@@ -93,7 +93,8 @@ user scale a simple typed store wins):
         mock-tested (approve executes, reject does not). 5/5 sidecar tests green.
     [x] Post-session learning (/extract + "Save learnings" in chat).
     [x] Renderer: marvin-client + MarvinChat; proposals route to /memory.
-    [ ] Remaining: Tauri spawn of the sidecar + keychain (needs Tauri toolchain).
+    [x] Tauri spawn of the sidecar + OS keychain (src-tauri keychain.rs + lib.rs;
+        Settings stores the key). Written; verify the build on macOS.
 [~] Phase 4 — Local SQLite persistence:
     [x] Storage adapter (storage.ts): cache-hydrate model — Tauri(SQLite)/
         localStorage backends; whole data layer off raw localStorage. Reads stay
@@ -103,9 +104,19 @@ user scale a simple typed store wins):
     [ ] `cargo build` needs the Tauri toolchain + system libs (gdk/webkit) — the
         Rust is written but not compile-verified in this headless sandbox; build
         it on macOS. Typed tables / FTS are a later refinement.
-[ ] Phase 5 — Gmail + Calendar OAuth (keychain); Studios live
-[ ] Phase 6 — LeadStories Slack monitor + Moonshot shadow log; background sync
-[ ] Phase 7 — Voice layer (Whisper STT) + Tauri packaging/auto-update/tray
+[~] Phase 5 — Integrations + Studios:
+    [x] Per-view data endpoints (/data/inbox|trello|calendar|slack|buffer) +
+        functional view pages (components/ui/DataView) bound to sidecar data.
+    [x] Studios live: Amargi/LeadStories/Moonshot workbench → runtime (Sonnet),
+        drafting only (StudioWorkbench reuses the streaming /chat loop).
+    [x] Gmail + Calendar real REST (cred-gated); Slack live via @slack/web-api
+        (SLACK_AMARGI_BOT_TOKEN). Go live by adding creds to .env.local / keychain.
+    [x] Light memory maintenance (archive episodic > 120d) on /memory load.
+    [ ] Trello (Zapier MCP) + Buffer (Direct MCP) live connectors; Slack mentions.
+[ ] Phase 6 — Typed SQLite tables/FTS; background/scheduled extraction;
+    LeadStories monitor + emergency alerts; Moonshot shadow log.
+[ ] Phase 7 — Voice (Whisper STT); package sidecar as a binary with its deps
+    (node_modules aren't bundled yet); auto-update + system tray.
 
 ## Reference parts library (/reference — gitignored, read-only)
 - personal-ai-assistant — supervisor + sub-agent pattern (maps to MARVIN + Studios)

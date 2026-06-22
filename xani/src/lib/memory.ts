@@ -237,6 +237,29 @@ export function recordAccess(id: string): void {
   });
 }
 
+/**
+ * Light maintenance: archive episodic summaries older than the TTL so they stop
+ * competing for context budget. Non-destructive (soft-supersede) and idempotent
+ * — facts/preferences/rules are never touched; they decay only via retrieval
+ * scoring (recency) in context.ts. Heavier consolidation is a later, Rust/SQLite
+ * job. Returns the number archived.
+ */
+const EPISODIC_TTL_DAYS = 120;
+
+export function runMemoryMaintenance(nowMs: number = Date.now()): number {
+  const cutoff = nowMs - EPISODIC_TTL_DAYS * 86_400_000;
+  let archived = 0;
+  const next = allMemories().map((m) => {
+    if (m.tier === 'episodic' && m.status === 'active' && Date.parse(m.createdAt) < cutoff) {
+      archived++;
+      return { ...m, status: 'superseded' as MemoryStatus, validUntil: new Date(nowMs).toISOString() };
+    }
+    return m;
+  });
+  if (archived) writeJson(MEM_KEY, next);
+  return archived;
+}
+
 // ── Self-adjustment proposals ─────────────────────────────────────
 
 export function getAdjustments(): SelfAdjustment[] {

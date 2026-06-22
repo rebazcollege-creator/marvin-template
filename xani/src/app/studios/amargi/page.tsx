@@ -1,11 +1,13 @@
-import { PagePlaceholder } from '@/components/ui/PagePlaceholder';
+import { StudioWorkbench } from '@/components/studios/StudioWorkbench';
 
 export default function AmargiStudioPage() {
   return (
-    <PagePlaceholder
+    <StudioWorkbench
+      studio="amargi"
       title="Amargi — Caption Writer"
-      subtitle="Studio · Sonnet"
-      note="Paste an article URL or text and MARVIN drafts two versions: an Instagram caption (hook + context + CTA, 3-5 paragraphs) and an X/Threads post (under 280 chars). UK English, Sage voice, no emojis, no hashtags. Drafting only — never auto-posted. Editor UI lands in Phase 3."
+      subtitle="Studio · Sonnet · two versions, never auto-posted"
+      inputLabel="Article URL or pasted article text"
+      placeholder="Paste the article text or a link…"
     />
   );
 }

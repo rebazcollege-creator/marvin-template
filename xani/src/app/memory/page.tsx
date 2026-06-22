@@ -9,6 +9,7 @@ import {
   ingestMemory,
   rejectMemory,
   removeMemory,
+  runMemoryMaintenance,
   setAdjustmentStatus,
   updateMemory,
   type MemoryCategory,
@@ -52,7 +53,10 @@ export default function MemoryPage() {
   };
 
   useEffect(() => {
-    ensureStorageReady().then(refresh);
+    ensureStorageReady().then(() => {
+      runMemoryMaintenance();
+      refresh();
+    });
   }, []);
 
   if (!memories) {

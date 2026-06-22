@@ -1,18 +1,26 @@
-import type { BriefingData } from '../src/lib/marvin-protocol.ts';
+import { WebClient } from '@slack/web-api';
+import type {
+  BriefingData,
+  InboxData,
+  TrelloData,
+  CalendarData,
+  SlackData,
+  BufferData,
+} from '../src/lib/marvin-protocol.ts';
 
 /**
  * Integration connectors (sidecar side) — "ready but stubbed".
  *
  * All run in the sidecar so tokens never reach the renderer. Each is cred-gated:
- * with no credentials it reports connected:false and returns nothing (the
- * no-mock-data rule); with credentials it performs the real call.
+ * with no credentials it reports connected:false and returns nothing (no mock
+ * data); with credentials it performs the real call.
  *
  * Mechanisms follow the settled architecture:
  *   - Gmail (5 accounts) + Google Calendar: real REST via OAuth refresh tokens.
- *   - Trello: Zapier MCP (pending MCP wiring) — gated, reports not-connected.
- *   - Buffer: Direct MCP (pending MCP wiring) — gated, reports not-connected.
- *   - Slack: token-gated; live mention fetch needs search scopes (pending).
- *     LeadStories Slack is monitor-only and must never be written to.
+ *   - Slack: real via @slack/web-api (bot token), read-only. LeadStories Slack is
+ *     monitor-only and must never be written to.
+ *   - Trello: Zapier MCP — pending MCP wiring (gated).
+ *   - Buffer: Direct MCP — pending MCP wiring (gated).
  */
 
 const GMAIL_ACCOUNTS = [
@@ -23,11 +31,12 @@ const GMAIL_ACCOUNTS = [
   { role: 'amargi', n: 5 },
 ] as const;
 
-async function googleAccessToken(
-  clientId: string,
-  clientSecret: string,
-  refreshToken: string,
-): Promise<string | null> {
+const AMARGI_CHANNELS = [
+  { id: 'C0HRYE891', name: 'general' },
+  { id: 'C052Z75EY73', name: 'tt-arabic' },
+];
+
+async function googleAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<string | null> {
   try {
     const r = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -47,16 +56,23 @@ async function googleAccessToken(
   }
 }
 
-async function gmailUnread(): Promise<{ connected: boolean; accounts: { account: string; unread: number }[] }> {
+function gmailCreds(n: number): { id: string; secret: string; refresh: string } | null {
+  const id = process.env[`GMAIL_CLIENT_ID_${n}`];
+  const secret = process.env[`GMAIL_CLIENT_SECRET_${n}`];
+  const refresh = process.env[`GMAIL_REFRESH_TOKEN_${n}`];
+  return id && secret && refresh ? { id, secret, refresh } : null;
+}
+
+// ── Gmail ─────────────────────────────────────────────────────────
+
+async function gmailUnreadCounts(): Promise<{ connected: boolean; accounts: { account: string; unread: number }[] }> {
   const accounts: { account: string; unread: number }[] = [];
-  let anyConfigured = false;
+  let any = false;
   for (const a of GMAIL_ACCOUNTS) {
-    const id = process.env[`GMAIL_CLIENT_ID_${a.n}`];
-    const secret = process.env[`GMAIL_CLIENT_SECRET_${a.n}`];
-    const refresh = process.env[`GMAIL_REFRESH_TOKEN_${a.n}`];
-    if (!id || !secret || !refresh) continue;
-    anyConfigured = true;
-    const token = await googleAccessToken(id, secret, refresh);
+    const c = gmailCreds(a.n);
+    if (!c) continue;
+    any = true;
+    const token = await googleAccessToken(c.id, c.secret, c.refresh);
     if (!token) continue;
     try {
       const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX', {
@@ -66,13 +82,60 @@ async function gmailUnread(): Promise<{ connected: boolean; accounts: { account:
       const j = (await r.json()) as { messagesUnread?: number };
       accounts.push({ account: a.role, unread: j.messagesUnread ?? 0 });
     } catch {
-      /* skip this account on error */
+      /* skip */
     }
   }
-  return { connected: anyConfigured, accounts };
+  return { connected: any, accounts };
 }
 
-async function calendarToday(): Promise<{ connected: boolean; events: { title: string; start: string }[] }> {
+export async function getInbox(): Promise<InboxData> {
+  const messages: InboxData['messages'] = [];
+  let any = false;
+  for (const a of GMAIL_ACCOUNTS) {
+    const c = gmailCreds(a.n);
+    if (!c) continue;
+    any = true;
+    const token = await googleAccessToken(c.id, c.secret, c.refresh);
+    if (!token) continue;
+    try {
+      const list = await fetch(
+        'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread&maxResults=6',
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!list.ok) continue;
+      const lj = (await list.json()) as { messages?: { id: string }[] };
+      for (const m of lj.messages ?? []) {
+        const det = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (!det.ok) continue;
+        const dj = (await det.json()) as {
+          snippet?: string;
+          internalDate?: string;
+          payload?: { headers?: { name: string; value: string }[] };
+        };
+        const header = (name: string) =>
+          dj.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? '';
+        messages.push({
+          account: a.role,
+          from: header('from'),
+          subject: header('subject'),
+          snippet: dj.snippet ?? '',
+          receivedAt: dj.internalDate ? new Date(Number(dj.internalDate)).toISOString() : '',
+          unread: true,
+        });
+      }
+    } catch {
+      /* skip account */
+    }
+  }
+  return { connected: any, messages };
+}
+
+// ── Google Calendar ───────────────────────────────────────────────
+
+export async function getCalendar(): Promise<CalendarData> {
   const id = process.env.GOOGLE_CALENDAR_CLIENT_ID;
   const secret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
   const refresh = process.env.GOOGLE_CALENDAR_REFRESH_TOKEN;
@@ -91,11 +154,13 @@ async function calendarToday(): Promise<{ connected: boolean; events: { title: s
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) return { connected: true, events: [] };
     const j = (await r.json()) as {
-      items?: { summary?: string; start?: { dateTime?: string; date?: string } }[];
+      items?: { summary?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }[];
     };
     const events = (j.items ?? []).map((e) => ({
       title: e.summary ?? '(busy)',
       start: e.start?.dateTime ?? e.start?.date ?? '',
+      end: e.end?.dateTime ?? e.end?.date ?? '',
+      allDay: Boolean(e.start?.date && !e.start?.dateTime),
     }));
     return { connected: true, events };
   } catch {
@@ -103,37 +168,57 @@ async function calendarToday(): Promise<{ connected: boolean; events: { title: s
   }
 }
 
-function slackMentions(): { connected: boolean; mentions: { workspace: string; text: string; emergency: boolean }[] } {
-  // Token-gated. Live mention fetch needs search scopes / event subscriptions;
-  // wired in a later pass. LeadStories Slack stays read/monitor-only.
-  const configured = Boolean(
-    process.env.SLACK_LEADSTORIES_BOT_TOKEN || process.env.SLACK_AMARGI_BOT_TOKEN,
-  );
-  return { connected: configured, mentions: [] };
+// ── Slack (read-only) ─────────────────────────────────────────────
+
+export async function getSlack(): Promise<SlackData> {
+  const token = process.env.SLACK_AMARGI_BOT_TOKEN;
+  if (!token) return { connected: false, messages: [] };
+  const client = new WebClient(token);
+  const out: SlackData['messages'] = [];
+  for (const ch of AMARGI_CHANNELS) {
+    try {
+      const res = await client.conversations.history({ channel: ch.id, limit: 8 });
+      for (const m of res.messages ?? []) {
+        out.push({
+          workspace: 'amargi',
+          channel: ch.name,
+          user: m.user ?? '',
+          text: m.text ?? '',
+          ts: m.ts ?? '',
+          emergency: false,
+        });
+      }
+    } catch {
+      /* skip channel */
+    }
+  }
+  return { connected: true, messages: out };
 }
 
-function trelloStatus(): { connected: boolean; cards: { name: string; url: string; urgent: boolean }[] } {
-  // Trello is via Zapier MCP (board 683dafe308be04e369b8434c) — pending MCP wiring.
+// ── Trello (Zapier MCP — pending) ─────────────────────────────────
+
+export function getTrello(): TrelloData {
   return { connected: false, cards: [] };
 }
 
-function bufferStatus(): { connected: boolean; status: { drafts: number; scheduled: number } | null } {
-  // Buffer is via Direct MCP (org 68d1dabf16b86596e286a44b) — pending MCP wiring.
-  return { connected: false, status: null };
+// ── Buffer (Direct MCP — pending) ─────────────────────────────────
+
+export function getBuffer(): BufferData {
+  return { connected: false, drafts: 0, scheduled: 0, byPlatform: [] };
 }
 
-/** Aggregate all sources for the morning briefing (parallel where async). */
+// ── Aggregated morning briefing ───────────────────────────────────
+
 export async function getBriefingData(): Promise<BriefingData> {
-  const [gmail, calendar] = await Promise.all([gmailUnread(), calendarToday()]);
-  const slack = slackMentions();
-  const trello = trelloStatus();
-  const buffer = bufferStatus();
+  const [gmail, calendar, slack] = await Promise.all([gmailUnreadCounts(), getCalendar(), getSlack()]);
+  const trello = getTrello();
+  const buffer = getBuffer();
   return {
     gmail: gmail.accounts,
-    trello: trello.cards,
-    buffer: buffer.status,
-    slack: slack.mentions,
-    calendar: calendar.events,
+    trello: trello.cards.map((c) => ({ name: c.name, url: c.url, urgent: c.urgent })),
+    buffer: buffer.connected ? { drafts: buffer.drafts, scheduled: buffer.scheduled } : null,
+    slack: slack.messages.map((m) => ({ workspace: m.workspace, text: m.text, emergency: m.emergency })),
+    calendar: calendar.events.map((e) => ({ title: e.title, start: e.start })),
     connected: {
       gmail: gmail.connected,
       trello: trello.connected,

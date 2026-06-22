@@ -16,7 +16,7 @@
 let cache: Map<string, string> | null = null;
 let readyPromise: Promise<void> | null = null;
 
-function isTauri(): boolean {
+export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 }
 

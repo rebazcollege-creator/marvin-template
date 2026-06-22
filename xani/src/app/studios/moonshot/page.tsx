@@ -1,11 +1,13 @@
-import { PagePlaceholder } from '@/components/ui/PagePlaceholder';
+import { StudioWorkbench } from '@/components/studios/StudioWorkbench';
 
 export default function MoonshotStudioPage() {
   return (
-    <PagePlaceholder
+    <StudioWorkbench
+      studio="moonshot"
       title="Moonshot — OIC Report"
-      subtitle="Studio · Sonnet"
-      note="Provide an account handle and what it posts; MARVIN drafts a Cliché A referral paragraph. Country = Iraq, objective tone, translated Sorani quotes. Drafts only — never writes into Moonshot's official spreadsheets. Editor UI lands in Phase 3."
+      subtitle="Studio · Sonnet · Cliché A paragraph, country = Iraq"
+      inputLabel="Account handle + what the account posts"
+      placeholder="e.g. @handle on TikTok — posts Sorani-language content about…"
     />
   );
 }

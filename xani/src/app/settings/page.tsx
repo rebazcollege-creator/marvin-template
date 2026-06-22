@@ -9,7 +9,7 @@ import {
   saveSettings,
   type XaniSettings,
 } from '@/lib/settings';
-import { ensureStorageReady } from '@/lib/storage';
+import { ensureStorageReady, isTauri } from '@/lib/storage';
 
 /**
  * Settings — the customization surface. Xanî is built for one user, so every
@@ -30,10 +30,26 @@ const PROMPT_FIELDS: { key: keyof XaniSettings['prompts']; label: string }[] = [
 export default function SettingsPage() {
   const [settings, setSettings] = useState<XaniSettings | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [keyInput, setKeyInput] = useState('');
+  const [keyStored, setKeyStored] = useState<boolean | null>(null);
 
   useEffect(() => {
     ensureStorageReady().then(() => setSettings(getSettings()));
+    if (isTauri()) {
+      import('@tauri-apps/api/core')
+        .then(({ invoke }) => invoke<boolean>('has_api_key'))
+        .then(setKeyStored)
+        .catch(() => setKeyStored(false));
+    }
   }, []);
+
+  const saveApiKey = async () => {
+    if (!keyInput.trim()) return;
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('set_api_key', { key: keyInput.trim() });
+    setKeyInput('');
+    setKeyStored(true);
+  };
 
   if (!settings) {
     return (
@@ -155,6 +171,33 @@ export default function SettingsPage() {
           />
         </Field>
       </Section>
+
+      {/* API key (desktop only — stored in the OS keychain) */}
+      {isTauri() && (
+        <Section title="Anthropic API key (keychain)">
+          <p className="mb-3 text-sm text-ink-soft">
+            Stored in your OS keychain and handed to MARVIN&apos;s runtime — never saved to a
+            file or shown again. {keyStored ? 'A key is currently stored.' : 'No key stored yet.'}
+          </p>
+          <Field label="API key">
+            <input
+              type="password"
+              value={keyInput}
+              onChange={(e) => setKeyInput(e.target.value)}
+              placeholder="sk-ant-…"
+              className={inputCls}
+            />
+          </Field>
+          <button
+            type="button"
+            onClick={() => void saveApiKey()}
+            disabled={!keyInput.trim()}
+            className="rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-paper hover:bg-terracotta-dim disabled:opacity-40"
+          >
+            Save key to keychain
+          </button>
+        </Section>
+      )}
 
       {/* Prompts */}
       <Section title="Prompts">

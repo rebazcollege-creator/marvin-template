@@ -61,6 +61,37 @@ export interface BriefingData {
   };
 }
 
+// ── Per-view data payloads (GET /data/*) ──────────────────────────
+export interface InboxData {
+  connected: boolean;
+  messages: {
+    account: string;
+    from: string;
+    subject: string;
+    snippet: string;
+    receivedAt: string;
+    unread: boolean;
+  }[];
+}
+export interface TrelloData {
+  connected: boolean;
+  cards: { name: string; url: string; labels: string[]; urgent: boolean; due: string | null }[];
+}
+export interface CalendarData {
+  connected: boolean;
+  events: { title: string; start: string; end: string; allDay: boolean }[];
+}
+export interface SlackData {
+  connected: boolean;
+  messages: { workspace: string; channel: string; user: string; text: string; ts: string; emergency: boolean }[];
+}
+export interface BufferData {
+  connected: boolean;
+  drafts: number;
+  scheduled: number;
+  byPlatform: { platform: string; count: number }[];
+}
+
 /** Server-sent events streamed back over /chat. */
 export type StreamEvent =
   | { type: 'text'; text: string }

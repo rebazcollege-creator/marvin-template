@@ -3,7 +3,14 @@ import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
-import { getBriefingData } from './connectors.ts';
+import {
+  getBriefingData,
+  getInbox,
+  getCalendar,
+  getSlack,
+  getTrello,
+  getBuffer,
+} from './connectors.ts';
 import type { ChatRequest, StreamEvent, ProposedMemory } from '../src/lib/marvin-protocol.ts';
 
 /**
@@ -79,13 +86,27 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'GET' && req.url === '/data/briefing') {
+  if (req.method === 'GET' && req.url?.startsWith('/data/')) {
     try {
-      json(res, 200, await getBriefingData());
+      switch (req.url) {
+        case '/data/briefing':
+          return json(res, 200, await getBriefingData());
+        case '/data/inbox':
+          return json(res, 200, await getInbox());
+        case '/data/calendar':
+          return json(res, 200, await getCalendar());
+        case '/data/slack':
+          return json(res, 200, await getSlack());
+        case '/data/trello':
+          return json(res, 200, getTrello());
+        case '/data/buffer':
+          return json(res, 200, getBuffer());
+        default:
+          return json(res, 404, { error: 'Unknown data endpoint.' });
+      }
     } catch (err) {
-      json(res, 500, { error: (err as Error).message });
+      return json(res, 500, { error: (err as Error).message });
     }
-    return;
   }
 
   if (req.method === 'POST' && req.url === '/approve') {

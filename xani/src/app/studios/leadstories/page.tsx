@@ -1,11 +1,13 @@
-import { PagePlaceholder } from '@/components/ui/PagePlaceholder';
+import { StudioWorkbench } from '@/components/studios/StudioWorkbench';
 
 export default function LeadStoriesStudioPage() {
   return (
-    <PagePlaceholder
+    <StudioWorkbench
+      studio="leadstories"
       title="LeadStories — Fact-Check"
-      subtitle="Studio · Sonnet"
-      note="Paste a claim or TikTok description and MARVIN drafts a structured fact-check note: claim, verdict, 1-3 credible sources, reasoning. English only. Drafts only — never writes into TCS or any LeadStories system. Editor UI lands in Phase 3."
+      subtitle="Studio · Sonnet · English only, drafts only"
+      inputLabel="Claim text or TikTok video description"
+      placeholder="Paste the claim or video description to fact-check…"
     />
   );
 }

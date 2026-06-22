@@ -1,5 +1,5 @@
 import { BriefingCard } from '@/components/briefing/BriefingCard';
-import { MarvinInput } from '@/components/marvin/MarvinInput';
+import { MarvinChat } from '@/components/marvin/MarvinChat';
 
 export default function HomePage() {
   return (
@@ -8,7 +8,7 @@ export default function HomePage() {
         <BriefingCard />
       </div>
       <div className="pt-8">
-        <MarvinInput />
+        <MarvinChat />
       </div>
     </div>
   );

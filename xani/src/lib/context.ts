@@ -1,5 +1,6 @@
 import { getSettings, LOCKED_RULES } from '@/lib/settings';
 import { getMemories, type MemoryEntry } from '@/lib/memory';
+import type { SystemBlock } from '@/lib/marvin-protocol';
 
 /**
  * Assembles the context MARVIN runs with at request time — the bridge that makes
@@ -16,12 +17,7 @@ import { getMemories, type MemoryEntry } from '@/lib/memory';
  * at single-user scale a simple typed store beats embedding overhead.
  */
 
-export interface SystemBlock {
-  type: 'text';
-  text: string;
-  /** Present on the stable block so the sidecar can set a cache breakpoint. */
-  cache: boolean;
-}
+export type { SystemBlock };
 
 /** ~chars; rough token proxy to keep the dynamic block lean. */
 const DYNAMIC_BUDGET_CHARS = 4000;

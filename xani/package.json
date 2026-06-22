@@ -8,7 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "sidecar": "node sidecar/server.ts",
+    "sidecar:test": "node --test sidecar/agent.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

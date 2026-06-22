@@ -1,4 +1,4 @@
 {
   "extends": "next/core-web-vitals",
-  "ignorePatterns": ["reference/", "src-tauri/", "out/", ".next/"]
+  "ignorePatterns": ["reference/", "src-tauri/", "sidecar/", "out/", ".next/"]
 }

@@ -84,8 +84,16 @@ user scale a simple typed store wins):
 [x] Phase 1.6 — ultracode review: security split, action guard, memory upgrade
     (tiers/trust/write-gate/supersede/WMR), command palette, Tauri hardening
     (CSP, capabilities, icons), ESLint + strict TS
-[ ] Phase 3 — Agent runtime: Node sidecar + manual tool loop + confirmation gate
-    + prompt caching + structured propose_memory/propose_adjustment tools
+[~] Phase 3 — Agent runtime (in progress):
+    [x] Node sidecar (sidecar/): HTTP/SSE server owning the key, manual tool loop
+        (agent.ts), tool registry (tools.ts), prompt-caching system blocks,
+        structured propose_memory/propose_adjustment, read-tool stubs, write-tool
+        confirmation gate; mock tests (node --test) green.
+    [x] Renderer wired: lib/marvin-client.ts (SSE) + MarvinChat; proposals route
+        into the /memory human-in-the-loop queues. `npm run sidecar` to run it.
+    [ ] Token-level streaming (currently block-level); interactive approval UI
+        for write tools; Rust spawn of the sidecar + loopback in packaged app
+        (dev uses http://localhost:8787); post-session background extraction.
 [ ] Phase 4 — Rust SQLite (rusqlite + sqlite-vec) persistence; migrate storage.ts
 [ ] Phase 5 — Gmail + Calendar OAuth (keychain); Studios live
 [ ] Phase 6 — LeadStories Slack monitor + Moonshot shadow log; background sync

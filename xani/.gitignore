@@ -16,6 +16,8 @@
 # tauri
 /src-tauri/target
 /src-tauri/gen
+# compiled sidecar binary (built by `npm run sidecar:build`)
+/src-tauri/binaries
 
 # env — never commit secrets
 .env

@@ -10,6 +10,7 @@
     "lint": "next lint",
     "tauri": "tauri",
     "sidecar": "node sidecar/server.ts",
+    "sidecar:build": "node sidecar/build.mjs",
     "sidecar:test": "node --test sidecar/agent.test.ts"
   },
   "dependencies": {

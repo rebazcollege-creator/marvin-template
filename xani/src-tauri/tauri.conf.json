@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
-    "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeDevCommand": "npm run sidecar:build && npm run dev",
+    "beforeBuildCommand": "npm run sidecar:build && npm run build"
   },
   "app": {
     "windows": [
@@ -21,16 +21,13 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; img-src 'self' data: asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://localhost:8787"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
-    "resources": {
-      "../sidecar": "sidecar",
-      "../src/lib/marvin-protocol.ts": "src/lib/marvin-protocol.ts"
-    },
+    "externalBin": ["binaries/xani-sidecar"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

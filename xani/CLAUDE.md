@@ -115,8 +115,12 @@ user scale a simple typed store wins):
     [ ] Trello (Zapier MCP) + Buffer (Direct MCP) live connectors; Slack mentions.
 [ ] Phase 6 — Typed SQLite tables/FTS; background/scheduled extraction;
     LeadStories monitor + emergency alerts; Moonshot shadow log.
-[ ] Phase 7 — Voice (Whisper STT); package sidecar as a binary with its deps
-    (node_modules aren't bundled yet); auto-update + system tray.
+[~] Phase 7 — Packaging:
+    [x] Sidecar compiled to a self-contained binary via Bun (sidecar/build.mjs →
+        src-tauri/binaries/xani-sidecar-<triple>, gitignored). Tauri externalBin +
+        shell-plugin spawn (lib.rs); CSP allows localhost:8787. No Node/node_modules
+        at runtime. Requires Bun on the build machine; verify `tauri build` on macOS.
+    [ ] Voice (Whisper STT); auto-update + system tray.
 
 ## Reference parts library (/reference — gitignored, read-only)
 - personal-ai-assistant — supervisor + sub-agent pattern (maps to MARVIN + Studios)

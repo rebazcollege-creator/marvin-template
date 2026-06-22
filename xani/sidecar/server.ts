@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
+import { getBriefingData } from './connectors.ts';
 import type { ChatRequest, StreamEvent, ProposedMemory } from '../src/lib/marvin-protocol.ts';
 
 /**
@@ -75,6 +76,15 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'GET' && req.url === '/health') {
     json(res, 200, { ok: true, hasKey: Boolean(apiKey) });
+    return;
+  }
+
+  if (req.method === 'GET' && req.url === '/data/briefing') {
+    try {
+      json(res, 200, await getBriefingData());
+    } catch (err) {
+      json(res, 500, { error: (err as Error).message });
+    }
     return;
   }
 

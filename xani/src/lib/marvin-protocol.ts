@@ -41,6 +41,26 @@ export interface ProposedAdjustment {
   proposed: string;
 }
 
+/**
+ * Aggregated morning-briefing data the sidecar returns from GET /data/briefing.
+ * Every source carries a `connected` flag so the UI shows real counts when wired
+ * and honest empty states otherwise — never fabricated numbers.
+ */
+export interface BriefingData {
+  gmail: { account: string; unread: number }[];
+  trello: { name: string; url: string; urgent: boolean }[];
+  buffer: { drafts: number; scheduled: number } | null;
+  slack: { workspace: string; text: string; emergency: boolean }[];
+  calendar: { title: string; start: string }[];
+  connected: {
+    gmail: boolean;
+    trello: boolean;
+    buffer: boolean;
+    slack: boolean;
+    calendar: boolean;
+  };
+}
+
 /** Server-sent events streamed back over /chat. */
 export type StreamEvent =
   | { type: 'text'; text: string }

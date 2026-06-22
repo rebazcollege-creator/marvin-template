@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Warm cream / paper palette */
+  --paper: #f5f0e8;
+  --paper-card: #fbf8f2;
+  --terracotta: #c0613a;
+  --terracotta-dim: #a8512e;
+  --amber: #d89a4e;
+  --ink: #2c2c2c;
+  --ink-soft: #5a554c;
+  --line: #e3dbcc;
+}
+
+html,
+body {
+  background-color: var(--paper);
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3,
+.wordmark {
+  font-family: var(--font-playfair), Georgia, serif;
+}

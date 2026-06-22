@@ -52,9 +52,14 @@ export default function SettingsPage() {
 
   const handleReset = () => {
     resetSettings();
-    setSettings(structuredCloneDefaults());
+    setSettings(structuredClone(DEFAULT_SETTINGS));
     setSavedAt(null);
   };
+
+  const resetPrompt = (key: keyof XaniSettings['prompts']) =>
+    update({
+      prompts: { ...settings.prompts, [key]: DEFAULT_SETTINGS.prompts[key] },
+    });
 
   const toggleDayOff = (day: number) => {
     const has = settings.daysOff.includes(day);
@@ -113,6 +118,7 @@ export default function SettingsPage() {
               <button
                 key={d.value}
                 type="button"
+                aria-pressed={active}
                 onClick={() => toggleDayOff(d.value)}
                 className={`rounded-full border px-4 py-1.5 text-sm transition-colors ${
                   active
@@ -152,22 +158,34 @@ export default function SettingsPage() {
       {/* Prompts */}
       <Section title="Prompts">
         <p className="mb-3 text-sm text-ink-soft">
-          Edit how MARVIN and each Studio think. Blank a field and Reset to
-          restore its default.
+          Edit how MARVIN and each Studio think. Non-negotiable safety rules are
+          always appended automatically and can&apos;t be removed here.
         </p>
-        {PROMPT_FIELDS.map((f) => (
-          <Field key={f.key} label={f.label}>
-            <textarea
-              className={`${inputCls} min-h-40 font-mono text-xs leading-relaxed`}
-              value={settings.prompts[f.key]}
-              onChange={(e) =>
-                update({
-                  prompts: { ...settings.prompts, [f.key]: e.target.value },
-                })
-              }
-            />
-          </Field>
-        ))}
+        {PROMPT_FIELDS.map((f) => {
+          const isDefault = settings.prompts[f.key] === DEFAULT_SETTINGS.prompts[f.key];
+          return (
+            <Field key={f.key} label={f.label}>
+              <textarea
+                aria-label={f.label}
+                className={`${inputCls} min-h-40 font-mono text-xs leading-relaxed`}
+                value={settings.prompts[f.key]}
+                onChange={(e) =>
+                  update({
+                    prompts: { ...settings.prompts, [f.key]: e.target.value },
+                  })
+                }
+              />
+              <button
+                type="button"
+                onClick={() => resetPrompt(f.key)}
+                disabled={isDefault}
+                className="mt-1 text-xs text-ink-soft underline-offset-2 hover:underline disabled:opacity-40"
+              >
+                {isDefault ? 'Using default' : 'Reset this prompt to default'}
+              </button>
+            </Field>
+          );
+        })}
       </Section>
 
       <div className="mt-8 flex items-center gap-3">
@@ -188,10 +206,6 @@ export default function SettingsPage() {
       </div>
     </div>
   );
-}
-
-function structuredCloneDefaults(): XaniSettings {
-  return structuredClone(DEFAULT_SETTINGS);
 }
 
 const inputCls =

@@ -26,6 +26,13 @@ export function Sidebar() {
         Xanî
       </Link>
       <p className="mt-1 text-xs text-ink-soft">Personal OS · MARVIN</p>
+      <p className="mt-3 text-xs text-ink-soft">
+        Press{' '}
+        <kbd className="rounded border border-line bg-paper px-1.5 py-0.5 font-sans">
+          ⌘K
+        </kbd>{' '}
+        for anything
+      </p>
 
       <nav className="mt-8 space-y-1">
         {NAV.map((item) => (

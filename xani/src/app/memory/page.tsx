@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import {
-  addMemory,
+  approveMemory,
   getAdjustments,
   getMemories,
+  getProposedMemories,
+  ingestMemory,
+  rejectMemory,
   removeMemory,
   setAdjustmentStatus,
   updateMemory,
@@ -14,30 +17,36 @@ import {
 } from '@/lib/memory';
 
 /**
- * Memory — what MARVIN has learned, and the changes it wants to make to itself.
+ * Memory — what MARVIN has learned, what it wants to remember, and the changes
+ * it wants to make to itself.
  *
- * MARVIN extracts memories from conversation; here you curate them (pin, edit,
- * delete, add your own). Self-adjustment proposals are MARVIN reasoning about
- * its own behaviour — you approve or reject each one. Nothing it proposes to
- * change about itself is applied without your say-so.
+ * Three review surfaces, all human-in-the-loop:
+ *  - Self-adjustments: MARVIN reasoning about its own behaviour (approve/reject).
+ *  - Proposed memories: the write-gate queue. Anything inferred or derived from
+ *    untrusted content (email/Slack/web) lands here, never auto-trusted.
+ *  - Active memory: the curated store (pin, edit importance, forget).
  */
 
 const CATEGORIES: MemoryCategory[] = [
+  'rule',
   'preference',
   'fact',
   'workflow',
   'correction',
+  'episode',
   'other',
 ];
 
 export default function MemoryPage() {
   const [memories, setMemories] = useState<MemoryEntry[] | null>(null);
+  const [proposed, setProposed] = useState<MemoryEntry[]>([]);
   const [adjustments, setAdjustments] = useState<SelfAdjustment[]>([]);
   const [draft, setDraft] = useState('');
   const [draftCat, setDraftCat] = useState<MemoryCategory>('preference');
 
   const refresh = () => {
     setMemories(getMemories());
+    setProposed(getProposedMemories());
     setAdjustments(getAdjustments());
   };
 
@@ -55,13 +64,8 @@ export default function MemoryPage() {
 
   const handleAdd = () => {
     if (!draft.trim()) return;
-    addMemory({
-      category: draftCat,
-      content: draft.trim(),
-      source: 'manual',
-      pinned: false,
-      confidence: 1,
-    });
+    // Manual entry is fully trusted and becomes active immediately.
+    ingestMemory({ category: draftCat, content: draft.trim(), source: 'manual' });
     setDraft('');
     refresh();
   };
@@ -80,7 +84,8 @@ export default function MemoryPage() {
         <section className="mt-8 rounded-2xl border border-amber bg-paper-card p-6">
           <h2 className="text-xl text-ink">MARVIN wants to adjust itself</h2>
           <p className="mt-1 text-sm text-ink-soft">
-            Review each proposal. Nothing changes until you approve it.
+            Review each proposal. Nothing changes until you approve it. Locked
+            safety rules can never be changed this way.
           </p>
           <div className="mt-4 space-y-4">
             {pending.map((a) => (
@@ -120,24 +125,73 @@ export default function MemoryPage() {
         </section>
       )}
 
+      {/* Proposed memories — the write-gate queue */}
+      {proposed.length > 0 && (
+        <section className="mt-8 rounded-2xl border border-line bg-paper-card p-6">
+          <h2 className="text-xl text-ink">Proposed memories</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            Inferred, or derived from email/Slack/web content — untrusted until
+            you approve. Approving marks it trusted.
+          </p>
+          <ul className="mt-4 space-y-3">
+            {proposed.map((m) => (
+              <li key={m.id} className="rounded-xl border border-line p-4">
+                <span className="text-xs font-medium uppercase tracking-wide text-ink-soft">
+                  {m.category} · via {m.source} · trust {m.trust}
+                </span>
+                <p className="mt-1 text-sm text-ink">{m.content}</p>
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      approveMemory(m.id);
+                      refresh();
+                    }}
+                    className="rounded-lg bg-terracotta px-4 py-1.5 text-sm font-medium text-paper hover:bg-terracotta-dim"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      rejectMemory(m.id);
+                      refresh();
+                    }}
+                    className="rounded-lg border border-line px-4 py-1.5 text-sm text-ink-soft hover:text-ink"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {/* Add a memory manually */}
       <section className="mt-8 rounded-2xl border border-line bg-paper-card p-6">
         <h2 className="text-xl text-ink">Add a memory</h2>
         <div className="mt-4 space-y-3">
-          <select
-            value={draftCat}
-            onChange={(e) => setDraftCat(e.target.value as MemoryCategory)}
-            className="rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-terracotta"
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium uppercase tracking-wide text-ink-soft">
+              Category
+            </span>
+            <select
+              value={draftCat}
+              onChange={(e) => setDraftCat(e.target.value as MemoryCategory)}
+              className="rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-terracotta"
+            >
+              {CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </label>
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            aria-label="New memory content"
             placeholder="e.g. Always refer to the country as 'Iraq', never 'Iraqi Kurdistan'."
             className="min-h-20 w-full rounded-lg border border-line bg-paper px-3 py-2 text-sm text-ink outline-none focus:border-terracotta"
           />
@@ -152,12 +206,12 @@ export default function MemoryPage() {
         </div>
       </section>
 
-      {/* Memory list */}
+      {/* Active memory list */}
       <section className="mt-8">
         <h2 className="text-xl text-ink">Learned ({memories.length})</h2>
         {memories.length === 0 ? (
           <p className="mt-4 rounded-2xl border border-dashed border-line bg-paper-card p-8 text-sm text-ink-soft">
-            Nothing learned yet. As you work with MARVIN it will record durable
+            Nothing learned yet. As you work with MARVIN it will propose durable
             preferences, facts and corrections here — and you can add your own
             above.
           </p>
@@ -171,14 +225,14 @@ export default function MemoryPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <span className="text-xs font-medium uppercase tracking-wide text-ink-soft">
-                      {m.category}
-                      {m.source === 'inferred' ? ' · inferred' : ''}
+                      {m.tier} · {m.category} · trust {m.trust}
                     </span>
                     <p className="mt-1 text-sm text-ink">{m.content}</p>
                   </div>
                   <div className="flex shrink-0 gap-2">
                     <button
                       type="button"
+                      aria-pressed={m.pinned}
                       onClick={() => {
                         updateMemory(m.id, { pinned: !m.pinned });
                         refresh();

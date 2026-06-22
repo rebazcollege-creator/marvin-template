@@ -84,17 +84,25 @@ user scale a simple typed store wins):
 [x] Phase 1.6 — ultracode review: security split, action guard, memory upgrade
     (tiers/trust/write-gate/supersede/WMR), command palette, Tauri hardening
     (CSP, capabilities, icons), ESLint + strict TS
-[~] Phase 3 — Agent runtime (in progress):
-    [x] Node sidecar (sidecar/): HTTP/SSE server owning the key, manual tool loop
-        (agent.ts), tool registry (tools.ts), prompt-caching system blocks,
-        structured propose_memory/propose_adjustment, read-tool stubs, write-tool
-        confirmation gate; mock tests (node --test) green.
-    [x] Renderer wired: lib/marvin-client.ts (SSE) + MarvinChat; proposals route
-        into the /memory human-in-the-loop queues. `npm run sidecar` to run it.
-    [ ] Token-level streaming (currently block-level); interactive approval UI
-        for write tools; Rust spawn of the sidecar + loopback in packaged app
-        (dev uses http://localhost:8787); post-session background extraction.
-[ ] Phase 4 — Rust SQLite (rusqlite + sqlite-vec) persistence; migrate storage.ts
+[x] Phase 3 — Agent runtime:
+    [x] Node sidecar (sidecar/): SSE server owning the key, manual tool loop,
+        prompt-cache system blocks, propose_memory/propose_adjustment, read-tool
+        stubs, .env loader. `npm run sidecar`.
+    [x] Token-level streaming (messages.stream → text deltas).
+    [x] Interactive write-approval with resume (/approve + inline UI cards);
+        mock-tested (approve executes, reject does not). 5/5 sidecar tests green.
+    [x] Post-session learning (/extract + "Save learnings" in chat).
+    [x] Renderer: marvin-client + MarvinChat; proposals route to /memory.
+    [ ] Remaining: Tauri spawn of the sidecar + keychain (needs Tauri toolchain).
+[~] Phase 4 — Local SQLite persistence:
+    [x] Storage adapter (storage.ts): cache-hydrate model — Tauri(SQLite)/
+        localStorage backends; whole data layer off raw localStorage. Reads stay
+        sync (no async ripple); dev keeps the localStorage path.
+    [x] Rust kv store (src-tauri/src/db.rs, rusqlite bundled) + lib.rs wiring
+        (kv_all/get/set/remove, xani.db in app data dir).
+    [ ] `cargo build` needs the Tauri toolchain + system libs (gdk/webkit) — the
+        Rust is written but not compile-verified in this headless sandbox; build
+        it on macOS. Typed tables / FTS are a later refinement.
 [ ] Phase 5 — Gmail + Calendar OAuth (keychain); Studios live
 [ ] Phase 6 — LeadStories Slack monitor + Moonshot shadow log; background sync
 [ ] Phase 7 — Voice layer (Whisper STT) + Tauri packaging/auto-update/tray

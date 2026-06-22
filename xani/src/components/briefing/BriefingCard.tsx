@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
+import { ensureStorageReady } from '@/lib/storage';
 
 /**
  * Morning briefing card.
@@ -70,7 +71,7 @@ export function BriefingCard() {
   const now = useMemo(() => new Date(), []);
 
   useEffect(() => {
-    setSettings(getSettings());
+    ensureStorageReady().then(() => setSettings(getSettings()));
   }, []);
 
   if (!settings) {

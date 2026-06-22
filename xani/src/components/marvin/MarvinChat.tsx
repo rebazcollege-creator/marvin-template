@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { streamMarvin } from '@/lib/marvin-client';
+import { streamMarvin, approveMarvin, extractLearnings } from '@/lib/marvin-client';
 import { buildMarvinSystemBlocks } from '@/lib/context';
 import { getSettings } from '@/lib/settings';
+import { ensureStorageReady } from '@/lib/storage';
 import {
   ingestMemory,
   proposeAdjustment,
@@ -13,30 +14,33 @@ import {
 import type { ChatMessage } from '@/lib/marvin-protocol';
 
 /**
- * MARVIN chat — wired to the live sidecar runtime.
+ * MARVIN chat — wired to the live sidecar runtime (token streaming + write
+ * confirmation + post-session learning).
  *
- * The renderer composes the cache-friendly system blocks (base prompt + locked
- * rules + memories) and streams a turn from the sidecar. MARVIN's structured
- * proposals are routed straight into the human-in-the-loop queues:
- *  - propose_memory     → /memory "Proposed memories" (write-gate)
- *  - propose_adjustment → /memory "MARVIN wants to adjust itself"
+ *  - text deltas stream in live.
+ *  - propose_memory/propose_adjustment route into the /memory HITL queues.
+ *  - approval_request shows an inline Approve/Reject card; the loop resumes on
+ *    the user's decision (POST /approve).
+ *  - "Save learnings" runs a background extraction pass over the chat.
  */
 
 type Note = { id: number; text: string };
+type Approval = { id: string; tool: string; reason: string };
 
 export function MarvinChat() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [notes, setNotes] = useState<Note[]>([]);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
   const noteId = useRef(0);
 
-  const addNote = (text: string) =>
-    setNotes((n) => [...n, { id: noteId.current++, text }]);
+  const addNote = (text: string) => setNotes((n) => [...n, { id: noteId.current++, text }]);
 
   const send = async () => {
     const text = input.trim();
     if (!text || busy) return;
+    await ensureStorageReady();
 
     const userMsg: ChatMessage = { role: 'user', content: text };
     const history = [...messages, userMsg];
@@ -80,7 +84,7 @@ export function MarvinChat() {
           }
           break;
         case 'approval_request':
-          addNote(`MARVIN wants to run "${e.tool}" — that needs your confirmation.`);
+          setApprovals((a) => [...a, { id: e.id, tool: e.tool, reason: e.reason }]);
           break;
         case 'error':
           assistant += (assistant ? '\n\n' : '') + `⚠ ${e.message}`;
@@ -92,6 +96,31 @@ export function MarvinChat() {
     });
 
     setBusy(false);
+  };
+
+  const decide = (id: string, approved: boolean) => {
+    void approveMarvin(id, approved);
+    setApprovals((a) => a.filter((x) => x.id !== id));
+  };
+
+  const saveLearnings = async () => {
+    if (messages.length === 0) return;
+    await ensureStorageReady();
+    const model = getSettings().models.routine;
+    const proposals = await extractLearnings(messages, model);
+    proposals.forEach((p) =>
+      ingestMemory({
+        category: p.category as MemoryCategory,
+        content: p.content,
+        source: 'inferred',
+        importance: p.importance,
+      }),
+    );
+    addNote(
+      proposals.length
+        ? `Saved ${proposals.length} learning(s) — review on /memory.`
+        : 'No new durable learnings found in this chat.',
+    );
   };
 
   return (
@@ -110,11 +139,46 @@ export function MarvinChat() {
               {m.content || (busy && i === messages.length - 1 ? '…' : '')}
             </div>
           ))}
+
+          {approvals.map((a) => (
+            <div key={a.id} className="rounded-xl border border-amber bg-paper-card p-3 text-sm">
+              <p className="text-ink">
+                MARVIN wants to run <span className="font-medium">{a.tool}</span>. {a.reason}
+              </p>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => decide(a.id, true)}
+                  className="rounded-lg bg-terracotta px-3 py-1 text-xs font-medium text-paper hover:bg-terracotta-dim"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  onClick={() => decide(a.id, false)}
+                  className="rounded-lg border border-line px-3 py-1 text-xs text-ink-soft hover:text-ink"
+                >
+                  Reject
+                </button>
+              </div>
+            </div>
+          ))}
+
           {notes.map((n) => (
             <p key={n.id} className="text-xs text-ink-soft">
               {n.text}
             </p>
           ))}
+
+          {!busy && (
+            <button
+              type="button"
+              onClick={() => void saveLearnings()}
+              className="text-xs text-ink-soft underline-offset-2 hover:underline"
+            >
+              Save learnings from this chat
+            </button>
+          )}
         </div>
       )}
 

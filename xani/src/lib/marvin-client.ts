@@ -1,4 +1,9 @@
-import type { ChatRequest, StreamEvent } from '@/lib/marvin-protocol';
+import type {
+  ChatMessage,
+  ChatRequest,
+  ProposedMemory,
+  StreamEvent,
+} from '@/lib/marvin-protocol';
 
 /**
  * Renderer → sidecar transport. The sidecar owns the API key; the renderer only
@@ -56,5 +61,37 @@ export async function streamMarvin(
         // ignore malformed frame
       }
     }
+  }
+}
+
+/** Resolve a pending write-tool confirmation so the agent loop can resume. */
+export async function approveMarvin(id: string, approved: boolean): Promise<void> {
+  try {
+    await fetch(`${SIDECAR_URL}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, approved }),
+    });
+  } catch {
+    // sidecar unreachable — nothing to resume
+  }
+}
+
+/** Post-session learning: extract durable memories from a finished chat. */
+export async function extractLearnings(
+  messages: ChatMessage[],
+  model: string,
+): Promise<ProposedMemory[]> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/extract`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages, model }),
+    });
+    if (!resp.ok) return [];
+    const data = (await resp.json()) as { proposals?: ProposedMemory[] };
+    return data.proposals ?? [];
+  } catch {
+    return [];
   }
 }

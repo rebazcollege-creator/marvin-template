@@ -133,10 +133,14 @@ export const TOOLS_BY_NAME: Record<string, ToolDef> = Object.fromEntries(
 );
 
 /** The tool list as sent to the Anthropic API (no server-only fields). */
-export function apiTools() {
-  return TOOLS.map((t) => ({
+export function toApiTools(defs: ToolDef[]) {
+  return defs.map((t) => ({
     name: t.name,
     description: t.description,
     input_schema: t.input_schema,
   }));
+}
+
+export function apiTools() {
+  return toApiTools(TOOLS);
 }

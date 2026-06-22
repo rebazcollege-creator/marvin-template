@@ -1,46 +1,109 @@
 /**
- * Storage adapter seam.
+ * Storage adapter — Phase 4.
  *
- * Phase 1 persists to localStorage so the app works in `next dev` and the Tauri
- * webview with zero backend. The research is unambiguous that localStorage is a
- * stop-gap (5 MB cap, synchronous, no query) — the committed target is SQLite
- * (rusqlite + sqlite-vec) owned by the Rust side, surfaced via Tauri commands.
+ * Persistence now lives in SQLite owned by the Rust side (rusqlite, kv table)
+ * and is reached via Tauri commands (kv_all/kv_get/kv_set/kv_remove). When NOT
+ * running under Tauri (plain `next dev` in a browser) it falls back to
+ * localStorage so development needs no backend.
  *
- * Everything in the app reads/writes JSON through THIS module, so the migration
- * is contained here. Note the migration also flips these calls from sync to
- * async (Tauri IPC is async); callers that are already inside React effects /
- * event handlers absorb that without structural change.
+ * To avoid turning every getSettings()/getMemories() call site async, we use a
+ * CACHE-HYDRATE model: `ensureStorageReady()` loads all `xani.*` keys into an
+ * in-memory cache once at startup; reads are then synchronous against the cache
+ * and writes update the cache synchronously while persisting in the background.
+ * Components call `ensureStorageReady()` in their mount effect before reading.
  */
 
+let cache: Map<string, string> | null = null;
+let readyPromise: Promise<void> | null = null;
+
+function isTauri(): boolean {
+  return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+}
+
+async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<T>(cmd, args);
+}
+
+async function backendLoadAll(): Promise<[string, string][]> {
+  if (isTauri()) {
+    return await tauriInvoke<[string, string][]>('kv_all');
+  }
+  const out: [string, string][] = [];
+  if (typeof window !== 'undefined') {
+    for (let i = 0; i < window.localStorage.length; i++) {
+      const k = window.localStorage.key(i);
+      if (k && k.startsWith('xani.')) {
+        const v = window.localStorage.getItem(k);
+        if (v !== null) out.push([k, v]);
+      }
+    }
+  }
+  return out;
+}
+
+async function backendSet(key: string, value: string): Promise<void> {
+  if (isTauri()) return tauriInvoke('kv_set', { key, value });
+  if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
+}
+
+async function backendRemove(key: string): Promise<void> {
+  if (isTauri()) return tauriInvoke('kv_remove', { key });
+  if (typeof window !== 'undefined') window.localStorage.removeItem(key);
+}
+
+/** Hydrate the in-memory cache from the backend. Idempotent. */
+export function ensureStorageReady(): Promise<void> {
+  if (!readyPromise) {
+    readyPromise = backendLoadAll()
+      .then((entries) => {
+        cache = new Map(entries);
+      })
+      .catch(() => {
+        cache = new Map();
+      });
+  }
+  return readyPromise;
+}
+
 export function readJson<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
+  // Before hydration in a plain browser, read localStorage directly so first
+  // paint isn't empty; under Tauri, callers await ensureStorageReady() first.
+  if (!cache) {
+    if (typeof window !== 'undefined' && !isTauri()) {
+      try {
+        const raw = window.localStorage.getItem(key);
+        return raw ? (JSON.parse(raw) as T) : fallback;
+      } catch {
+        return fallback;
+      }
+    }
+    return fallback;
+  }
+  const raw = cache.get(key);
+  if (raw === undefined) return fallback;
   try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    return JSON.parse(raw) as T;
   } catch {
     return fallback;
   }
 }
 
 export function writeJson<T>(key: string, value: T): void {
-  if (typeof window === 'undefined') return;
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-  } catch {
-    // Quota or serialization failure — swallow in Phase 1; SQLite removes this class of error.
-  }
+  const raw = JSON.stringify(value);
+  if (cache) cache.set(key, raw);
+  void backendSet(key, raw);
 }
 
 export function removeKey(key: string): void {
-  if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(key);
+  if (cache) cache.delete(key);
+  void backendRemove(key);
 }
 
-/** Stable id generator. Uses the Web Crypto UUID available in the webview. */
+/** Stable id generator (Web Crypto in the webview). */
 export function newId(): string {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
     return crypto.randomUUID();
   }
-  // Defensive fallback (SSR / very old runtime).
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }

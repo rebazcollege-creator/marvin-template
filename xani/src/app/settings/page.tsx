@@ -9,6 +9,7 @@ import {
   saveSettings,
   type XaniSettings,
 } from '@/lib/settings';
+import { ensureStorageReady } from '@/lib/storage';
 
 /**
  * Settings — the customization surface. Xanî is built for one user, so every
@@ -31,7 +32,7 @@ export default function SettingsPage() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
   useEffect(() => {
-    setSettings(getSettings());
+    ensureStorageReady().then(() => setSettings(getSettings()));
   }, []);
 
   if (!settings) {

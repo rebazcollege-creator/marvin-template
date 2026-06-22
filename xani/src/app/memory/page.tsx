@@ -15,6 +15,7 @@ import {
   type MemoryEntry,
   type SelfAdjustment,
 } from '@/lib/memory';
+import { ensureStorageReady } from '@/lib/storage';
 
 /**
  * Memory — what MARVIN has learned, what it wants to remember, and the changes
@@ -51,7 +52,7 @@ export default function MemoryPage() {
   };
 
   useEffect(() => {
-    refresh();
+    ensureStorageReady().then(refresh);
   }, []);
 
   if (!memories) {

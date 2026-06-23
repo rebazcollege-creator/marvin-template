@@ -3,9 +3,49 @@ mod keychain;
 
 use db::Db;
 use std::sync::Mutex;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, RunEvent};
 use tauri_plugin_shell::process::CommandChild;
 use tauri_plugin_shell::ShellExt;
+
+fn show_main(app: &tauri::AppHandle) {
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.show();
+        let _ = w.set_focus();
+    }
+}
+
+/// System tray: keeps Xanî resident. Left-click or "Open Xanî" reveals the
+/// window; "Quit" exits (which also stops the sidecar via the Exit handler).
+fn setup_tray(app: &tauri::App) -> tauri::Result<()> {
+    let open = MenuItem::with_id(app, "open", "Open Xanî", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+
+    TrayIconBuilder::new()
+        .icon(app.default_window_icon().expect("default icon").clone())
+        .tooltip("Xanî")
+        .menu(&menu)
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            "open" => show_main(app),
+            "quit" => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main(tray.app_handle());
+            }
+        })
+        .build(app)?;
+    Ok(())
+}
 
 /// Handle to the spawned sidecar so we can stop it on app exit.
 struct SidecarProcess(Mutex<Option<CommandChild>>);
@@ -48,6 +88,9 @@ pub fn run() {
 
             // Agent runtime sidecar (self-contained binary).
             app.manage(SidecarProcess(Mutex::new(spawn_sidecar(app))));
+
+            // System tray.
+            setup_tray(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

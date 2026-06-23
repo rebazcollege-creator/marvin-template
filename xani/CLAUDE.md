@@ -120,7 +120,12 @@ user scale a simple typed store wins):
         src-tauri/binaries/xani-sidecar-<triple>, gitignored). Tauri externalBin +
         shell-plugin spawn (lib.rs); CSP allows localhost:8787. No Node/node_modules
         at runtime. Requires Bun on the build machine; verify `tauri build` on macOS.
-    [ ] Voice (Whisper STT); auto-update + system tray.
+    [x] System tray (resident app: Open Xanî / Quit, click-to-show) — lib.rs
+        setup_tray, tauri "tray-icon" feature. Verify on macOS.
+    [x] Chat history persistence (src/lib/chats.ts): conversations persist via the
+        storage adapter; New chat + recent-chat switching in MarvinChat.
+    [ ] Voice (Whisper STT); auto-update (deferred — needs signing keys + a
+        release/update endpoint to function or be tested).
 
 ## Reference parts library (/reference — gitignored, read-only)
 - personal-ai-assistant — supervisor + sub-agent pattern (maps to MARVIN + Studios)

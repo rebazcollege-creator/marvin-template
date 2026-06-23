@@ -1,10 +1,11 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { streamMarvin, approveMarvin, extractLearnings } from '@/lib/marvin-client';
 import { buildMarvinSystemBlocks } from '@/lib/context';
 import { getSettings } from '@/lib/settings';
 import { ensureStorageReady } from '@/lib/storage';
+import { listChats, getChat, saveChat, newChatId, type Chat } from '@/lib/chats';
 import {
   ingestMemory,
   proposeAdjustment,
@@ -14,20 +15,22 @@ import {
 import type { ChatMessage } from '@/lib/marvin-protocol';
 
 /**
- * MARVIN chat — wired to the live sidecar runtime (token streaming + write
- * confirmation + post-session learning).
+ * MARVIN chat — live runtime (token streaming + write confirmation + post-session
+ * learning), with persistent history.
  *
  *  - text deltas stream in live.
  *  - propose_memory/propose_adjustment route into the /memory HITL queues.
  *  - approval_request shows an inline Approve/Reject card; the loop resumes on
  *    the user's decision (POST /approve).
- *  - "Save learnings" runs a background extraction pass over the chat.
+ *  - conversations persist (chats.ts) and survive restarts; New chat + recent.
  */
 
 type Note = { id: number; text: string };
 type Approval = { id: string; tool: string; reason: string };
 
 export function MarvinChat() {
+  const [chatId, setChatId] = useState('');
+  const [chats, setChats] = useState<Chat[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -35,7 +38,41 @@ export function MarvinChat() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const noteId = useRef(0);
 
+  useEffect(() => {
+    ensureStorageReady().then(() => {
+      const recent = listChats();
+      setChats(recent);
+      if (recent[0]) {
+        setChatId(recent[0].id);
+        setMessages(recent[0].messages);
+      } else {
+        setChatId(newChatId());
+      }
+    });
+  }, []);
+
   const addNote = (text: string) => setNotes((n) => [...n, { id: noteId.current++, text }]);
+
+  const persist = (id: string, msgs: ChatMessage[]) => {
+    saveChat(id, msgs);
+    setChats(listChats());
+  };
+
+  const newChat = () => {
+    setChatId(newChatId());
+    setMessages([]);
+    setNotes([]);
+    setApprovals([]);
+  };
+
+  const switchChat = (id: string) => {
+    const c = getChat(id);
+    if (!c) return;
+    setChatId(c.id);
+    setMessages(c.messages);
+    setNotes([]);
+    setApprovals([]);
+  };
 
   const send = async () => {
     const text = input.trim();
@@ -96,6 +133,7 @@ export function MarvinChat() {
     });
 
     setBusy(false);
+    persist(chatId, [...history, { role: 'assistant', content: assistant }]);
   };
 
   const decide = (id: string, approved: boolean) => {
@@ -123,8 +161,31 @@ export function MarvinChat() {
     );
   };
 
+  const recent = chats.filter((c) => c.id !== chatId).slice(0, 4);
+
   return (
     <div>
+      <div className="mb-2 flex items-center gap-3">
+        <button
+          type="button"
+          onClick={newChat}
+          className="text-xs text-ink-soft underline-offset-2 hover:underline"
+        >
+          New chat
+        </button>
+        {recent.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => switchChat(c.id)}
+            title={c.title}
+            className="max-w-40 truncate text-xs text-ink-soft underline-offset-2 hover:text-terracotta hover:underline"
+          >
+            {c.title}
+          </button>
+        ))}
+      </div>
+
       {messages.length > 0 && (
         <div className="mb-3 space-y-3">
           {messages.map((m, i) => (

@@ -1,11 +1,27 @@
-import { PagePlaceholder } from '@/components/ui/PagePlaceholder';
+'use client';
+
+import { DrafterWorkbench } from '@/components/studios/DrafterWorkbench';
 
 export default function SlackComposerPage() {
   return (
-    <PagePlaceholder
+    <DrafterWorkbench
       title="Slack Composer"
-      subtitle="Studio · dual workspace"
-      note="Give intent, workspace and channel; MARVIN drafts the message. Sending always requires confirmation. LeadStories is monitor-only and cannot be posted to. Editor UI lands in Phase 3."
+      subtitle="Studio · The Amargi · draft only"
+      selects={[
+        {
+          key: 'workspace',
+          label: 'Workspace',
+          options: [{ value: 'amargi', label: 'The Amargi' }],
+        },
+      ]}
+      textInputs={[{ key: 'channel', label: 'Channel', placeholder: '#general' }]}
+      intentLabel="What should the message say?"
+      intentPlaceholder="e.g. Ask Aland for the updated cover graphic by Friday…"
+      buildPrompt={(f, intent) =>
+        `Draft a Slack message for the ${f.workspace} workspace, channel ${f.channel || '#general'}. ` +
+        `Intent: ${intent}. Message text only, friendly and concise. Draft only — do not post.`
+      }
+      note="Drafts only — posting always requires your confirmation. LeadStories Slack is monitor-only and is not offered here."
     />
   );
 }

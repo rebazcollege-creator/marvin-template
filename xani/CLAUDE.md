@@ -107,8 +107,10 @@ user scale a simple typed store wins):
 [~] Phase 5 — Integrations + Studios:
     [x] Per-view data endpoints (/data/inbox|trello|calendar|slack|buffer) +
         functional view pages (components/ui/DataView) bound to sidecar data.
-    [x] Studios live: Amargi/LeadStories/Moonshot workbench → runtime (Sonnet),
-        drafting only (StudioWorkbench reuses the streaming /chat loop).
+    [x] Studios live (all 5): Amargi/LeadStories/Moonshot (StudioWorkbench) +
+        Email drafter / Slack composer (DrafterWorkbench) → runtime, drafting
+        only. Slack composer offers Amargi only (LeadStories monitor-only); email
+        marks LeadStories send-restricted.
     [x] Gmail + Calendar real REST (cred-gated); Slack live via @slack/web-api
         (SLACK_AMARGI_BOT_TOKEN). Go live by adding creds to .env.local / keychain.
     [x] Light memory maintenance (archive episodic > 120d) on /memory load.

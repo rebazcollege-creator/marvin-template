@@ -13,6 +13,8 @@ export type ConnectField = {
   placeholder?: string;
   type?: FieldType;
   help?: string;
+  /** Env-var name the sidecar reads; written to the OS keychain on desktop. */
+  envKey?: string;
 };
 
 export type ConnectScope = {
@@ -38,18 +40,18 @@ export type ConnectMethod = {
   docsUrl?: string;
 };
 
-const googleService = (envHint: string): ConnectMethod => ({
+const googleService = (prefix: string): ConnectMethod => ({
   id: 'service',
   label: 'Use OAuth app credentials',
   blurb: 'Paste an OAuth client + refresh token you generated yourself. Best for power users and headless setups.',
   kind: 'form',
-  envHint,
+  envHint: `${prefix}_CLIENT_ID / _CLIENT_SECRET / _REFRESH_TOKEN`,
   docsLabel: 'Google Cloud console',
   docsUrl: 'https://console.cloud.google.com/apis/credentials',
   fields: [
-    { key: 'clientId', label: 'Client ID', placeholder: '…apps.googleusercontent.com' },
-    { key: 'clientSecret', label: 'Client secret', type: 'password', placeholder: 'GOCSPX-…' },
-    { key: 'refreshToken', label: 'Refresh token', type: 'password', placeholder: '1//0g…' },
+    { key: 'clientId', label: 'Client ID', placeholder: '…apps.googleusercontent.com', envKey: `${prefix}_CLIENT_ID` },
+    { key: 'clientSecret', label: 'Client secret', type: 'password', placeholder: 'GOCSPX-…', envKey: `${prefix}_CLIENT_SECRET` },
+    { key: 'refreshToken', label: 'Refresh token', type: 'password', placeholder: '1//0g…', envKey: `${prefix}_REFRESH_TOKEN` },
   ],
 });
 
@@ -70,7 +72,20 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
         { id: 'contacts', label: 'Read contacts', desc: 'Recognise who people are.' },
       ],
     },
-    googleService('GMAIL_<ACCOUNT>_CLIENT_ID / _SECRET / _REFRESH_TOKEN'),
+    {
+      id: 'service',
+      label: 'Use OAuth app credentials',
+      blurb: 'Paste an OAuth client + refresh token for one account. Best for power users and headless setups.',
+      kind: 'form',
+      envHint: 'GMAIL_CLIENT_ID_1 / _SECRET_1 / _REFRESH_TOKEN_1',
+      docsLabel: 'Google Cloud console',
+      docsUrl: 'https://console.cloud.google.com/apis/credentials',
+      fields: [
+        { key: 'clientId', label: 'Client ID', placeholder: '…apps.googleusercontent.com', envKey: 'GMAIL_CLIENT_ID_1' },
+        { key: 'clientSecret', label: 'Client secret', type: 'password', placeholder: 'GOCSPX-…', envKey: 'GMAIL_CLIENT_SECRET_1' },
+        { key: 'refreshToken', label: 'Refresh token', type: 'password', placeholder: '1//0g…', envKey: 'GMAIL_REFRESH_TOKEN_1' },
+      ],
+    },
   ],
   gcal: [
     {
@@ -85,7 +100,7 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
         { id: 'write', label: 'Manage events', desc: 'Create, move and decline events you approve.' },
       ],
     },
-    googleService('GOOGLE_CALENDAR_CLIENT_ID / _SECRET / _REFRESH_TOKEN'),
+    googleService('GOOGLE_CALENDAR'),
   ],
   drive: [
     {
@@ -100,7 +115,7 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
         { id: 'write', label: 'Edit files', desc: 'Make changes you approve in Approvals.' },
       ],
     },
-    googleService('GOOGLE_DRIVE_CLIENT_ID / _SECRET / _REFRESH_TOKEN'),
+    googleService('GOOGLE_DRIVE'),
   ],
   slack: [
     {
@@ -124,7 +139,7 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
       envHint: 'SLACK_<WORKSPACE>_BOT_TOKEN',
       docsLabel: 'Slack API · Your apps',
       docsUrl: 'https://api.slack.com/apps',
-      fields: [{ key: 'botToken', label: 'Bot token', type: 'password', placeholder: 'xoxb-…' }],
+      fields: [{ key: 'botToken', label: 'Bot token', type: 'password', placeholder: 'xoxb-…', envKey: 'SLACK_AMARGI_BOT_TOKEN' }],
     },
   ],
   trello: [
@@ -138,9 +153,9 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
       docsLabel: 'Trello power-up admin',
       docsUrl: 'https://trello.com/power-ups/admin',
       fields: [
-        { key: 'apiKey', label: 'API key', placeholder: 'Your Trello API key' },
-        { key: 'token', label: 'Token', type: 'password', placeholder: 'Your Trello token' },
-        { key: 'board', label: 'Board ID', placeholder: 'e.g. 683dafe308be04e369b8434c', help: 'The board MARVIN should use.' },
+        { key: 'apiKey', label: 'API key', placeholder: 'Your Trello API key', envKey: 'TRELLO_API_KEY' },
+        { key: 'token', label: 'Token', type: 'password', placeholder: 'Your Trello token', envKey: 'TRELLO_TOKEN' },
+        { key: 'board', label: 'Board ID', placeholder: 'e.g. 683dafe308be04e369b8434c', help: 'The board MARVIN should use.', envKey: 'TRELLO_BOARD_ID' },
       ],
     },
     {
@@ -149,7 +164,7 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
       blurb: 'Route Trello through your Zapier MCP server (no keys stored here).',
       kind: 'form',
       envHint: 'ZAPIER_MCP_SERVER_URL',
-      fields: [{ key: 'serverUrl', label: 'Zapier MCP server URL', placeholder: 'https://mcp.zapier.com/api/v1/connect' }],
+      fields: [{ key: 'serverUrl', label: 'Zapier MCP server URL', placeholder: 'https://mcp.zapier.com/api/v1/connect', envKey: 'ZAPIER_MCP_SERVER_URL' }],
     },
   ],
   buffer: [
@@ -162,7 +177,7 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
       envHint: 'BUFFER_ACCESS_TOKEN',
       docsLabel: 'Buffer · API settings',
       docsUrl: 'https://publish.buffer.com/settings/api',
-      fields: [{ key: 'accessToken', label: 'Access token', type: 'password', placeholder: '1/…' }],
+      fields: [{ key: 'accessToken', label: 'Access token', type: 'password', placeholder: '1/…', envKey: 'BUFFER_ACCESS_TOKEN' }],
     },
   ],
 };

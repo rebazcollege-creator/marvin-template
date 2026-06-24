@@ -65,6 +65,11 @@ fn spawn_sidecar(app: &tauri::App) -> Option<CommandChild> {
     if let Some(key) = keychain::read_api_key() {
         cmd = cmd.env("ANTHROPIC_API_KEY", key);
     }
+    // Integration credentials stored via the connection flow are handed to the
+    // sidecar here, so tokens never touch the renderer or disk in plaintext.
+    for (name, value) in keychain::read_integration_creds() {
+        cmd = cmd.env(name, value);
+    }
     match cmd.spawn() {
         Ok((_rx, child)) => Some(child),
         Err(err) => {
@@ -99,7 +104,9 @@ pub fn run() {
             db::kv_set,
             db::kv_remove,
             keychain::set_api_key,
-            keychain::has_api_key
+            keychain::has_api_key,
+            keychain::set_integration_cred,
+            keychain::has_integration_cred
         ])
         .build(tauri::generate_context!())
         .expect("error while building Xanî");

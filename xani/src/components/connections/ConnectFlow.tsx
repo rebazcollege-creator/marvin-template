@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { methodsFor, type ConnectMethod } from '@/lib/connect-flows';
 import type { Connection, ConnState } from '@/lib/connections';
+import { isTauri } from '@/lib/storage';
 
 /**
  * The connection flow. Walks the real paths for an integration:
@@ -46,24 +47,37 @@ export function ConnectFlow({
     setStep('method');
   };
 
-  const finish = () => {
+  const finish = async () => {
     if (!method) return;
     setStep('connecting');
-    // Honest transition: this records the connection config; the runtime uses the
-    // real credentials from the keychain/.env. No network call is faked here.
-    window.setTimeout(() => {
-      const accounts = method.multiAccount
-        ? Array.from(new Set([...(state?.accounts ?? []), account].filter(Boolean)))
-        : undefined;
-      onComplete({
-        connected: true,
-        method: method.id,
-        accounts,
-        scopes: method.scopes ? scopes : undefined,
-        connectedAt: new Date().toISOString(),
-      });
-      setStep('done');
-    }, 650);
+    // On desktop, credential-form values are written to the OS keychain (the Rust
+    // command), so the sidecar can read them at next spawn — tokens never touch the
+    // renderer beyond this transient write. On web/dev there's no keychain, so the
+    // connection is recorded and the user adds the keys to .env (per the note).
+    if (method.kind === 'form' && isTauri()) {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        for (const f of method.fields ?? []) {
+          const v = (values[f.key] ?? '').trim();
+          if (f.envKey && v) await invoke('set_integration_cred', { name: f.envKey, value: v });
+        }
+      } catch {
+        /* still record the connection below */
+      }
+    } else {
+      await new Promise((r) => window.setTimeout(r, 500));
+    }
+    const accounts = method.multiAccount
+      ? Array.from(new Set([...(state?.accounts ?? []), account].filter(Boolean)))
+      : undefined;
+    onComplete({
+      connected: true,
+      method: method.id,
+      accounts,
+      scopes: method.scopes ? scopes : undefined,
+      connectedAt: new Date().toISOString(),
+    });
+    setStep('done');
   };
 
   const canFinish =

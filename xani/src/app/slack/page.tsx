@@ -30,7 +30,7 @@ export default function SlackPage() {
   }, []);
 
   const badge = state === 'loading' ? 'Loading…' : state === 'offline' ? 'Sidecar offline' : data?.connected ? 'Connected' : 'Not connected';
-  const messages = data?.messages ?? [];
+  const messages = useMemo(() => data?.messages ?? [], [data]);
   const channels = useMemo(() => Array.from(new Set(messages.map((m) => m.channel))), [messages]);
   const current = active ?? channels[0] ?? null;
   const channelMsgs = messages.filter((m) => m.channel === current);

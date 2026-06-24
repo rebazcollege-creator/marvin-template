@@ -111,7 +111,9 @@ export default function InboxPage() {
         {state === 'loaded' && data?.connected && folder !== 'inbox' && (
           <Centered title={`${FOLDERS.find((f) => f.id === folder)?.label} is coming`} body="Inbox is live; the other folders are next." />
         )}
-        {state === 'loaded' && data?.connected && folder === 'inbox' && rows.length === 0 && <Centered title="Nothing here" body="No mail in this view right now." />}
+        {state === 'loaded' && data?.connected && folder === 'inbox' && rows.length === 0 && (
+          <Centered title={data.error ? 'Couldn’t load your mail' : 'Nothing here'} body={data.error ?? 'No mail in this view right now.'} />
+        )}
 
         {state === 'loaded' && data?.connected && folder === 'inbox' && rows.length > 0 && (
           <>

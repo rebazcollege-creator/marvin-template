@@ -64,6 +64,8 @@ export interface BriefingData {
 // ── Per-view data payloads (GET /data/*) ──────────────────────────
 export interface InboxData {
   connected: boolean;
+  /** When present, why the list is empty (auth failure, API disabled, etc.). */
+  error?: string;
   messages: {
     id: string;
     account: string;

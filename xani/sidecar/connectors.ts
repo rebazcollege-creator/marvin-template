@@ -41,22 +41,23 @@ const AMARGI_CHANNELS = [
 ];
 
 async function googleAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<string | null> {
+  return (await googleToken(clientId, clientSecret, refreshToken)).token ?? null;
+}
+
+/** Token exchange that also surfaces the error (for honest diagnostics). */
+async function googleToken(clientId: string, clientSecret: string, refreshToken: string): Promise<{ token?: string; error?: string }> {
   try {
     const r = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: clientId,
-        client_secret: clientSecret,
-        refresh_token: refreshToken,
-        grant_type: 'refresh_token',
-      }),
+      body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }),
     });
-    if (!r.ok) return null;
-    const j = (await r.json()) as { access_token?: string };
-    return j.access_token ?? null;
-  } catch {
-    return null;
+    const body = await r.text();
+    if (!r.ok) return { error: `auth ${r.status}: ${body.slice(0, 160)}` };
+    const j = JSON.parse(body) as { access_token?: string };
+    return j.access_token ? { token: j.access_token } : { error: 'no access_token returned' };
+  } catch (e) {
+    return { error: (e as Error).message };
   }
 }
 
@@ -95,19 +96,27 @@ async function gmailUnreadCounts(): Promise<{ connected: boolean; accounts: { ac
 export async function getInbox(): Promise<InboxData> {
   const messages: InboxData['messages'] = [];
   let any = false;
+  let tokenErr = '';
+  let apiErr = '';
   for (const a of GMAIL_ACCOUNTS) {
     const c = gmailCreds(a.n);
     if (!c) continue;
     any = true;
-    const token = await googleAccessToken(c.id, c.secret, c.refresh);
-    if (!token) continue;
+    const { token, error } = await googleToken(c.id, c.secret, c.refresh);
+    if (!token) {
+      tokenErr = tokenErr || `${a.role}: ${error ?? 'authentication failed'}`;
+      continue;
+    }
     try {
       // Recent inbox mail (read + unread), newest first — a faithful mailbox view.
       const list = await fetch(
         'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=in:inbox&maxResults=20',
         { headers: { Authorization: `Bearer ${token}` } },
       );
-      if (!list.ok) continue;
+      if (!list.ok) {
+        apiErr = apiErr || `${a.role}: Gmail API ${list.status} — ${(await list.text()).slice(0, 180)}`;
+        continue;
+      }
       const lj = (await list.json()) as { messages?: { id: string }[] };
       for (const m of lj.messages ?? []) {
         const det = await fetch(
@@ -138,7 +147,12 @@ export async function getInbox(): Promise<InboxData> {
     }
   }
   messages.sort((a, b) => (b.receivedAt > a.receivedAt ? 1 : b.receivedAt < a.receivedAt ? -1 : 0));
-  return { connected: any, messages };
+  let error: string | undefined;
+  if (messages.length === 0) {
+    if (tokenErr) error = `Couldn’t sign in to Gmail — ${tokenErr}. The refresh token likely doesn’t match the Client ID/secret; reconnect with “Sign in with Google”.`;
+    else if (apiErr) error = apiErr;
+  }
+  return { connected: any, messages, error };
 }
 
 // ── Google Calendar ───────────────────────────────────────────────

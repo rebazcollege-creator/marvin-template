@@ -13,12 +13,19 @@ import { setCred } from './creds.ts';
 
 const SCOPES: Record<string, string[]> = {
   gmail: [
-    'https://www.googleapis.com/auth/gmail.modify',
-    'https://www.googleapis.com/auth/gmail.send',
+    'https://mail.google.com/', // full mailbox: read, send, modify, delete, manage labels
+    'https://www.googleapis.com/auth/contacts',
+    'https://www.googleapis.com/auth/userinfo.email',
+    'https://www.googleapis.com/auth/userinfo.profile',
+  ],
+  gcal: [
+    'https://www.googleapis.com/auth/calendar', // full read/write on all calendars
     'https://www.googleapis.com/auth/userinfo.email',
   ],
-  gcal: ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.email'],
-  drive: ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/userinfo.email'],
+  drive: [
+    'https://www.googleapis.com/auth/drive', // full read/write on all Drive files
+    'https://www.googleapis.com/auth/userinfo.email',
+  ],
 };
 
 const KEYS: Record<string, { id: string; secret: string; refresh: string }> = {

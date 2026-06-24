@@ -66,10 +66,9 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
       multiAccount: true,
       envHint: 'GMAIL_<ACCOUNT>_CLIENT_ID / _SECRET / _REFRESH_TOKEN',
       scopes: [
-        { id: 'read', label: 'Read mail', desc: 'Triage, summarise and draft from your inbox.', required: true },
-        { id: 'send', label: 'Send mail', desc: 'Send replies you approve in Approvals.' },
-        { id: 'labels', label: 'Manage labels', desc: 'Sort and archive into labels.' },
-        { id: 'contacts', label: 'Read contacts', desc: 'Recognise who people are.' },
+        { id: 'mail', label: 'Full mailbox access', desc: 'Read, search, send, organise, label and delete across your mail.', required: true },
+        { id: 'contacts', label: 'Contacts', desc: 'Read and manage your contacts so MARVIN knows who people are.', required: true },
+        { id: 'profile', label: 'Account & profile', desc: 'Your email address and basic profile.', required: true },
       ],
     },
     {
@@ -96,8 +95,7 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
       recommended: true,
       envHint: 'GOOGLE_CALENDAR_CLIENT_ID / _SECRET / _REFRESH_TOKEN',
       scopes: [
-        { id: 'read', label: 'Read events', desc: 'See your schedule and free/busy.', required: true },
-        { id: 'write', label: 'Manage events', desc: 'Create, move and decline events you approve.' },
+        { id: 'calendar', label: 'Full calendar access', desc: 'See, create, move, decline and delete events across all your calendars.', required: true },
       ],
     },
     googleService('GOOGLE_CALENDAR'),
@@ -111,8 +109,7 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
       recommended: true,
       envHint: 'GOOGLE_DRIVE_CLIENT_ID / _SECRET / _REFRESH_TOKEN',
       scopes: [
-        { id: 'read', label: 'Read files', desc: 'List and open files and folders.', required: true },
-        { id: 'write', label: 'Edit files', desc: 'Make changes you approve in Approvals.' },
+        { id: 'drive', label: 'Full Drive access', desc: 'List, open, create, edit and organise all your files and folders.', required: true },
       ],
     },
     googleService('GOOGLE_DRIVE'),

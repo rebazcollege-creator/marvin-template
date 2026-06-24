@@ -1,4 +1,13 @@
 import { readJson, writeJson, newId } from '@/lib/storage';
+import { logActivity } from '@/lib/activity';
+
+function broadcast(): void {
+  try {
+    window.dispatchEvent(new CustomEvent('xani:approvals-changed'));
+  } catch {
+    /* SSR / no window */
+  }
+}
 
 /**
  * The Approvals queue — the trust gate. Outbound actions MARVIN (or a surface like
@@ -49,7 +58,23 @@ export function enqueueApproval(input: {
     status: 'pending',
   };
   saveApprovals([item, ...listApprovals()]);
+  logActivity({ kind: 'approval', title: `Prepared: ${item.title}`, detail: item.source, tag: 'Needs you' });
+  broadcast();
   return item;
+}
+
+export function decideApproval(id: string, status: 'approved' | 'rejected'): void {
+  const all = listApprovals();
+  const item = all.find((a) => a.id === id);
+  saveApprovals(all.map((a) => (a.id === id ? { ...a, status, decidedAt: new Date().toISOString() } : a)));
+  if (item) {
+    logActivity({
+      kind: status === 'approved' ? 'approved' : 'rejected',
+      title: `${status === 'approved' ? 'Approved' : 'Rejected'}: ${item.title}`,
+      detail: item.source,
+    });
+  }
+  broadcast();
 }
 
 export function pendingCount(): number {

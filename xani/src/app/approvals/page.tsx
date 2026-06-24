@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { ensureStorageReady } from '@/lib/storage';
 import { AUTONOMY_DEFS, getAutonomy, setAutonomy, type Level } from '@/lib/autonomy';
-import { listApprovals, saveApprovals, type ApprovalItem, type ApprovalKind } from '@/lib/approvals';
+import { listApprovals, saveApprovals, decideApproval, type ApprovalItem, type ApprovalKind } from '@/lib/approvals';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 const LEVELS: { id: Level; label: string }[] = [
@@ -41,8 +41,10 @@ export default function ApprovalsPage() {
     setItems(next);
     saveApprovals(next);
   };
-  const decide = (id: string, status: 'approved' | 'rejected') =>
-    persist(items.map((i) => (i.id === id ? { ...i, status, decidedAt: new Date().toISOString() } : i)));
+  const decide = (id: string, status: 'approved' | 'rejected') => {
+    decideApproval(id, status);
+    setItems(listApprovals());
+  };
   const saveEdit = (id: string) => {
     persist(items.map((i) => (i.id === id ? { ...i, preview: draft } : i)));
     setEditing(null);

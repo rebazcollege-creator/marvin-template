@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ensureStorageReady } from '@/lib/storage';
 import { Modal } from '@/components/ui/Modal';
 import { enqueueApproval, type ApprovalKind } from '@/lib/approvals';
+import { logActivity } from '@/lib/activity';
 import {
   listAutomations,
   saveAutomations,
@@ -97,12 +98,15 @@ export default function AutomationsPage() {
     persist([a, ...items]);
     setOpen((o) => ({ ...o, [a.id]: true }));
     setText('');
+    logActivity({ kind: 'automation', title: `Created automation: ${a.name}`, detail: a.trigger });
   };
 
   const addTemplate = (id: string) => {
     const t = AUTO_TEMPLATES.find((x) => x.id === id);
     if (!t) return;
-    persist([fromTemplate(t), ...items]);
+    const a = fromTemplate(t);
+    persist([a, ...items]);
+    logActivity({ kind: 'automation', title: `Added automation: ${a.name}`, detail: a.trigger });
   };
 
   const toggle = (id: string) =>

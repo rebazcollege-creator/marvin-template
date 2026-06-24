@@ -1,8 +1,11 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
+import { ensureStorageReady } from '@/lib/storage';
+import { pendingCount } from '@/lib/approvals';
 
 type Item = { label: string; href: string; icon: string };
 
@@ -54,7 +57,7 @@ function Icon({ name }: { name: string }) {
   }
 }
 
-function NavLink({ item, active }: { item: Item; active: boolean }) {
+function NavLink({ item, active, badge }: { item: Item; active: boolean; badge?: number }) {
   return (
     <Link
       href={item.href}
@@ -69,6 +72,11 @@ function NavLink({ item, active }: { item: Item; active: boolean }) {
         <Icon name={item.icon} />
       </span>
       {item.label}
+      {badge !== undefined && badge > 0 && (
+        <span className="ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent px-1 text-[10.5px] font-bold text-on-accent">
+          {badge}
+        </span>
+      )}
     </Link>
   );
 }
@@ -84,6 +92,14 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 export function Sidebar() {
   const pathname = usePathname();
   const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
+  const [pending, setPending] = useState(0);
+
+  useEffect(() => {
+    const read = () => ensureStorageReady().then(() => setPending(pendingCount()));
+    read();
+    window.addEventListener('xani:approvals-changed', read);
+    return () => window.removeEventListener('xani:approvals-changed', read);
+  }, []);
 
   return (
     <aside className="gm-rail flex w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface px-3.5 pb-4 pt-5">
@@ -120,7 +136,12 @@ export function Sidebar() {
       <SectionLabel>Assistant</SectionLabel>
       <nav className="space-y-0.5">
         {ASSISTANT.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
+          <NavLink
+            key={item.href}
+            item={item}
+            active={isActive(item.href)}
+            badge={item.href === '/approvals' ? pending : undefined}
+          />
         ))}
       </nav>
     </aside>

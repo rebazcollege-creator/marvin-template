@@ -11,6 +11,7 @@ import {
   type ConnState,
 } from '@/lib/connections';
 import { ConnectFlow } from '@/components/connections/ConnectFlow';
+import { logActivity } from '@/lib/activity';
 
 function Card({ c, state, onOpen }: { c: Connection; state?: ConnState; onOpen: () => void }) {
   const on = !!state?.connected;
@@ -62,11 +63,15 @@ export default function ConnectionsPage() {
   const complete = (id: string, s: ConnState) => {
     setConnection(id, s);
     setMap(getConnections());
+    const name = CONNECTIONS.find((c) => c.id === id)?.name ?? id;
+    logActivity({ kind: 'connection', title: `Connected ${name}`, detail: s.accounts?.length ? s.accounts.join(', ') : undefined });
   };
   const disconnect = (id: string) => {
     removeConnection(id);
     setMap(getConnections());
     setActiveId(null);
+    const name = CONNECTIONS.find((c) => c.id === id)?.name ?? id;
+    logActivity({ kind: 'connection', title: `Disconnected ${name}` });
   };
 
   const connected = CONNECTIONS.filter((c) => map[c.id]?.connected);

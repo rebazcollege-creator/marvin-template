@@ -1,4 +1,8 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { spawnSync } from 'node:child_process';
+import { writeFileSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
@@ -70,6 +74,12 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
+async function readRawBody(req: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) chunks.push(chunk as Buffer);
+  return Buffer.concat(chunks);
+}
+
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -110,6 +120,36 @@ const server = createServer(async (req, res) => {
       }
     } catch (err) {
       return json(res, 500, { error: (err as Error).message });
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/transcribe') {
+    // On-device transcription via a local whisper.cpp binary. Audio never leaves
+    // the machine; if no binary is configured we say so honestly (no cloud STT).
+    const bin = process.env.WHISPER_BIN;
+    if (!bin) {
+      return json(res, 200, {
+        ok: false,
+        error: 'On-device transcription isn’t configured. Set WHISPER_BIN to a whisper.cpp binary (and WHISPER_MODEL) — audio stays on your device.',
+      });
+    }
+    const file = join(tmpdir(), `xani-rec-${Date.now()}.webm`);
+    try {
+      writeFileSync(file, await readRawBody(req));
+      const args = (process.env.WHISPER_ARGS ?? '-otxt -nt').split(' ').filter(Boolean);
+      if (process.env.WHISPER_MODEL) args.push('-m', process.env.WHISPER_MODEL);
+      args.push('-f', file);
+      const out = spawnSync(bin, args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+      if (out.status !== 0) return json(res, 200, { ok: false, error: (out.stderr || 'Transcription failed.').slice(0, 500) });
+      return json(res, 200, { ok: true, text: (out.stdout || '').trim() });
+    } catch (err) {
+      return json(res, 200, { ok: false, error: (err as Error).message });
+    } finally {
+      try {
+        unlinkSync(file);
+      } catch {
+        /* ignore */
+      }
     }
   }
 

@@ -13,6 +13,7 @@ import {
 } from '@/lib/notetaker';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 import { enqueueApproval } from '@/lib/approvals';
+import { transcribeAudio } from '@/lib/marvin-client';
 
 type Capture = 'off' | 'requesting' | 'recording' | 'denied';
 
@@ -45,6 +46,12 @@ export default function NotetakerPage() {
   const rafRef = useRef<number | null>(null);
   const ctxRef = useRef<AudioContext | null>(null);
   const startRef = useRef(0);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const blobsRef = useRef<Map<string, Blob>>(new Map());
+  const pendingIdRef = useRef<string | null>(null);
+  const [, setBlobTick] = useState(0);
+  const [transcribeMsg, setTranscribeMsg] = useState('');
 
   useEffect(() => {
     ensureStorageReady().then(() => {
@@ -66,12 +73,33 @@ export default function NotetakerPage() {
     if (timerRef.current) window.clearInterval(timerRef.current);
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     ctxRef.current?.close().catch(() => {});
+    try {
+      if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+    } catch {
+      /* ignore */
+    }
     streamRef.current?.getTracks().forEach((t) => t.stop());
     timerRef.current = null;
     rafRef.current = null;
     ctxRef.current = null;
     streamRef.current = null;
   }
+
+  const transcribe = async (session: NoteSession) => {
+    const blob = blobsRef.current.get(session.id);
+    if (!blob) {
+      setTranscribeMsg('No audio for this session — audio is held only in memory and clears on reload.');
+      return;
+    }
+    setTranscribeMsg('Transcribing on your device…');
+    const r = await transcribeAudio(blob);
+    if (r.ok && r.text) {
+      patchSession(session.id, { notes: session.notes ? `${session.notes}\n\n${r.text}` : r.text });
+      setTranscribeMsg('Transcript added to notes.');
+    } else {
+      setTranscribeMsg(r.error ?? 'Could not transcribe.');
+    }
+  };
 
   const start = async () => {
     setCapture('requesting');
@@ -81,6 +109,24 @@ export default function NotetakerPage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+      try {
+        const rec = new MediaRecorder(stream);
+        recorderRef.current = rec;
+        chunksRef.current = [];
+        rec.ondataavailable = (e) => {
+          if (e.data && e.data.size) chunksRef.current.push(e.data);
+        };
+        rec.onstop = () => {
+          const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+          if (pendingIdRef.current && blob.size) blobsRef.current.set(pendingIdRef.current, blob);
+          setBlobTick((t) => t + 1);
+          streamRef.current?.getTracks().forEach((t) => t.stop());
+          streamRef.current = null;
+        };
+        rec.start();
+      } catch {
+        /* recording without MediaRecorder still captures timing/notes */
+      }
       try {
         const ctx = new AudioContext();
         ctxRef.current = ctx;
@@ -114,12 +160,28 @@ export default function NotetakerPage() {
 
   const stop = () => {
     const dur = elapsed;
-    teardown();
+    // Stop meters/timer now, but let the recorder flush (its onstop closes tracks)
+    // so the captured audio is associated with the new session.
+    if (timerRef.current) window.clearInterval(timerRef.current);
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    ctxRef.current?.close().catch(() => {});
+    timerRef.current = null;
+    rafRef.current = null;
+    ctxRef.current = null;
     const s = newSession(agenda, dur);
+    pendingIdRef.current = s.id;
     persist([s, ...sessions]);
     setSelectedId(s.id);
     setCapture('off');
     setLevel(0);
+    setTranscribeMsg('');
+    const rec = recorderRef.current;
+    if (rec && rec.state !== 'inactive') {
+      rec.stop();
+    } else {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    }
   };
 
   const cancelCapture = () => {
@@ -282,6 +344,9 @@ export default function NotetakerPage() {
                 onTitle={(t) => patchSession(selected.id, { title: t })}
                 onNotes={(n) => patchSession(selected.id, { notes: n })}
                 onDelete={() => { persist(sessions.filter((s) => s.id !== selected.id)); setSelectedId(null); }}
+                hasAudio={blobsRef.current.has(selected.id)}
+                onTranscribe={() => void transcribe(selected)}
+                transcribeMsg={transcribeMsg}
               />
             )}
 
@@ -343,6 +408,9 @@ function Review({
   onTitle,
   onNotes,
   onDelete,
+  hasAudio,
+  onTranscribe,
+  transcribeMsg,
 }: {
   session: NoteSession;
   draftAction: string;
@@ -353,6 +421,9 @@ function Review({
   onTitle: (t: string) => void;
   onNotes: (n: string) => void;
   onDelete: () => void;
+  hasAudio: boolean;
+  onTranscribe: () => void;
+  transcribeMsg: string;
 }) {
   return (
     <div>
@@ -375,7 +446,16 @@ function Review({
         </>
       )}
 
-      <div className="mt-6 text-[11px] font-bold tracking-[0.08em] text-muted">NOTES</div>
+      <div className="mt-6 flex items-center gap-3">
+        <span className="text-[11px] font-bold tracking-[0.08em] text-muted">NOTES</span>
+        {hasAudio && (
+          <button type="button" onClick={onTranscribe} className="flex items-center gap-1.5 rounded-[8px] border border-border bg-bg px-2.5 py-1 text-[11.5px] font-semibold text-text-2 hover:bg-hover">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M6 11a6 6 0 0 0 12 0M12 17v4" /></svg>
+            Transcribe (on-device)
+          </button>
+        )}
+        {transcribeMsg && <span className="text-[11.5px] text-muted">{transcribeMsg}</span>}
+      </div>
       <textarea
         value={session.notes}
         onChange={(e) => onNotes(e.target.value)}

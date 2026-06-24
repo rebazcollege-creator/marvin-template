@@ -98,6 +98,25 @@ export async function actMarvin(payload: ActPayload): Promise<ActResult & { offl
   }
 }
 
+/**
+ * On-device transcription: send recorded audio to the sidecar, which runs a local
+ * whisper binary. Audio never leaves the machine. Returns ok:false (with a clear
+ * reason) when transcription isn't configured or the runtime is offline.
+ */
+export async function transcribeAudio(blob: Blob): Promise<{ ok: boolean; text?: string; error?: string; offline?: boolean }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/transcribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: blob,
+    });
+    if (!resp.ok) return { ok: false, error: `Runtime responded ${resp.status}.` };
+    return (await resp.json()) as { ok: boolean; text?: string; error?: string };
+  } catch {
+    return { ok: false, offline: true, error: 'Runtime offline — start it with: npm run sidecar.' };
+  }
+}
+
 /** Post-session learning: extract durable memories from a finished chat. */
 export async function extractLearnings(
   messages: ChatMessage[],

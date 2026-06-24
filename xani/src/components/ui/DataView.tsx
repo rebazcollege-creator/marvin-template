@@ -43,33 +43,33 @@ export function DataView<T extends { connected: boolean }>(props: {
           : 'Not connected';
 
   return (
-    <div className="mx-auto max-w-3xl px-8 py-10">
+    <div className="mx-auto max-w-3xl px-8 pb-16 pt-7">
       <div className="flex items-baseline justify-between">
         <div>
-          <h1 className="text-3xl text-ink">{props.title}</h1>
-          {props.subtitle ? <p className="mt-1 text-sm text-ink-soft">{props.subtitle}</p> : null}
+          <h1 className="font-display text-[26px] font-semibold text-text">{props.title}</h1>
+          {props.subtitle ? <p className="mt-1 text-[13px] text-muted">{props.subtitle}</p> : null}
         </div>
-        <span className="text-xs text-ink-soft">{badge}</span>
+        <span className="text-[11.5px] text-muted">{badge}</span>
       </div>
 
-      <div className="mt-8">
-        {state === 'loading' && <div className="h-24 animate-pulse rounded-2xl bg-line/60" />}
+      <div className="mt-7">
+        {state === 'loading' && <div className="xsk h-24 rounded-2xl" />}
 
         {state === 'offline' && (
-          <div className="rounded-2xl border border-dashed border-line bg-paper-card p-8 text-sm text-ink-soft">
+          <div className="rounded-2xl border border-dashed border-border bg-surface p-8 text-sm text-text-2">
             MARVIN&apos;s runtime isn&apos;t reachable. Start it with{' '}
-            <code className="rounded bg-paper px-1">npm run sidecar</code>.
+            <code className="rounded bg-bg px-1">npm run sidecar</code>.
           </div>
         )}
 
         {state === 'loaded' && data && !data.connected && (
-          <div className="rounded-2xl border border-dashed border-line bg-paper-card p-8 text-sm text-ink-soft">
+          <div className="rounded-2xl border border-dashed border-border bg-surface p-8 text-sm text-text-2">
             {props.notConnectedNote}
           </div>
         )}
 
         {state === 'loaded' && data && data.connected && props.isEmpty(data) && (
-          <div className="rounded-2xl border border-dashed border-line bg-paper-card p-8 text-sm text-ink-soft">
+          <div className="rounded-2xl border border-dashed border-border bg-surface p-8 text-sm text-text-2">
             {props.emptyNote}
           </div>
         )}

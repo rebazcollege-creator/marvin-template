@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
+import { loadCreds, setCred, credStatus } from './creds.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
 import {
@@ -31,6 +32,7 @@ import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload } from '../sr
  */
 
 loadDotenv();
+loadCreds();
 
 const PORT = Number(process.env.MARVIN_SIDECAR_PORT ?? 8787);
 const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
@@ -120,6 +122,20 @@ const server = createServer(async (req, res) => {
       }
     } catch (err) {
       return json(res, 500, { error: (err as Error).message });
+    }
+  }
+
+  if (req.method === 'GET' && req.url === '/creds/status') {
+    return json(res, 200, credStatus());
+  }
+
+  if (req.method === 'POST' && req.url === '/creds') {
+    try {
+      const { name, value } = JSON.parse(await readBody(req)) as { name: string; value: string };
+      const ok = setCred(name, String(value ?? ''));
+      return json(res, ok ? 200 : 400, ok ? { ok: true } : { ok: false, error: `Unknown credential key: ${name}` });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: (err as Error).message });
     }
   }
 

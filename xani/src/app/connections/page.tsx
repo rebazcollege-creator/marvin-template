@@ -11,6 +11,7 @@ import {
   type ConnState,
 } from '@/lib/connections';
 import { ConnectFlow } from '@/components/connections/ConnectFlow';
+import { LivePreview } from '@/components/connections/LivePreview';
 import { logActivity } from '@/lib/activity';
 
 function Card({ c, state, onOpen }: { c: Connection; state?: ConnState; onOpen: () => void }) {
@@ -33,6 +34,7 @@ function Card({ c, state, onOpen }: { c: Connection; state?: ConnState; onOpen: 
         )}
       </div>
       <p className="flex-1 text-[12.5px] leading-relaxed text-text-2">{c.desc}</p>
+      {on && <LivePreview id={c.id} />}
       <button
         type="button"
         onClick={onOpen}

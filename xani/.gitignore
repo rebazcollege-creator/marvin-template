@@ -34,3 +34,6 @@ yarn-error.log*
 .vscode
 *.tsbuildinfo
 next-env.d.ts
+
+# Dev-only sidecar credential store (entered via Connections)
+.xani-creds.json

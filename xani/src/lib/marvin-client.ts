@@ -117,6 +117,35 @@ export async function transcribeAudio(blob: Blob): Promise<{ ok: boolean; text?:
   }
 }
 
+/**
+ * Store an integration credential in the runtime (dev: the sidecar's gitignored
+ * creds file + live process.env; desktop uses the OS keychain instead). Lets keys
+ * entered in Connections take effect immediately without editing .env.
+ */
+export async function setRuntimeCred(name: string, value: string): Promise<boolean> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/creds`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, value }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Which integration credentials the runtime currently has (env-var name → present). */
+export async function getCredStatus(): Promise<Record<string, boolean> | null> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/creds/status`);
+    if (!resp.ok) return null;
+    return (await resp.json()) as Record<string, boolean>;
+  } catch {
+    return null;
+  }
+}
+
 /** Post-session learning: extract durable memories from a finished chat. */
 export async function extractLearnings(
   messages: ChatMessage[],

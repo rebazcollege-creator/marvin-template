@@ -5,6 +5,7 @@ import { Modal } from '@/components/ui/Modal';
 import { methodsFor, type ConnectMethod } from '@/lib/connect-flows';
 import type { Connection, ConnState } from '@/lib/connections';
 import { isTauri } from '@/lib/storage';
+import { setRuntimeCred } from '@/lib/marvin-client';
 
 /**
  * The connection flow. Walks the real paths for an integration:
@@ -54,15 +55,21 @@ export function ConnectFlow({
     // command), so the sidecar can read them at next spawn — tokens never touch the
     // renderer beyond this transient write. On web/dev there's no keychain, so the
     // connection is recorded and the user adds the keys to .env (per the note).
-    if (method.kind === 'form' && isTauri()) {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        for (const f of method.fields ?? []) {
-          const v = (values[f.key] ?? '').trim();
-          if (f.envKey && v) await invoke('set_integration_cred', { name: f.envKey, value: v });
+    if (method.kind === 'form') {
+      for (const f of method.fields ?? []) {
+        const v = (values[f.key] ?? '').trim();
+        if (!f.envKey || !v) continue;
+        if (isTauri()) {
+          try {
+            const { invoke } = await import('@tauri-apps/api/core');
+            await invoke('set_integration_cred', { name: f.envKey, value: v });
+          } catch {
+            /* still record the connection below */
+          }
+        } else {
+          // dev: hand the credential to the running sidecar so it takes effect now
+          await setRuntimeCred(f.envKey, v);
         }
-      } catch {
-        /* still record the connection below */
       }
     } else {
       await new Promise((r) => window.setTimeout(r, 500));

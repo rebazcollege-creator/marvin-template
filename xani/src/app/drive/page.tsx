@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchDrive } from '@/lib/marvin-data';
+import { useState } from 'react';
+import { fetchDrive, PATHS } from '@/lib/marvin-data';
+import { useLiveData } from '@/lib/use-live-data';
 import type { DriveData, DriveKind } from '@/lib/marvin-protocol';
 
 /**
@@ -57,19 +58,8 @@ function Star({ on }: { on: boolean }) {
 }
 
 export default function DrivePage() {
-  const [data, setData] = useState<DriveData | null>(null);
-  const [state, setState] = useState<'loading' | 'loaded' | 'offline'>('loading');
+  const { data, state } = useLiveData<DriveData>(PATHS.drive, fetchDrive);
   const [view, setView] = useState<'grid' | 'list'>('grid');
-
-  useEffect(() => {
-    fetchDrive().then((d) => {
-      if (d === null) setState('offline');
-      else {
-        setData(d);
-        setState('loaded');
-      }
-    });
-  }, []);
 
   const badge =
     state === 'loading' ? 'Loading…' : state === 'offline' ? 'Sidecar offline' : data?.connected ? 'Connected' : 'Not connected';

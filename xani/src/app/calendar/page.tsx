@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchCalendar } from '@/lib/marvin-data';
+import { useState } from 'react';
+import { fetchCalendar, PATHS } from '@/lib/marvin-data';
+import { useLiveData } from '@/lib/use-live-data';
 import type { CalendarData } from '@/lib/marvin-protocol';
 import { Modal } from '@/components/ui/Modal';
 import { enqueueApproval } from '@/lib/approvals';
@@ -17,24 +18,13 @@ function timeOf(e: Ev): string {
 }
 
 export default function CalendarPage() {
-  const [data, setData] = useState<CalendarData | null>(null);
-  const [state, setState] = useState<'loading' | 'loaded' | 'offline'>('loading');
+  const { data, state } = useLiveData<CalendarData>(PATHS.calendar, fetchCalendar);
   const [open, setOpen] = useState<Ev | null>(null);
   const [focus, setFocus] = useState(false);
   const [queued, setQueued] = useState(false);
   const [fLabel, setFLabel] = useState('Deep work');
   const [fStart, setFStart] = useState('13:00');
   const [fDur, setFDur] = useState('2');
-
-  useEffect(() => {
-    fetchCalendar().then((d) => {
-      if (d === null) setState('offline');
-      else {
-        setData(d);
-        setState('loaded');
-      }
-    });
-  }, []);
 
   const badge = state === 'loading' ? 'Loading…' : state === 'offline' ? 'Sidecar offline' : data?.connected ? 'Connected' : 'Not connected';
   const events = data?.events ?? [];

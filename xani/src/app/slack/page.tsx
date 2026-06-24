@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { fetchSlack } from '@/lib/marvin-data';
+import { useMemo, useState } from 'react';
+import { fetchSlack, PATHS } from '@/lib/marvin-data';
+import { useLiveData } from '@/lib/use-live-data';
 import type { SlackData } from '@/lib/marvin-protocol';
 import { Modal } from '@/components/ui/Modal';
 import { enqueueApproval } from '@/lib/approvals';
@@ -11,23 +12,12 @@ function isMonitorOnly(channel: string): boolean {
 }
 
 export default function SlackPage() {
-  const [data, setData] = useState<SlackData | null>(null);
-  const [state, setState] = useState<'loading' | 'loaded' | 'offline'>('loading');
+  const { data, state } = useLiveData<SlackData>(PATHS.slack, fetchSlack);
   const [active, setActive] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [queued, setQueued] = useState(false);
   const [channel, setChannel] = useState('');
   const [text, setText] = useState('');
-
-  useEffect(() => {
-    fetchSlack().then((d) => {
-      if (d === null) setState('offline');
-      else {
-        setData(d);
-        setState('loaded');
-      }
-    });
-  }, []);
 
   const badge = state === 'loading' ? 'Loading…' : state === 'offline' ? 'Sidecar offline' : data?.connected ? 'Connected' : 'Not connected';
   const messages = useMemo(() => data?.messages ?? [], [data]);

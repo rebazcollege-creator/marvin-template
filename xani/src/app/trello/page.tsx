@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchTrello } from '@/lib/marvin-data';
+import { useState } from 'react';
+import { fetchTrello, PATHS } from '@/lib/marvin-data';
+import { useLiveData } from '@/lib/use-live-data';
 import type { TrelloData } from '@/lib/marvin-protocol';
 import { Modal } from '@/components/ui/Modal';
 import { enqueueApproval } from '@/lib/approvals';
@@ -10,8 +11,7 @@ type Card = TrelloData['cards'][number];
 const LISTS = ['To do', 'Doing', 'In review', 'Done'];
 
 export default function TrelloPage() {
-  const [data, setData] = useState<TrelloData | null>(null);
-  const [state, setState] = useState<'loading' | 'loaded' | 'offline'>('loading');
+  const { data, state } = useLiveData<TrelloData>(PATHS.trello, fetchTrello);
   const [open, setOpen] = useState<Card | null>(null);
   const [creating, setCreating] = useState(false);
   const [queued, setQueued] = useState(false);
@@ -22,16 +22,6 @@ export default function TrelloPage() {
   const [due, setDue] = useState('');
   // move form
   const [moveTo, setMoveTo] = useState(LISTS[0]);
-
-  useEffect(() => {
-    fetchTrello().then((d) => {
-      if (d === null) setState('offline');
-      else {
-        setData(d);
-        setState('loaded');
-      }
-    });
-  }, []);
 
   const badge = state === 'loading' ? 'Loading…' : state === 'offline' ? 'Sidecar offline' : data?.connected ? 'Connected' : 'Not connected';
   const cards = data?.cards ?? [];

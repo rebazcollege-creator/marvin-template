@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchBuffer } from '@/lib/marvin-data';
+import { useState } from 'react';
+import { fetchBuffer, PATHS } from '@/lib/marvin-data';
+import { useLiveData } from '@/lib/use-live-data';
 import type { BufferData } from '@/lib/marvin-protocol';
 import { Modal } from '@/components/ui/Modal';
 import { enqueueApproval } from '@/lib/approvals';
@@ -9,22 +10,11 @@ import { enqueueApproval } from '@/lib/approvals';
 const PLATFORMS = ['Instagram', 'TikTok', 'LinkedIn', 'X', 'Threads', 'Facebook'];
 
 export default function BufferPage() {
-  const [data, setData] = useState<BufferData | null>(null);
-  const [state, setState] = useState<'loading' | 'loaded' | 'offline'>('loading');
+  const { data, state } = useLiveData<BufferData>(PATHS.buffer, fetchBuffer);
   const [creating, setCreating] = useState(false);
   const [queued, setQueued] = useState(false);
   const [platform, setPlatform] = useState(PLATFORMS[0]);
   const [caption, setCaption] = useState('');
-
-  useEffect(() => {
-    fetchBuffer().then((d) => {
-      if (d === null) setState('offline');
-      else {
-        setData(d);
-        setState('loaded');
-      }
-    });
-  }, []);
 
   const badge = state === 'loading' ? 'Loading…' : state === 'offline' ? 'Sidecar offline' : data?.connected ? 'Connected' : 'Not connected';
 

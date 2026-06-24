@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady } from '@/lib/storage';
-import { fetchBriefingData } from '@/lib/marvin-data';
+import { fetchBriefingData, peekData, PATHS } from '@/lib/marvin-data';
 import type { BriefingData } from '@/lib/marvin-protocol';
 
 /**
@@ -79,7 +79,7 @@ function todayLabel(date: Date, timezone: string): string {
 
 export function BriefingCard({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const [settings, setSettings] = useState<XaniSettings | null>(null);
-  const [data, setData] = useState<BriefingData | null>(null);
+  const [data, setData] = useState<BriefingData | null>(() => peekData<BriefingData>(PATHS.briefing));
   const now = useMemo(() => new Date(), []);
 
   useEffect(() => {

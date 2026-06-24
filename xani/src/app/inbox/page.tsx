@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { fetchInbox } from '@/lib/marvin-data';
+import { useState } from 'react';
+import { fetchInbox, PATHS } from '@/lib/marvin-data';
+import { useLiveData } from '@/lib/use-live-data';
 import type { InboxData } from '@/lib/marvin-protocol';
 import { Modal } from '@/components/ui/Modal';
 import { ComposeModal } from '@/components/inbox/ComposeModal';
@@ -9,21 +10,10 @@ import { ComposeModal } from '@/components/inbox/ComposeModal';
 type Msg = InboxData['messages'][number];
 
 export default function InboxPage() {
-  const [data, setData] = useState<InboxData | null>(null);
-  const [state, setState] = useState<'loading' | 'loaded' | 'offline'>('loading');
+  const { data, state } = useLiveData<InboxData>(PATHS.inbox, fetchInbox);
   const [open, setOpen] = useState<Msg | null>(null);
   const [compose, setCompose] = useState<{ mode: 'new' | 'reply'; to?: string; subject?: string; account?: string } | null>(null);
   const [queued, setQueued] = useState(false);
-
-  useEffect(() => {
-    fetchInbox().then((d) => {
-      if (d === null) setState('offline');
-      else {
-        setData(d);
-        setState('loaded');
-      }
-    });
-  }, []);
 
   const badge = state === 'loading' ? 'Loading…' : state === 'offline' ? 'Sidecar offline' : data?.connected ? 'Connected' : 'Not connected';
   const messages = data?.messages ?? [];

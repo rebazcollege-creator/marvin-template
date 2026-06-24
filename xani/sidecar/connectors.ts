@@ -102,38 +102,42 @@ export async function getInbox(): Promise<InboxData> {
     const token = await googleAccessToken(c.id, c.secret, c.refresh);
     if (!token) continue;
     try {
+      // Recent inbox mail (read + unread), newest first — a faithful mailbox view.
       const list = await fetch(
-        'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=is:unread&maxResults=6',
+        'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=in:inbox&maxResults=20',
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!list.ok) continue;
       const lj = (await list.json()) as { messages?: { id: string }[] };
       for (const m of lj.messages ?? []) {
         const det = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
         if (!det.ok) continue;
         const dj = (await det.json()) as {
           snippet?: string;
           internalDate?: string;
+          labelIds?: string[];
           payload?: { headers?: { name: string; value: string }[] };
         };
         const header = (name: string) =>
           dj.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? '';
         messages.push({
+          id: m.id,
           account: a.role,
           from: header('from'),
           subject: header('subject'),
           snippet: dj.snippet ?? '',
           receivedAt: dj.internalDate ? new Date(Number(dj.internalDate)).toISOString() : '',
-          unread: true,
+          unread: (dj.labelIds ?? []).includes('UNREAD'),
         });
       }
     } catch {
       /* skip account */
     }
   }
+  messages.sort((a, b) => (b.receivedAt > a.receivedAt ? 1 : b.receivedAt < a.receivedAt ? -1 : 0));
   return { connected: any, messages };
 }
 

@@ -65,6 +65,7 @@ export interface BriefingData {
 export interface InboxData {
   connected: boolean;
   messages: {
+    id: string;
     account: string;
     from: string;
     subject: string;

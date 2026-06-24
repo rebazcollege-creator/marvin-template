@@ -172,6 +172,16 @@ export async function getCredStatus(): Promise<Record<string, boolean> | null> {
   }
 }
 
+/** True if the runtime (sidecar) is reachable. Used by the sidebar status dot. */
+export async function pingRuntime(): Promise<boolean> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/health`, { cache: 'no-store' });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
 /** Post-session learning: extract durable memories from a finished chat. */
 export async function extractLearnings(
   messages: ChatMessage[],

@@ -6,8 +6,10 @@ import { usePathname } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { ensureStorageReady } from '@/lib/storage';
 import { pendingCount } from '@/lib/approvals';
+import { pingRuntime } from '@/lib/marvin-client';
 
 type Item = { label: string; href: string; icon: string };
+type Studio = { label: string; href: string; dot: string };
 
 const PRIMARY: Item[] = [
   { label: 'Home', href: '/', icon: 'home' },
@@ -21,18 +23,18 @@ const PRIMARY: Item[] = [
   { label: 'Settings', href: '/settings', icon: 'settings' },
 ];
 
-const STUDIOS: Item[] = [
-  { label: 'Amargi', href: '/studios/amargi', icon: 'studio' },
-  { label: 'LeadStories', href: '/studios/leadstories', icon: 'studio' },
-  { label: 'Moonshot', href: '/studios/moonshot', icon: 'studio' },
-];
-
 const ASSISTANT: Item[] = [
   { label: 'Activity', href: '/activity', icon: 'activity' },
   { label: 'Notetaker', href: '/notetaker', icon: 'notetaker' },
   { label: 'Automations', href: '/automations', icon: 'automations' },
   { label: 'Connections', href: '/connections', icon: 'connections' },
   { label: 'Approvals', href: '/approvals', icon: 'approvals' },
+];
+
+const STUDIOS: Studio[] = [
+  { label: 'Amargi — Captions', href: '/studios/amargi', dot: '#C0613A' },
+  { label: 'LeadStories — Fact-check', href: '/studios/leadstories', dot: '#D89A4E' },
+  { label: 'Moonshot — OIC report', href: '/studios/moonshot', dot: 'var(--text-2)' },
 ];
 
 function Icon({ name }: { name: string }) {
@@ -47,7 +49,6 @@ function Icon({ name }: { name: string }) {
     case 'slack': return (<svg {...p}><rect x="5" y="9" width="6" height="3" rx="1.5" /><rect x="12" y="5" width="3" height="6" rx="1.5" /><rect x="13" y="12" width="6" height="3" rx="1.5" /><rect x="9" y="13" width="3" height="6" rx="1.5" /></svg>);
     case 'memory': return (<svg {...p}><circle cx="12" cy="12" r="3" /><path d="M12 4v3M12 17v3M4 12h3M17 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2" /></svg>);
     case 'settings': return (<svg {...p}><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.3 1a7 7 0 0 0-1.7-1l-.3-2.5H9.4l-.3 2.5a7 7 0 0 0-1.7 1l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 1.7 1l.3 2.5h4.2l.3-2.5a7 7 0 0 0 1.7-1l2.3 1 2-3.4-2-1.5a7 7 0 0 0 .1-1z" /></svg>);
-    case 'studio': return (<svg {...p}><circle cx="12" cy="12" r="8" /><circle cx="12" cy="12" r="2.5" /></svg>);
     case 'activity': return (<svg {...p}><path d="M3 12h4l2 6 4-12 2 6h6" /></svg>);
     case 'notetaker': return (<svg {...p}><rect x="6" y="3" width="12" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h4" /></svg>);
     case 'automations': return (<svg {...p}><path d="M13 3 5 13h6l-1 8 8-10h-6z" /></svg>);
@@ -61,19 +62,17 @@ function NavLink({ item, active, badge }: { item: Item; active: boolean; badge?:
   return (
     <Link
       href={item.href}
-      className={`relative flex items-center gap-2.5 rounded-md px-3 py-2 text-sm transition-colors ${
-        active
-          ? 'bg-accent-soft font-semibold text-text'
-          : 'text-text-2 hover:bg-hover hover:text-text'
+      style={{ boxShadow: active ? 'inset 3px 0 0 var(--accent)' : undefined }}
+      className={`flex items-center gap-[11px] rounded-[9px] px-[11px] py-2 text-[13.5px] transition-colors ${
+        active ? 'bg-accent-soft font-semibold text-text' : 'font-medium text-text-2 hover:bg-hover hover:text-text'
       }`}
     >
-      {active && <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-full bg-accent" />}
       <span className={active ? 'text-accent' : 'text-muted'}>
         <Icon name={item.icon} />
       </span>
-      {item.label}
+      <span className="flex-1">{item.label}</span>
       {badge !== undefined && badge > 0 && (
-        <span className="ml-auto grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent px-1 text-[10.5px] font-bold text-on-accent">
+        <span className="grid h-[18px] min-w-[18px] place-items-center rounded-[9px] bg-accent-soft px-[5px] text-[10.5px] font-bold text-text-2">
           {badge}
         </span>
       )}
@@ -81,9 +80,23 @@ function NavLink({ item, active, badge }: { item: Item; active: boolean; badge?:
   );
 }
 
+function StudioLink({ studio, active }: { studio: Studio; active: boolean }) {
+  return (
+    <Link
+      href={studio.href}
+      className={`flex items-center gap-2.5 rounded-[9px] px-[11px] py-[7px] text-[12.5px] transition-colors ${
+        active ? 'bg-accent-soft font-semibold text-text' : 'text-text-2 hover:bg-hover hover:text-text'
+      }`}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: studio.dot }} />
+      <span>{studio.label}</span>
+    </Link>
+  );
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-1 mt-6 px-3 text-[10.5px] font-semibold uppercase tracking-[0.09em] text-muted">
+    <p className="px-3 pb-[7px] pt-[18px] text-[10.5px] font-semibold uppercase tracking-[0.09em] text-muted">
       {children}
     </p>
   );
@@ -93,6 +106,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const isActive = (href: string) => (href === '/' ? pathname === '/' : pathname.startsWith(href));
   const [pending, setPending] = useState(0);
+  const [runtimeUp, setRuntimeUp] = useState<boolean | null>(null);
 
   useEffect(() => {
     const read = () => ensureStorageReady().then(() => setPending(pendingCount()));
@@ -101,12 +115,23 @@ export function Sidebar() {
     return () => window.removeEventListener('xani:approvals-changed', read);
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    const check = () => pingRuntime().then((up) => alive && setRuntimeUp(up));
+    check();
+    const id = window.setInterval(check, 15000);
+    return () => { alive = false; window.clearInterval(id); };
+  }, []);
+
+  const runtimeDot = runtimeUp === null ? 'var(--muted)' : runtimeUp ? '#6E8B6A' : '#D89A4E';
+  const runtimeLabel = runtimeUp === null ? 'Checking runtime…' : runtimeUp ? 'Runtime connected' : 'Runtime offline';
+
   return (
-    <aside className="gm-rail flex w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface px-3.5 pb-4 pt-5">
-      <div className="flex items-start justify-between px-2">
+    <aside className="gm-rail flex w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface px-3.5 pb-3.5 pt-[22px]">
+      <div className="flex items-start justify-between px-2 pb-0.5">
         <Link href="/" className="block">
-          <span className="wordmark block text-3xl font-semibold leading-none text-text">Xanî</span>
-          <span className="mt-1 block text-[11.5px] text-text-2">Personal OS · MARVIN</span>
+          <span className="wordmark block text-[30px] font-semibold leading-none tracking-[0.01em] text-text">Xanî</span>
+          <span className="mt-[5px] block text-[11.5px] tracking-[0.02em] text-text-2">Personal OS · MARVIN</span>
         </Link>
         <ThemeToggle />
       </div>
@@ -114,27 +139,20 @@ export function Sidebar() {
       <button
         type="button"
         onClick={() => window.dispatchEvent(new CustomEvent('xani:command'))}
-        className="mt-4 flex items-center justify-between rounded-md border border-border px-3 py-1.5 text-xs text-text-2 transition-colors hover:bg-hover"
+        className="mx-1 mb-3.5 mt-4 flex items-center gap-2.5 rounded-[11px] border border-border bg-bg px-[11px] py-[9px] text-text-2 transition-colors hover:bg-hover"
       >
-        <span>Search & commands</span>
-        <kbd className="rounded border border-border bg-bg px-1.5 py-0.5 font-sans text-[10px]">⌘K</kbd>
+        <kbd className="rounded-[5px] border border-[#DBD2C0] bg-surface px-1.5 py-px font-sans text-[12px] font-semibold text-text-2">⌘K</kbd>
+        <span className="text-[12.5px]">for anything</span>
       </button>
 
-      <nav className="mt-4 space-y-0.5">
+      <nav className="flex flex-col gap-px">
         {PRIMARY.map((item) => (
           <NavLink key={item.href} item={item} active={isActive(item.href)} />
         ))}
       </nav>
 
-      <SectionLabel>Studios</SectionLabel>
-      <nav className="space-y-0.5">
-        {STUDIOS.map((item) => (
-          <NavLink key={item.href} item={item} active={isActive(item.href)} />
-        ))}
-      </nav>
-
       <SectionLabel>Assistant</SectionLabel>
-      <nav className="space-y-0.5">
+      <nav className="flex flex-col gap-px">
         {ASSISTANT.map((item) => (
           <NavLink
             key={item.href}
@@ -144,6 +162,20 @@ export function Sidebar() {
           />
         ))}
       </nav>
+
+      <SectionLabel>Studios</SectionLabel>
+      <nav className="flex flex-col gap-px">
+        {STUDIOS.map((studio) => (
+          <StudioLink key={studio.href} studio={studio} active={isActive(studio.href)} />
+        ))}
+      </nav>
+
+      <div className="mt-auto flex items-center gap-2.5 border-t border-border px-2.5 pb-0.5 pt-2.5">
+        <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: runtimeDot }} />
+        <span className="text-[11.5px] text-text-2">{runtimeLabel}</span>
+        <div className="flex-1" />
+        <span className="grid h-[26px] w-[26px] place-items-center rounded-full bg-accent text-[12px] font-semibold text-on-accent">R</span>
+      </div>
     </aside>
   );
 }

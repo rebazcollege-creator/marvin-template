@@ -44,6 +44,7 @@ export default function TrelloPage() {
       source: 'Trello · Amargi board',
       preview: `List: ${list}${due ? `\nDue: ${new Date(due).toLocaleDateString('en-GB')}` : ''}\n\n${title.trim()}`,
       actionLabel: 'Create card',
+      payload: { kind: 'task', name: title.trim(), list, due: due || undefined },
     });
     setTitle('');
     setDue('');

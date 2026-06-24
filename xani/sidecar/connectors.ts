@@ -7,6 +7,8 @@ import type {
   SlackData,
   BufferData,
   DriveData,
+  ActPayload,
+  ActResult,
 } from '../src/lib/marvin-protocol.ts';
 
 /**
@@ -240,24 +242,193 @@ export async function getSlack(): Promise<SlackData> {
   return { connected: true, messages: out };
 }
 
-// ── Trello (Zapier MCP — pending) ─────────────────────────────────
+// ── Trello (REST: API key + token + board) ────────────────────────
 
-export function getTrello(): TrelloData {
-  return { connected: false, cards: [] };
+function trelloCreds(): { key: string; token: string; board: string } | null {
+  const key = process.env.TRELLO_API_KEY;
+  const token = process.env.TRELLO_TOKEN;
+  const board = process.env.TRELLO_BOARD_ID;
+  return key && token && board ? { key, token, board } : null;
 }
 
-// ── Buffer (Direct MCP — pending) ─────────────────────────────────
+export async function getTrello(): Promise<TrelloData> {
+  const c = trelloCreds();
+  if (!c) return { connected: false, cards: [] };
+  try {
+    const auth = `key=${c.key}&token=${c.token}`;
+    const r = await fetch(`https://api.trello.com/1/boards/${c.board}/cards?fields=name,url,due,labels&${auth}`);
+    if (!r.ok) return { connected: true, cards: [] };
+    const j = (await r.json()) as { name?: string; url?: string; due?: string | null; labels?: { name?: string }[] }[];
+    const cards = j.map((c2) => ({
+      name: c2.name ?? '(card)',
+      url: c2.url ?? '',
+      labels: (c2.labels ?? []).map((l) => l.name ?? '').filter(Boolean),
+      urgent: Boolean(c2.due && new Date(c2.due).getTime() < Date.now() + 36 * 3600 * 1000),
+      due: c2.due ?? null,
+    }));
+    return { connected: true, cards };
+  } catch {
+    return { connected: true, cards: [] };
+  }
+}
 
-export function getBuffer(): BufferData {
-  return { connected: false, drafts: 0, scheduled: 0, byPlatform: [] };
+// ── Buffer (REST: access token) ───────────────────────────────────
+
+export async function getBuffer(): Promise<BufferData> {
+  const token = process.env.BUFFER_ACCESS_TOKEN;
+  if (!token) return { connected: false, drafts: 0, scheduled: 0, byPlatform: [] };
+  try {
+    const r = await fetch(`https://api.bufferapp.com/1/profiles.json?access_token=${token}`);
+    if (!r.ok) return { connected: true, drafts: 0, scheduled: 0, byPlatform: [] };
+    const profiles = (await r.json()) as { service?: string; counts?: { pending?: number; sent?: number } }[];
+    let drafts = 0;
+    let scheduled = 0;
+    const byPlatform: BufferData['byPlatform'] = [];
+    for (const p of profiles) {
+      const pending = p.counts?.pending ?? 0;
+      scheduled += pending;
+      byPlatform.push({ platform: p.service ?? 'channel', count: pending });
+    }
+    return { connected: true, drafts, scheduled, byPlatform };
+  } catch {
+    return { connected: true, drafts: 0, scheduled: 0, byPlatform: [] };
+  }
+}
+
+// ── Writers: actually perform outward actions (gated by Approvals UI) ──
+
+function base64url(s: string): string {
+  return Buffer.from(s).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+async function sendGmail(p: { to: string; subject: string; body: string; account?: string }): Promise<ActResult> {
+  // Pick the account by role if given, else the first configured one.
+  const acct = GMAIL_ACCOUNTS.find((a) => a.role === p.account) ?? GMAIL_ACCOUNTS.find((a) => gmailCreds(a.n));
+  const c = acct ? gmailCreds(acct.n) : null;
+  if (!c) return { ok: false, note: 'Gmail not connected — add GMAIL_* credentials.' };
+  // LeadStories send-restriction (locked rule).
+  if (acct?.role === 'leadstories') return { ok: false, error: 'LeadStories is send-restricted — MARVIN never sends from it.' };
+  const token = await googleAccessToken(c.id, c.secret, c.refresh);
+  if (!token) return { ok: false, error: 'Could not authorise Gmail.' };
+  const raw = base64url(`To: ${p.to}\r\nSubject: ${p.subject}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${p.body}`);
+  try {
+    const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ raw }),
+    });
+    if (!r.ok) return { ok: false, error: `Gmail send failed (${r.status}).` };
+    const j = (await r.json()) as { id?: string };
+    return { ok: true, id: j.id };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+async function createCalendarEvent(p: { title: string; start?: string; end?: string }): Promise<ActResult> {
+  const id = process.env.GOOGLE_CALENDAR_CLIENT_ID;
+  const secret = process.env.GOOGLE_CALENDAR_CLIENT_SECRET;
+  const refresh = process.env.GOOGLE_CALENDAR_REFRESH_TOKEN;
+  if (!id || !secret || !refresh) return { ok: false, note: 'Calendar not connected — add GOOGLE_CALENDAR_* credentials.' };
+  const token = await googleAccessToken(id, secret, refresh);
+  if (!token) return { ok: false, error: 'Could not authorise Calendar.' };
+  const start = p.start ?? new Date(Date.now() + 3600_000).toISOString();
+  const end = p.end ?? new Date(new Date(start).getTime() + 3600_000).toISOString();
+  try {
+    const r = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ summary: p.title, start: { dateTime: start }, end: { dateTime: end } }),
+    });
+    if (!r.ok) return { ok: false, error: `Calendar insert failed (${r.status}).` };
+    const j = (await r.json()) as { id?: string; htmlLink?: string };
+    return { ok: true, id: j.id, url: j.htmlLink };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+async function postSlack(p: { channel: string; text: string }): Promise<ActResult> {
+  if (/lead\s*stories/i.test(p.channel)) return { ok: false, error: 'LeadStories Slack is monitor-only — MARVIN never posts there.' };
+  const token = process.env.SLACK_AMARGI_BOT_TOKEN;
+  if (!token) return { ok: false, note: 'Slack not connected — add SLACK_AMARGI_BOT_TOKEN.' };
+  try {
+    const client = new WebClient(token);
+    const name = p.channel.replace(/^#/, '');
+    const ch = AMARGI_CHANNELS.find((c) => c.name === name)?.id ?? name;
+    const res = await client.chat.postMessage({ channel: ch, text: p.text });
+    return res.ok ? { ok: true, id: res.ts } : { ok: false, error: 'Slack post failed.' };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+async function createTrelloCard(p: { name: string; list?: string; due?: string }): Promise<ActResult> {
+  const c = trelloCreds();
+  if (!c) return { ok: false, note: 'Trello not connected — add TRELLO_API_KEY / TRELLO_TOKEN / TRELLO_BOARD_ID.' };
+  const auth = `key=${c.key}&token=${c.token}`;
+  try {
+    // Find the target list on the board (default to the first list).
+    const lr = await fetch(`https://api.trello.com/1/boards/${c.board}/lists?fields=name&${auth}`);
+    const lists = lr.ok ? ((await lr.json()) as { id: string; name: string }[]) : [];
+    const list = lists.find((l) => p.list && l.name.toLowerCase() === p.list.toLowerCase()) ?? lists[0];
+    if (!list) return { ok: false, error: 'No lists on the Trello board.' };
+    const params = new URLSearchParams({ idList: list.id, name: p.name, ...(p.due ? { due: p.due } : {}) });
+    const r = await fetch(`https://api.trello.com/1/cards?${auth}&${params.toString()}`, { method: 'POST' });
+    if (!r.ok) return { ok: false, error: `Trello create failed (${r.status}).` };
+    const j = (await r.json()) as { id?: string; shortUrl?: string };
+    return { ok: true, id: j.id, url: j.shortUrl };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+async function createBufferPost(p: { platform: string; caption: string }): Promise<ActResult> {
+  const token = process.env.BUFFER_ACCESS_TOKEN;
+  if (!token) return { ok: false, note: 'Buffer not connected — add BUFFER_ACCESS_TOKEN.' };
+  try {
+    const pr = await fetch(`https://api.bufferapp.com/1/profiles.json?access_token=${token}`);
+    if (!pr.ok) return { ok: false, error: 'Could not list Buffer channels.' };
+    const profiles = (await pr.json()) as { id?: string; service?: string }[];
+    const profile = profiles.find((x) => (x.service ?? '').toLowerCase() === p.platform.toLowerCase()) ?? profiles[0];
+    if (!profile?.id) return { ok: false, error: 'No matching Buffer channel.' };
+    const body = new URLSearchParams({ 'profile_ids[]': profile.id, text: p.caption, access_token: token });
+    const r = await fetch('https://api.bufferapp.com/1/updates/create.json', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    if (!r.ok) return { ok: false, error: `Buffer create failed (${r.status}).` };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** Dispatch an approved action to the right writer. */
+export async function executeAction(payload: ActPayload): Promise<ActResult> {
+  switch (payload.kind) {
+    case 'email':
+      return sendGmail(payload);
+    case 'calendar':
+      return createCalendarEvent(payload);
+    case 'slack':
+      return postSlack(payload);
+    case 'social':
+      return createBufferPost(payload);
+    case 'task':
+      return createTrelloCard(payload);
+    default:
+      return { ok: false, error: 'Unsupported action.' };
+  }
 }
 
 // ── Aggregated morning briefing ───────────────────────────────────
 
 export async function getBriefingData(): Promise<BriefingData> {
-  const [gmail, calendar, slack] = await Promise.all([gmailUnreadCounts(), getCalendar(), getSlack()]);
-  const trello = getTrello();
-  const buffer = getBuffer();
+  const [gmail, calendar, slack, trello, buffer] = await Promise.all([
+    gmailUnreadCounts(),
+    getCalendar(),
+    getSlack(),
+    getTrello(),
+    getBuffer(),
+  ]);
   return {
     gmail: gmail.accounts,
     trello: trello.cards.map((c) => ({ name: c.name, url: c.url, urgent: c.urgent })),

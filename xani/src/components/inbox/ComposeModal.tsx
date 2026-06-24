@@ -38,6 +38,7 @@ export function ComposeModal({
       source: `Gmail${account ? ` · ${account}` : ''} · to ${to.trim()}`,
       preview: `To: ${to.trim()}\nSubject: ${subject.trim() || '(no subject)'}\n\n${body.trim()}`,
       actionLabel: 'Send email',
+      payload: { kind: 'email', to: to.trim(), subject: subject.trim() || '(no subject)', body: body.trim(), account },
     });
     onQueued();
     onClose();

@@ -1,4 +1,6 @@
 import type {
+  ActPayload,
+  ActResult,
   ChatMessage,
   ChatRequest,
   ProposedMemory,
@@ -74,6 +76,25 @@ export async function approveMarvin(id: string, approved: boolean): Promise<void
     });
   } catch {
     // sidecar unreachable — nothing to resume
+  }
+}
+
+/**
+ * Execute an approved outward action through the sidecar (real send/create/post).
+ * Returns { ok:false, offline:true } if the runtime isn't reachable, so the UI can
+ * mark it approved-but-pending honestly instead of claiming it ran.
+ */
+export async function actMarvin(payload: ActPayload): Promise<ActResult & { offline?: boolean }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/act`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ payload }),
+    });
+    if (!resp.ok) return { ok: false, error: `Runtime responded ${resp.status}.` };
+    return (await resp.json()) as ActResult;
+  } catch {
+    return { ok: false, offline: true, error: 'Runtime offline.' };
   }
 }
 

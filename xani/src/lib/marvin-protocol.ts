@@ -97,6 +97,25 @@ export interface DriveData {
   files: { id: string; name: string; kind: DriveKind; modified: string; starred: boolean }[];
 }
 
+/**
+ * Outward actions the sidecar can actually perform (POST /act), once approved.
+ * Each is cred-gated; with no credentials the sidecar returns ok:false with a note.
+ */
+export type ActPayload =
+  | { kind: 'email'; to: string; subject: string; body: string; account?: string }
+  | { kind: 'calendar'; title: string; start?: string; end?: string }
+  | { kind: 'slack'; channel: string; text: string }
+  | { kind: 'social'; platform: string; caption: string }
+  | { kind: 'task'; name: string; list?: string; due?: string };
+
+export interface ActResult {
+  ok: boolean;
+  id?: string;
+  url?: string;
+  error?: string;
+  note?: string;
+}
+
 /** Server-sent events streamed back over /chat. */
 export type StreamEvent =
   | { type: 'text'; text: string }

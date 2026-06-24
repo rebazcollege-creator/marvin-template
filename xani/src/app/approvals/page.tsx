@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ensureStorageReady } from '@/lib/storage';
 import { AUTONOMY_DEFS, getAutonomy, setAutonomy, type Level } from '@/lib/autonomy';
 import { listApprovals, saveApprovals, decideApproval, type ApprovalItem, type ApprovalKind } from '@/lib/approvals';
+import { actMarvin } from '@/lib/marvin-client';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 const LEVELS: { id: Level; label: string }[] = [
@@ -28,6 +29,7 @@ export default function ApprovalsPage() {
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
   const [confirming, setConfirming] = useState<ApprovalItem | null>(null);
+  const [result, setResult] = useState<string | null>(null);
 
   useEffect(() => {
     ensureStorageReady().then(() => {
@@ -44,6 +46,25 @@ export default function ApprovalsPage() {
   const decide = (id: string, status: 'approved' | 'rejected') => {
     decideApproval(id, status);
     setItems(listApprovals());
+  };
+
+  const approve = async (item: ApprovalItem) => {
+    if (!item.payload) {
+      decide(item.id, 'approved');
+      setResult(`Approved — ${item.title}.`);
+      return;
+    }
+    setResult(`Running “${item.title}”…`);
+    const r = await actMarvin(item.payload);
+    if (r.ok) {
+      decide(item.id, 'approved');
+      setResult(`Done — ${item.title}.${r.url ? ' Opened in the app.' : ''}`);
+    } else if (r.offline) {
+      decide(item.id, 'approved');
+      setResult('Approved. It will run once the runtime is on (start it with: npm run sidecar).');
+    } else {
+      setResult(`Couldn’t run: ${r.error ?? r.note ?? 'not connected'}. Left in the queue.`);
+    }
   };
   const saveEdit = (id: string) => {
     persist(items.map((i) => (i.id === id ? { ...i, preview: draft } : i)));
@@ -69,6 +90,13 @@ export default function ApprovalsPage() {
           The trust gate. Outward actions wait here for your nod, gated by the autonomy you set below.
         </p>
       </header>
+
+      {result && (
+        <div className="mb-4 flex items-center gap-2 rounded-[11px] border border-border bg-surface px-4 py-2.5 text-[12.5px] text-text-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-green" /> {result}
+          <button type="button" onClick={() => setResult(null)} className="ml-auto text-muted hover:text-text">✕</button>
+        </div>
+      )}
 
       {/* queue */}
       {!ready ? (
@@ -182,7 +210,7 @@ export default function ApprovalsPage() {
         body={confirming ? 'Approve this action? It’s recorded as approved now and runs through MARVIN’s runtime when it’s on — gated by your autonomy settings.' : ''}
         detail={confirming?.preview}
         okLabel={confirming?.actionLabel ?? 'Approve'}
-        onConfirm={() => confirming && decide(confirming.id, 'approved')}
+        onConfirm={() => { if (confirming) void approve(confirming); }}
         onClose={() => setConfirming(null)}
       />
     </div>

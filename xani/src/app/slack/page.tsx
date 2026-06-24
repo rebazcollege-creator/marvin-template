@@ -44,6 +44,7 @@ export default function SlackPage() {
       source: `Slack · #${ch}`,
       preview: `#${ch}\n\n${text.trim()}`,
       actionLabel: 'Post to Slack',
+      payload: { kind: 'slack', channel: ch, text: text.trim() },
     });
     setText('');
     setComposing(false);

@@ -36,6 +36,7 @@ export default function BufferPage() {
       source: `Buffer · ${platform}`,
       preview: `Platform: ${platform}\n\n${caption.trim()}`,
       actionLabel: 'Schedule post',
+      payload: { kind: 'social', platform: platform ?? 'Instagram', caption: caption.trim() },
     });
     setCaption('');
     setCreating(false);

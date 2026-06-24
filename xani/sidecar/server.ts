@@ -11,8 +11,9 @@ import {
   getSlack,
   getTrello,
   getBuffer,
+  executeAction,
 } from './connectors.ts';
-import type { ChatRequest, StreamEvent, ProposedMemory } from '../src/lib/marvin-protocol.ts';
+import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload } from '../src/lib/marvin-protocol.ts';
 
 /**
  * MARVIN sidecar HTTP server.
@@ -101,14 +102,25 @@ const server = createServer(async (req, res) => {
         case '/data/slack':
           return json(res, 200, await getSlack());
         case '/data/trello':
-          return json(res, 200, getTrello());
+          return json(res, 200, await getTrello());
         case '/data/buffer':
-          return json(res, 200, getBuffer());
+          return json(res, 200, await getBuffer());
         default:
           return json(res, 404, { error: 'Unknown data endpoint.' });
       }
     } catch (err) {
       return json(res, 500, { error: (err as Error).message });
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/act') {
+    try {
+      const { payload } = JSON.parse(await readBody(req)) as { payload: ActPayload };
+      if (!payload || !payload.kind) return json(res, 400, { ok: false, error: 'Missing action payload.' });
+      const result = await executeAction(payload);
+      return json(res, 200, result);
+    } catch (err) {
+      return json(res, 400, { ok: false, error: (err as Error).message });
     }
   }
 

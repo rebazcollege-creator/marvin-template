@@ -40,12 +40,17 @@ export default function CalendarPage() {
   const events = data?.events ?? [];
 
   const protectFocus = () => {
+    const [h, m] = fStart.split(':').map((n) => Number(n));
+    const start = new Date();
+    start.setHours(h ?? 13, m ?? 0, 0, 0);
+    const end = new Date(start.getTime() + (Number(fDur) || 2) * 3600_000);
     enqueueApproval({
       kind: 'calendar',
       title: `Protect focus: ${fLabel}`,
       source: 'Calendar · focus block',
       preview: `Hold ${fStart} for ${fDur}h as “${fLabel}”.\nDecline tentative invites that clash; reshuffle flexible tasks around it.`,
       actionLabel: 'Hold focus block',
+      payload: { kind: 'calendar', title: `Focus: ${fLabel}`, start: start.toISOString(), end: end.toISOString() },
     });
     setFocus(false);
     setQueued(true);

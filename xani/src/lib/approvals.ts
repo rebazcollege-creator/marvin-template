@@ -1,5 +1,6 @@
 import { readJson, writeJson, newId } from '@/lib/storage';
 import { logActivity } from '@/lib/activity';
+import type { ActPayload } from '@/lib/marvin-protocol';
 
 function broadcast(): void {
   try {
@@ -29,6 +30,8 @@ export type ApprovalItem = {
   createdAt: string;
   status: ApprovalStatus;
   decidedAt?: string;
+  /** Structured data so /act can perform the real action on approve. */
+  payload?: ActPayload;
 };
 
 const KEY = 'xani.approvals.v1';
@@ -46,6 +49,7 @@ export function enqueueApproval(input: {
   source: string;
   preview: string;
   actionLabel?: string;
+  payload?: ActPayload;
 }): ApprovalItem {
   const item: ApprovalItem = {
     id: newId(),
@@ -56,6 +60,7 @@ export function enqueueApproval(input: {
     actionLabel: input.actionLabel ?? 'Approve',
     createdAt: new Date().toISOString(),
     status: 'pending',
+    payload: input.payload,
   };
   saveApprovals([item, ...listApprovals()]);
   logActivity({ kind: 'approval', title: `Prepared: ${item.title}`, detail: item.source, tag: 'Needs you' });

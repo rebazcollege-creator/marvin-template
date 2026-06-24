@@ -151,6 +151,9 @@ export default function NotetakerPage() {
         ? `Create a Trello card:\n${routing.action.text}`
         : `Create a calendar event:\n${routing.action.text}`,
       actionLabel: toTrello ? 'Create card' : 'Add to calendar',
+      payload: toTrello
+        ? { kind: 'task', name: routing.action.text }
+        : { kind: 'calendar', title: routing.action.text },
     });
     updateAction(routing.session.id, routing.action.id, { routed: true });
   };

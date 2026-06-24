@@ -92,7 +92,18 @@ async function gmailUnreadCounts(): Promise<{ connected: boolean; accounts: { ac
   return { connected: any, accounts };
 }
 
-export async function getInbox(): Promise<InboxData> {
+/** Gmail search query per Gmail-clone folder. */
+const FOLDER_QUERY: Record<string, string> = {
+  inbox: 'in:inbox',
+  starred: 'is:starred',
+  sent: 'in:sent',
+  drafts: 'in:drafts',
+  spam: 'in:spam',
+  trash: 'in:trash',
+};
+
+export async function getInbox(folder = 'inbox'): Promise<InboxData> {
+  const q = FOLDER_QUERY[folder] ?? FOLDER_QUERY.inbox;
   const messages: InboxData['messages'] = [];
   let any = false;
   let tokenErr = '';
@@ -107,9 +118,9 @@ export async function getInbox(): Promise<InboxData> {
       continue;
     }
     try {
-      // Recent inbox mail (read + unread), newest first — a faithful mailbox view.
+      // Recent mail in this folder (read + unread), newest first — a faithful mailbox view.
       const list = await fetch(
-        'https://gmail.googleapis.com/gmail/v1/users/me/messages?q=in:inbox&maxResults=20',
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=25`,
         { headers: { Authorization: `Bearer ${token}` } },
       );
       if (!list.ok) {

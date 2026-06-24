@@ -5,6 +5,7 @@
   "description": "Xanî — a personal AI operating system for Rebaz. MARVIN at the centre.",
   "scripts": {
     "dev": "next dev",
+    "dev:all": "node scripts/dev-all.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

@@ -5,7 +5,9 @@ import { Modal } from '@/components/ui/Modal';
 import { methodsFor, type ConnectMethod } from '@/lib/connect-flows';
 import type { Connection, ConnState } from '@/lib/connections';
 import { isTauri } from '@/lib/storage';
-import { setRuntimeCred } from '@/lib/marvin-client';
+import { setRuntimeCred, startGoogleOAuth } from '@/lib/marvin-client';
+
+const GOOGLE = new Set(['gmail', 'gcal', 'drive']);
 
 /**
  * The connection flow. Walks the real paths for an integration:
@@ -87,6 +89,32 @@ export function ConnectFlow({
     setStep('done');
   };
 
+  const isGoogle = GOOGLE.has(connection.id);
+
+  const googleSignIn = async () => {
+    const clientId = (values.clientId ?? '').trim();
+    const clientSecret = (values.clientSecret ?? '').trim();
+    if (!clientId || !clientSecret) {
+      setError('Enter your Google Client ID and secret first.');
+      return;
+    }
+    setStep('connecting');
+    const r = await startGoogleOAuth(connection.id, clientId, clientSecret);
+    if (r.ok) {
+      onComplete({
+        connected: true,
+        method: 'oauth',
+        accounts: r.email ? [r.email] : undefined,
+        scopes,
+        connectedAt: new Date().toISOString(),
+      });
+      setStep('done');
+    } else {
+      setError(r.error ?? 'Could not connect to Google.');
+      setStep('error');
+    }
+  };
+
   const canFinish =
     method?.kind === 'oauth'
       ? (!method.multiAccount || account.trim().length > 0) && scopes.length > 0
@@ -152,16 +180,22 @@ export function ConnectFlow({
       {/* METHOD: OAUTH */}
       {step === 'method' && method?.kind === 'oauth' && (
         <div className="space-y-4">
-          {method.multiAccount && (
-            <label className="block">
-              <span className="mb-1 block text-[12px] font-semibold text-text-2">Which account?</span>
-              <input
-                value={account}
-                onChange={(e) => setAccount(e.target.value)}
-                placeholder="you@gmail.com"
-                className="w-full rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13.5px] text-text outline-none focus:border-accent"
-              />
-            </label>
+          {isGoogle && (
+            <div className="space-y-2.5">
+              <p className="rounded-[11px] border border-border bg-bg px-3.5 py-2.5 text-[11.5px] leading-relaxed text-text-2">
+                One-time setup: create a Google <strong className="text-text">OAuth client (type: Desktop app)</strong> and paste its Client ID + secret below. Then “Sign in with Google” opens Google, you approve, and it connects automatically.
+                {' '}
+                <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" className="font-semibold text-accent hover:underline">Open Google Cloud →</a>
+              </p>
+              <label className="block">
+                <span className="mb-1 block text-[12px] font-semibold text-text-2">Client ID</span>
+                <input value={values.clientId ?? ''} onChange={(e) => setValues((v) => ({ ...v, clientId: e.target.value }))} placeholder="…apps.googleusercontent.com" className="w-full rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13.5px] text-text outline-none focus:border-accent" />
+              </label>
+              <label className="block">
+                <span className="mb-1 block text-[12px] font-semibold text-text-2">Client secret</span>
+                <input type="password" value={values.clientSecret ?? ''} onChange={(e) => setValues((v) => ({ ...v, clientSecret: e.target.value }))} placeholder="GOCSPX-…" className="w-full rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13.5px] text-text outline-none focus:border-accent" />
+              </label>
+            </div>
           )}
           <div>
             <div className="mb-2 text-[11px] font-bold tracking-[0.07em] text-muted">WHAT MARVIN MAY DO</div>
@@ -195,18 +229,33 @@ export function ConnectFlow({
               })}
             </div>
           </div>
-          <p className="rounded-[11px] border border-border bg-bg px-3.5 py-2.5 text-[11.5px] leading-relaxed text-muted">
-            {connection.id.startsWith('g') || connection.id === 'drive' || connection.id === 'gmail'
-              ? 'In the packaged desktop app this opens Google’s consent screen and stores the token in your OS keychain — nothing is sent anywhere else.'
-              : `In the packaged app this opens ${connection.name}’s sign-in and stores the token in your OS keychain.`}
-            {method.envHint && <span className="mt-1 block">Runtime reads: <code className="text-text-2">{method.envHint}</code></span>}
-          </p>
-          <FlowButtons
-            backTo={() => setStep('choose')}
-            onConfirm={finish}
-            confirmLabel={method.multiAccount ? 'Continue with Google' : 'Continue'}
-            disabled={!canFinish}
-          />
+          {!isGoogle && (
+            <p className="rounded-[11px] border border-border bg-bg px-3.5 py-2.5 text-[11.5px] leading-relaxed text-muted">
+              In the packaged app this opens {connection.name}’s sign-in and stores the token in your OS keychain.
+              {method.envHint && <span className="mt-1 block">Runtime reads: <code className="text-text-2">{method.envHint}</code></span>}
+            </p>
+          )}
+          {isGoogle ? (
+            <div className="flex items-center justify-between pt-1">
+              <button type="button" onClick={() => setStep('choose')} className="text-[13px] font-medium text-text-2 hover:text-text">← Back</button>
+              <button
+                type="button"
+                onClick={() => void googleSignIn()}
+                disabled={!(values.clientId ?? '').trim() || !(values.clientSecret ?? '').trim()}
+                className="flex items-center gap-2 rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M21.35 11.1H12v2.9h5.35c-.25 1.5-1.8 4.4-5.35 4.4a5.4 5.4 0 1 1 0-10.8c1.55 0 2.6.66 3.2 1.22l2.18-2.1A8.3 8.3 0 0 0 12 3.6 8.4 8.4 0 1 0 20.4 12c0-.56-.06-.98-.15-1.4z" /></svg>
+                Sign in with Google
+              </button>
+            </div>
+          ) : (
+            <FlowButtons
+              backTo={() => setStep('choose')}
+              onConfirm={finish}
+              confirmLabel={method.multiAccount ? 'Continue' : 'Continue'}
+              disabled={!canFinish}
+            />
+          )}
         </div>
       )}
 
@@ -244,7 +293,9 @@ export function ConnectFlow({
       {step === 'connecting' && (
         <div className="flex flex-col items-center gap-3 py-10 text-center">
           <span className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
-          <p className="text-[13px] text-text-2">Saving your {connection.name} connection…</p>
+          <p className="text-[13px] text-text-2">
+            {isGoogle ? 'Waiting for Google sign-in in your browser… approve there, then come back.' : `Saving your ${connection.name} connection…`}
+          </p>
         </div>
       )}
 

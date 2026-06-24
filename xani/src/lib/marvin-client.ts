@@ -135,6 +135,30 @@ export async function setRuntimeCred(name: string, value: string): Promise<boole
   }
 }
 
+/**
+ * Real "Sign in with Google" — asks the sidecar to run the loopback OAuth flow
+ * (opens Google in the browser, captures the redirect, stores the refresh token).
+ * Resolves when the user finishes in the browser. Needs a one-time Google OAuth
+ * client (Desktop app) — clientId + clientSecret.
+ */
+export async function startGoogleOAuth(
+  integration: string,
+  clientId: string,
+  clientSecret: string,
+): Promise<{ ok: boolean; email?: string; error?: string; offline?: boolean }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/oauth/google/start`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ integration, clientId, clientSecret }),
+    });
+    if (!resp.ok) return { ok: false, error: `Runtime responded ${resp.status}.` };
+    return (await resp.json()) as { ok: boolean; email?: string; error?: string };
+  } catch {
+    return { ok: false, offline: true, error: 'Runtime offline — start it with: npm run dev:all' };
+  }
+}
+
 /** Which integration credentials the runtime currently has (env-var name → present). */
 export async function getCredStatus(): Promise<Record<string, boolean> | null> {
   try {

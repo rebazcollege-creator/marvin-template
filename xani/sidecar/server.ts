@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
 import { loadCreds, setCred, credStatus } from './creds.ts';
+import { startGoogleLogin } from './google-oauth.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
 import {
@@ -127,6 +128,20 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'GET' && req.url === '/creds/status') {
     return json(res, 200, credStatus());
+  }
+
+  if (req.method === 'POST' && req.url === '/oauth/google/start') {
+    try {
+      const { integration, clientId, clientSecret } = JSON.parse(await readBody(req)) as {
+        integration: string;
+        clientId: string;
+        clientSecret: string;
+      };
+      const result = await startGoogleLogin({ integration, clientId, clientSecret });
+      return json(res, 200, result);
+    } catch (err) {
+      return json(res, 400, { ok: false, error: (err as Error).message });
+    }
   }
 
   if (req.method === 'POST' && req.url === '/creds') {

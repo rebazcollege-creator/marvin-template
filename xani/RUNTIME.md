@@ -124,6 +124,30 @@ once their keys are set.
 
 ---
 
+## 4b. Sign in with Google (Gmail / Calendar / Drive) — the one-time setup
+
+Xanî now has a real **"Sign in with Google"** (desktop loopback OAuth). It opens
+Google, you approve, and it connects automatically — no copy-pasting tokens. But
+because Xanî is *your own* app (not a Google-verified company app), you create a
+free Google OAuth client **once**. ~5 minutes:
+
+1. Go to <https://console.cloud.google.com> → create/select a project.
+2. **APIs & Services → Library** → enable the APIs you want: **Gmail API**,
+   **Google Calendar API**, **Google Drive API**.
+3. **APIs & Services → OAuth consent screen** → User type **External** → fill the app
+   name + your email → **Add users** → add *your own* Google address as a **Test user**
+   (this lets you use it immediately without Google verification).
+4. **APIs & Services → Credentials → Create credentials → OAuth client ID** →
+   Application type **Desktop app** → Create → copy the **Client ID** and **Client secret**.
+5. In Xanî: **Connections → Gmail → Connect → Sign in with Google** → paste the
+   Client ID + secret → **Sign in with Google**. Your browser opens Google; approve.
+   (You'll see *"Google hasn't verified this app"* — that's normal for a personal
+   client; click **Advanced → Go to Xanî**.) Done — the card flips to **Live** and
+   your inbox appears.
+
+You do step 1–4 once; afterwards every Google sign-in is one click. The same client
+works for Calendar and Drive (just enable those APIs and Connect them too).
+
 ## 5. The other integrations (quick notes)
 
 - **Anthropic key** — without it, MARVIN chat and Studio drafting return an error;

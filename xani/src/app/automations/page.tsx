@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { ensureStorageReady } from '@/lib/storage';
+import { Modal } from '@/components/ui/Modal';
+import { enqueueApproval, type ApprovalKind } from '@/lib/approvals';
 import {
   listAutomations,
   saveAutomations,
@@ -71,6 +73,11 @@ export default function AutomationsPage() {
   const [text, setText] = useState('');
   const [filter, setFilter] = useState<AutoCategory | 'All'>('All');
   const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [editing, setEditing] = useState<Automation | null>(null);
+  const [eName, setEName] = useState('');
+  const [eTrigger, setETrigger] = useState('');
+  const [eAuto, setEAuto] = useState<'auto' | 'ask'>('ask');
+  const [runMsg, setRunMsg] = useState('');
 
   useEffect(() => {
     ensureStorageReady().then(() => {
@@ -102,6 +109,35 @@ export default function AutomationsPage() {
     persist(items.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a)));
   const remove = (id: string) => persist(items.filter((a) => a.id !== id));
 
+  const startEdit = (a: Automation) => {
+    setEditing(a);
+    setEName(a.name);
+    setETrigger(a.trigger);
+    setEAuto(a.autonomy);
+  };
+  const saveEdit = () => {
+    if (!editing) return;
+    persist(items.map((a) => (a.id === editing.id ? { ...a, name: eName.trim() || a.name, trigger: eTrigger.trim() || a.trigger, autonomy: eAuto } : a)));
+    setEditing(null);
+  };
+  const catKind: Record<AutoCategory, ApprovalKind> = {
+    Inbox: 'email',
+    Calendar: 'calendar',
+    Social: 'social',
+    Brief: 'task',
+    'Fact-check': 'task',
+  };
+  const runNow = (a: Automation) => {
+    enqueueApproval({
+      kind: catKind[a.category],
+      title: `Run now: ${a.name}`,
+      source: `Automation · ${a.trigger}`,
+      preview: `Run this automation once now:\n${a.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
+      actionLabel: a.autonomy === 'auto' ? 'Run now' : 'Run & review',
+    });
+    setRunMsg(a.name);
+  };
+
   const enabled = items.filter((a) => a.enabled);
   const stats = [
     { num: enabled.length, label: 'Running now' },
@@ -118,6 +154,13 @@ export default function AutomationsPage() {
           Standing instructions Xanî runs for you — on a schedule, or the moment something happens.
         </p>
       </header>
+
+      {runMsg && (
+        <div className="mb-4 flex items-center gap-2 rounded-[11px] border border-border bg-surface px-4 py-2.5 text-[12.5px] text-text-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-green" /> “{runMsg}” sent to Approvals to run.
+          <a href="/approvals" className="ml-auto font-semibold text-accent hover:underline">Review</a>
+        </div>
+      )}
 
       {/* stats */}
       <div className="mb-5 flex gap-2.5">
@@ -311,13 +354,15 @@ export default function AutomationsPage() {
                       <div className="text-[12px] text-muted">No runs yet — it’ll start on the next trigger.</div>
                     </div>
                   </div>
-                  <div className="mt-3 text-right">
-                    <button
-                      type="button"
-                      onClick={() => remove(a.id)}
-                      className="text-[11.5px] text-muted transition hover:text-accent"
-                    >
-                      Remove automation
+                  <div className="mt-3 flex items-center gap-2">
+                    <button type="button" onClick={() => runNow(a)} className="rounded-[9px] bg-accent px-3 py-1.5 text-[12px] font-semibold text-on-accent hover:bg-accent-dim">
+                      Run now
+                    </button>
+                    <button type="button" onClick={() => startEdit(a)} className="rounded-[9px] border border-border bg-bg px-3 py-1.5 text-[12px] font-semibold text-text-2 hover:bg-hover">
+                      Edit
+                    </button>
+                    <button type="button" onClick={() => remove(a.id)} className="ml-auto text-[11.5px] text-muted transition hover:text-accent">
+                      Remove
                     </button>
                   </div>
                 </div>
@@ -326,6 +371,33 @@ export default function AutomationsPage() {
           );
         })
       )}
+
+      <Modal open={!!editing} onClose={() => setEditing(null)} title="Edit automation" subtitle="Reconfigure what Xanî runs" width="max-w-lg">
+        <div className="space-y-3">
+          <label className="block">
+            <span className="mb-1 block text-[11.5px] font-semibold text-muted">Name</span>
+            <input value={eName} onChange={(e) => setEName(e.target.value)} className="w-full rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13.5px] text-text outline-none focus:border-accent" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-[11.5px] font-semibold text-muted">Trigger</span>
+            <input value={eTrigger} onChange={(e) => setETrigger(e.target.value)} className="w-full rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13.5px] text-text outline-none focus:border-accent" />
+          </label>
+          <div>
+            <span className="mb-1.5 block text-[11.5px] font-semibold text-muted">Autonomy</span>
+            <div className="flex rounded-[10px] border border-border bg-bg p-0.5">
+              {(['auto', 'ask'] as const).map((v) => (
+                <button key={v} type="button" onClick={() => setEAuto(v)} className={`flex-1 rounded-lg px-3 py-1.5 text-[12.5px] font-semibold transition ${eAuto === v ? (v === 'auto' ? 'bg-green text-white' : 'bg-accent text-on-accent') : 'text-text-2 hover:text-text'}`}>
+                  {v === 'auto' ? 'Auto' : 'Asks first'}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end gap-2.5">
+          <button type="button" onClick={() => setEditing(null)} className="rounded-[10px] border border-border bg-surface px-4 py-2 text-[13px] font-semibold text-text-2 hover:bg-hover">Cancel</button>
+          <button type="button" onClick={saveEdit} className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent-dim">Save</button>
+        </div>
+      </Modal>
     </div>
   );
 }

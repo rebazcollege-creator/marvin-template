@@ -6,6 +6,7 @@ import type {
   CalendarData,
   SlackData,
   BufferData,
+  DriveData,
 } from '../src/lib/marvin-protocol.ts';
 
 /**
@@ -165,6 +166,50 @@ export async function getCalendar(): Promise<CalendarData> {
     return { connected: true, events };
   } catch {
     return { connected: true, events: [] };
+  }
+}
+
+// ── Google Drive ──────────────────────────────────────────────────
+
+function driveKind(mime?: string): DriveData['files'][number]['kind'] {
+  if (!mime) return 'file';
+  if (mime === 'application/vnd.google-apps.folder') return 'folder';
+  if (mime.includes('document')) return 'doc';
+  if (mime.includes('spreadsheet')) return 'sheet';
+  if (mime.includes('presentation')) return 'slide';
+  if (mime === 'application/pdf') return 'pdf';
+  if (mime.startsWith('image/')) return 'image';
+  return 'file';
+}
+
+export async function getDrive(): Promise<DriveData> {
+  const id = process.env.GOOGLE_DRIVE_CLIENT_ID;
+  const secret = process.env.GOOGLE_DRIVE_CLIENT_SECRET;
+  const refresh = process.env.GOOGLE_DRIVE_REFRESH_TOKEN;
+  if (!id || !secret || !refresh) return { connected: false, files: [] };
+  const token = await googleAccessToken(id, secret, refresh);
+  if (!token) return { connected: false, files: [] };
+
+  const url =
+    'https://www.googleapis.com/drive/v3/files' +
+    '?orderBy=folder,modifiedTime desc&pageSize=50&q=trashed=false' +
+    '&fields=files(id,name,mimeType,modifiedTime,starred)';
+  try {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) return { connected: true, files: [] };
+    const j = (await r.json()) as {
+      files?: { id?: string; name?: string; mimeType?: string; modifiedTime?: string; starred?: boolean }[];
+    };
+    const files = (j.files ?? []).map((f) => ({
+      id: f.id ?? '',
+      name: f.name ?? '(untitled)',
+      kind: driveKind(f.mimeType),
+      modified: f.modifiedTime ?? '',
+      starred: Boolean(f.starred),
+    }));
+    return { connected: true, files };
+  } catch {
+    return { connected: true, files: [] };
   }
 }
 

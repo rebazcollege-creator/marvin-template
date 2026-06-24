@@ -5,6 +5,7 @@ import type {
   CalendarData,
   SlackData,
   BufferData,
+  DriveData,
 } from '@/lib/marvin-protocol';
 
 /**
@@ -30,5 +31,6 @@ export const fetchBriefingData = () => get<BriefingData>('/data/briefing');
 export const fetchInbox = () => get<InboxData>('/data/inbox');
 export const fetchTrello = () => get<TrelloData>('/data/trello');
 export const fetchCalendar = () => get<CalendarData>('/data/calendar');
+export const fetchDrive = () => get<DriveData>('/data/drive');
 export const fetchSlack = () => get<SlackData>('/data/slack');
 export const fetchBuffer = () => get<BufferData>('/data/buffer');

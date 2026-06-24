@@ -7,6 +7,7 @@ import {
   getBriefingData,
   getInbox,
   getCalendar,
+  getDrive,
   getSlack,
   getTrello,
   getBuffer,
@@ -95,6 +96,8 @@ const server = createServer(async (req, res) => {
           return json(res, 200, await getInbox());
         case '/data/calendar':
           return json(res, 200, await getCalendar());
+        case '/data/drive':
+          return json(res, 200, await getDrive());
         case '/data/slack':
           return json(res, 200, await getSlack());
         case '/data/trello':

@@ -91,6 +91,11 @@ export interface BufferData {
   scheduled: number;
   byPlatform: { platform: string; count: number }[];
 }
+export type DriveKind = 'folder' | 'doc' | 'sheet' | 'slide' | 'pdf' | 'image' | 'file';
+export interface DriveData {
+  connected: boolean;
+  files: { id: string; name: string; kind: DriveKind; modified: string; starred: boolean }[];
+}
 
 /** Server-sent events streamed back over /chat. */
 export type StreamEvent =

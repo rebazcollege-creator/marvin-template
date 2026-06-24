@@ -206,27 +206,35 @@ export default function SettingsPage() {
         ))}
       </Collapsible>
 
-      {/* Anthropic API key (desktop only) */}
-      {isTauri() && (
-        <Collapsible title="Anthropic API key" summary={keyStored ? 'sk-ant-•••• · stored in OS keychain' : 'Not set'}>
-          <p className="mb-3 text-[12px] leading-relaxed text-muted">
-            Stored in your OS keychain and handed to MARVIN&apos;s runtime — never saved to a file or shown again.
-            {keyStored ? ' A key is currently stored.' : ' No key stored yet.'}
+      {/* Anthropic API key */}
+      <Collapsible title="Anthropic API key" summary={isTauri() ? (keyStored ? 'sk-ant-•••• · stored in OS keychain' : 'Not set') : 'Desktop: keychain · Dev: .env'}>
+        {isTauri() ? (
+          <>
+            <p className="mb-3 text-[12px] leading-relaxed text-muted">
+              Stored in your OS keychain and handed to MARVIN&apos;s runtime — never saved to a file or shown again.
+              {keyStored ? ' A key is currently stored.' : ' No key stored yet.'}
+            </p>
+            <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="sk-ant-…" className={monoCls} />
+            <div className="mt-3 flex items-center gap-2 text-[11.5px] text-muted">
+              <span>⛭</span> Stored in your OS keychain — desktop only.
+            </div>
+            <button
+              type="button"
+              onClick={() => void saveApiKey()}
+              disabled={!keyInput.trim()}
+              className="mt-3 rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent-dim disabled:opacity-40"
+            >
+              Save key to keychain
+            </button>
+          </>
+        ) : (
+          <p className="text-[12px] leading-relaxed text-muted">
+            For security the key is never entered in the browser. In the <strong className="font-semibold text-text-2">desktop app</strong> it&apos;s
+            stored in your OS keychain (this field appears there). In <strong className="font-semibold text-text-2">dev</strong>, set{' '}
+            <code className="rounded bg-bg px-1">ANTHROPIC_API_KEY</code> in <code className="rounded bg-bg px-1">xani/.env</code> — it&apos;s read only by the sidecar, never the renderer.
           </p>
-          <input type="password" value={keyInput} onChange={(e) => setKeyInput(e.target.value)} placeholder="sk-ant-…" className={monoCls} />
-          <div className="mt-3 flex items-center gap-2 text-[11.5px] text-muted">
-            <span>⛭</span> Stored in your OS keychain — desktop only.
-          </div>
-          <button
-            type="button"
-            onClick={() => void saveApiKey()}
-            disabled={!keyInput.trim()}
-            className="mt-3 rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent-dim disabled:opacity-40"
-          >
-            Save key to keychain
-          </button>
-        </Collapsible>
-      )}
+        )}
+      </Collapsible>
 
       {/* Prompts */}
       <Collapsible title="Prompts" summary={editedPrompts ? `${editedPrompts} customised` : 'All default'}>

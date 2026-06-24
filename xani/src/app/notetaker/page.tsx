@@ -12,6 +12,7 @@ import {
   type ActionDest,
 } from '@/lib/notetaker';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
+import { enqueueApproval } from '@/lib/approvals';
 
 type Capture = 'off' | 'requesting' | 'recording' | 'denied';
 
@@ -141,6 +142,16 @@ export default function NotetakerPage() {
   };
   const confirmRoute = () => {
     if (!routing) return;
+    const toTrello = routing.action.dest === 'trello';
+    enqueueApproval({
+      kind: toTrello ? 'task' : 'calendar',
+      title: routing.action.text,
+      source: `Notetaker · ${routing.session.title}`,
+      preview: toTrello
+        ? `Create a Trello card:\n${routing.action.text}`
+        : `Create a calendar event:\n${routing.action.text}`,
+      actionLabel: toTrello ? 'Create card' : 'Add to calendar',
+    });
     updateAction(routing.session.id, routing.action.id, { routed: true });
   };
 

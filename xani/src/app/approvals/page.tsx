@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { ensureStorageReady } from '@/lib/storage';
 import { AUTONOMY_DEFS, getAutonomy, setAutonomy, type Level } from '@/lib/autonomy';
+import { listApprovals, saveApprovals, type ApprovalItem, type ApprovalKind } from '@/lib/approvals';
+import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 const LEVELS: { id: Level; label: string }[] = [
   { id: 'auto', label: 'Auto' },
@@ -10,23 +12,49 @@ const LEVELS: { id: Level; label: string }[] = [
   { id: 'never', label: 'Never' },
 ];
 
+const KIND_TINT: Record<ApprovalKind, { tint: string; edge: string; label: string }> = {
+  email: { tint: 'var(--accent-soft)', edge: '#C0613A', label: 'Email' },
+  social: { tint: '#F8EFDF', edge: '#D89A4E', label: 'Post' },
+  calendar: { tint: '#E8EEE5', edge: '#6E8B6A', label: 'Calendar' },
+  files: { tint: '#ECE7F1', edge: '#7A6E9C', label: 'Files' },
+  slack: { tint: '#ECE7F1', edge: '#7A6E9C', label: 'Slack' },
+  task: { tint: 'var(--accent-soft)', edge: '#C0613A', label: 'Task' },
+};
+
 export default function ApprovalsPage() {
   const [levels, setLevels] = useState<Record<string, Level>>({});
+  const [items, setItems] = useState<ApprovalItem[]>([]);
   const [ready, setReady] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [draft, setDraft] = useState('');
+  const [confirming, setConfirming] = useState<ApprovalItem | null>(null);
 
   useEffect(() => {
     ensureStorageReady().then(() => {
       setLevels(getAutonomy());
+      setItems(listApprovals());
       setReady(true);
     });
   }, []);
 
-  const set = (id: string, level: Level) => {
+  const persist = (next: ApprovalItem[]) => {
+    setItems(next);
+    saveApprovals(next);
+  };
+  const decide = (id: string, status: 'approved' | 'rejected') =>
+    persist(items.map((i) => (i.id === id ? { ...i, status, decidedAt: new Date().toISOString() } : i)));
+  const saveEdit = (id: string) => {
+    persist(items.map((i) => (i.id === id ? { ...i, preview: draft } : i)));
+    setEditing(null);
+  };
+
+  const setLevel = (id: string, level: Level) => {
     const next = { ...levels, [id]: level };
     setLevels(next);
     setAutonomy(next);
   };
 
+  const pending = items.filter((i) => i.status === 'pending');
   const autoCount = Object.values(levels).filter((l) => l === 'auto').length;
   const askCount = Object.values(levels).filter((l) => l === 'ask').length;
   const neverCount = Object.values(levels).filter((l) => l === 'never').length;
@@ -41,40 +69,78 @@ export default function ApprovalsPage() {
       </header>
 
       {/* queue */}
-      <div className="mb-9 rounded-[16px] border border-dashed border-border bg-surface px-6 py-12 text-center">
-        <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-full bg-green-soft text-green-ink">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="m5 12.5 4.5 4.5L19 7" />
-          </svg>
+      {!ready ? (
+        <div className="mb-9 space-y-2.5">{[0, 1].map((i) => <div key={i} className="xsk h-28 rounded-2xl" />)}</div>
+      ) : pending.length === 0 ? (
+        <div className="mb-9 rounded-[16px] border border-dashed border-border bg-surface px-6 py-12 text-center">
+          <div className="mx-auto mb-3 grid h-11 w-11 place-items-center rounded-full bg-green-soft text-green-ink">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7" /></svg>
+          </div>
+          <p className="text-sm font-semibold text-text">You’re all caught up</p>
+          <p className="mx-auto mt-1.5 max-w-md text-[13px] text-text-2">
+            Nothing is waiting on you. When MARVIN prepares something you’ve set to “Ask” — or you route an
+            action here — it appears with a preview and a one-tap approve.
+          </p>
         </div>
-        <p className="text-sm font-semibold text-text">You’re all caught up</p>
-        <p className="mx-auto mt-1.5 max-w-md text-[13px] text-text-2">
-          Nothing is waiting on you. When MARVIN wants to do something you’ve set to “Ask”, it’ll appear here
-          with a preview and a one-tap approve.
-        </p>
-      </div>
+      ) : (
+        <div className="mb-9 space-y-2.5">
+          <div className="text-[11px] font-bold tracking-[0.08em] text-muted">WAITING ON YOU ({pending.length})</div>
+          {pending.map((it) => {
+            const k = KIND_TINT[it.kind];
+            const isEditing = editing === it.id;
+            return (
+              <div key={it.id} className="rounded-[14px] border border-border bg-surface p-[18px]">
+                <div className="flex items-start gap-3">
+                  <span className="rounded-[7px] px-2 py-1 text-[10.5px] font-semibold" style={{ background: k.tint, color: k.edge }}>{k.label}</span>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13.5px] font-semibold text-text">{it.title}</div>
+                    <div className="text-[11.5px] text-muted">{it.source}</div>
+                  </div>
+                </div>
+                {isEditing ? (
+                  <textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    className="mt-3 min-h-24 w-full resize-y rounded-[11px] border border-border bg-bg px-3.5 py-3 text-[12.5px] leading-relaxed text-text outline-none focus:border-accent"
+                  />
+                ) : (
+                  <div className="mt-3 whitespace-pre-wrap rounded-[11px] border border-border bg-bg px-3.5 py-3 text-[12.5px] leading-relaxed text-text-2">{it.preview}</div>
+                )}
+                <div className="mt-3 flex items-center gap-2">
+                  {isEditing ? (
+                    <>
+                      <button type="button" onClick={() => saveEdit(it.id)} className="rounded-[9px] bg-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent-dim">Save</button>
+                      <button type="button" onClick={() => setEditing(null)} className="rounded-[9px] border border-border bg-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-text-2 hover:bg-hover">Cancel</button>
+                    </>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => setConfirming(it)} className="rounded-[9px] bg-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent-dim">{it.actionLabel}</button>
+                      <button type="button" onClick={() => { setEditing(it.id); setDraft(it.preview); }} className="rounded-[9px] border border-border bg-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-text-2 hover:bg-hover">Edit</button>
+                      <button type="button" onClick={() => decide(it.id, 'rejected')} className="ml-auto rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold text-muted hover:text-accent">Reject</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* autonomy */}
       <div className="mb-3 flex items-center justify-between">
         <div className="text-[11px] font-bold tracking-[0.08em] text-muted">AUTONOMY BY CATEGORY</div>
         {ready && (
           <div className="flex items-center gap-1.5 text-[11.5px] text-muted">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 3 5 6v5c0 4 3 7 7 8 4-1 7-4 7-8V6z" />
-            </svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3 5 6v5c0 4 3 7 7 8 4-1 7-4 7-8V6z" /></svg>
             {autoCount} auto · {askCount} ask · {neverCount} never
           </div>
         )}
       </div>
-
       <div className="overflow-hidden rounded-[16px] border border-border bg-surface">
         {AUTONOMY_DEFS.map((d, i) => {
           const cur = levels[d.id] ?? 'ask';
           return (
-            <div
-              key={d.id}
-              className={`flex items-center justify-between gap-4 px-5 py-4 ${i > 0 ? 'border-t border-border' : ''}`}
-            >
+            <div key={d.id} className={`flex items-center justify-between gap-4 px-5 py-4 ${i > 0 ? 'border-t border-border' : ''}`}>
               <div>
                 <div className="text-sm font-medium text-text">{d.label}</div>
                 <div className="text-[12px] text-muted">{d.sub}</div>
@@ -85,7 +151,7 @@ export default function ApprovalsPage() {
                     key={l.id}
                     type="button"
                     aria-pressed={cur === l.id}
-                    onClick={() => set(d.id, l.id)}
+                    onClick={() => setLevel(d.id, l.id)}
                     className={`rounded-lg px-3 py-1 text-[12px] font-semibold transition ${
                       cur === l.id
                         ? l.id === 'never'
@@ -105,9 +171,18 @@ export default function ApprovalsPage() {
         })}
       </div>
       <p className="mt-3 text-[12px] text-muted">
-        These gates back the runtime’s action guard. Locked rules (e.g. LeadStories monitor-only) always apply on
-        top and can’t be loosened here.
+        These gates back the runtime’s action guard. Locked rules (e.g. LeadStories monitor-only) always apply on top and can’t be loosened here.
       </p>
+
+      <ConfirmModal
+        open={!!confirming}
+        title={confirming ? confirming.actionLabel : ''}
+        body={confirming ? 'Approve this action? It’s recorded as approved now and runs through MARVIN’s runtime when it’s on — gated by your autonomy settings.' : ''}
+        detail={confirming?.preview}
+        okLabel={confirming?.actionLabel ?? 'Approve'}
+        onConfirm={() => confirming && decide(confirming.id, 'approved')}
+        onClose={() => setConfirming(null)}
+      />
     </div>
   );
 }

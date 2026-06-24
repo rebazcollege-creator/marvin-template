@@ -1,14 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchInbox, fetchCalendar, fetchDrive, fetchSlack, fetchTrello, fetchBuffer } from '@/lib/marvin-data';
 
 /**
  * Live embedded preview of a connected integration — pulls real data from the
- * sidecar and shows a compact summary + a few rows, right in the Connections card.
- * Honest states: runtime offline, not connected (credentials missing), empty, data.
- * Integrations without a data endpoint yet show a quiet "no live preview" note.
+ * sidecar and shows a compact summary + a few rows. Auto-refreshes on an interval,
+ * when the tab regains focus, and on demand (refresh button). Honest states:
+ * runtime offline, not connected, empty, live.
  */
+
+const REFRESH_MS = 20_000;
 
 type Live = { connected: boolean; summary: string; rows: string[] } | null;
 
@@ -52,22 +54,45 @@ async function loadLive(id: string): Promise<Live | 'offline'> {
 export function LivePreview({ id }: { id: string }) {
   const [state, setState] = useState<'loading' | 'offline' | 'ready' | 'none'>('loading');
   const [live, setLive] = useState<Live>(null);
+  const [busy, setBusy] = useState(false);
+  const aliveRef = useRef(true);
+  const reqRef = useRef(0);
+
+  const load = useCallback(async () => {
+    const seq = ++reqRef.current;
+    setBusy(true);
+    const r = await loadLive(id);
+    if (!aliveRef.current || seq !== reqRef.current) return; // ignore stale/unmounted
+    if (r === 'offline') setState('offline');
+    else if (r === null) setState('none');
+    else {
+      setLive(r);
+      setState('ready');
+    }
+    setBusy(false);
+  }, [id]);
 
   useEffect(() => {
-    let alive = true;
-    loadLive(id).then((r) => {
-      if (!alive) return;
-      if (r === 'offline') setState('offline');
-      else if (r === null) setState('none');
-      else {
-        setLive(r);
-        setState('ready');
-      }
-    });
-    return () => {
-      alive = false;
+    aliveRef.current = true;
+    void load();
+    if (id === 'notion' || id === 'github' || id === 'linear' || id === 'hubspot' || id === 'zoom' || id === 'whatsapp') {
+      return () => {
+        aliveRef.current = false;
+      };
+    }
+    const interval = window.setInterval(() => void load(), REFRESH_MS);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void load();
     };
-  }, [id]);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      aliveRef.current = false;
+      window.clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [id, load]);
 
   const box = 'rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[11.5px]';
 
@@ -75,19 +100,30 @@ export function LivePreview({ id }: { id: string }) {
   if (state === 'none') return <div className={`${box} text-muted`}>No live preview yet — connected for actions.</div>;
   if (state === 'offline') return <div className={`${box} text-muted`}>Runtime offline — start it with <code className="text-text-2">npm run dev:all</code>.</div>;
   if (live && !live.connected) return <div className={`${box} text-muted`}>Add credentials above to see live data here.</div>;
-  if (live && live.rows.length === 0) return <div className={`${box} text-text-2`}><span className="font-semibold text-text">{live.summary}</span> · nothing to show.</div>;
 
   return (
     <div className={box}>
       <div className="mb-1 flex items-center gap-1.5 font-semibold text-text">
         <span className="h-1.5 w-1.5 rounded-full bg-green" />
         Live · {live?.summary}
+        <button
+          type="button"
+          onClick={() => void load()}
+          aria-label="Refresh"
+          className={`ml-auto text-muted transition hover:text-accent ${busy ? 'animate-spin' : ''}`}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.4M21 4v5h-5" /></svg>
+        </button>
       </div>
-      <ul className="space-y-0.5 text-text-2">
-        {live?.rows.map((r, i) => (
-          <li key={i} className="truncate">{r}</li>
-        ))}
-      </ul>
+      {live && live.rows.length > 0 ? (
+        <ul className="space-y-0.5 text-text-2">
+          {live.rows.map((r, i) => (
+            <li key={i} className="truncate">{r}</li>
+          ))}
+        </ul>
+      ) : (
+        <span className="text-text-2">Nothing to show right now.</span>
+      )}
     </div>
   );
 }

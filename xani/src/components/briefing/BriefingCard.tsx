@@ -77,7 +77,7 @@ function todayLabel(date: Date, timezone: string): string {
   }).format(date);
 }
 
-export function BriefingCard() {
+export function BriefingCard({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const [settings, setSettings] = useState<XaniSettings | null>(null);
   const [data, setData] = useState<BriefingData | null>(null);
   const now = useMemo(() => new Date(), []);
@@ -89,8 +89,8 @@ export function BriefingCard() {
 
   if (!settings) {
     return (
-      <section className="rounded-2xl border border-line bg-paper-card p-8 shadow-sm">
-        <div className="h-8 w-56 animate-pulse rounded bg-line" />
+      <section className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
+        <div className="h-8 w-56 animate-pulse rounded bg-border" />
       </section>
     );
   }
@@ -100,35 +100,37 @@ export function BriefingCard() {
   const hour = weekdayInTimezone(now, tz) >= 0 ? hourInTimezone(now, tz) : now.getHours();
 
   return (
-    <section className="rounded-2xl border border-line bg-paper-card p-8 shadow-sm">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-3xl text-ink">
-          {greeting(hour)}, {settings.profile.name}.
-        </h1>
-        <span className="text-sm text-ink-soft">{todayLabel(now, tz)}</span>
-      </header>
+    <section className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
+      {!hideHeader && (
+        <header className="flex items-baseline justify-between">
+          <h1 className="text-3xl text-text">
+            {greeting(hour)}, {settings.profile.name}.
+          </h1>
+          <span className="text-sm text-text-2">{todayLabel(now, tz)}</span>
+        </header>
+      )}
 
       {dayOff ? (
-        <p className="mt-8 text-ink-soft">
+        <p className={`${hideHeader ? '' : 'mt-8'} text-text-2`}>
           Day off. MARVIN is quiet today — no briefing, no alerts.
         </p>
       ) : (
         <>
-          <div className="mt-8 space-y-6">
+          <div className={`${hideHeader ? '' : 'mt-8'} space-y-6`}>
             {GROUPS.map((group) => (
               <div key={group.heading}>
-                <p className="text-xs font-medium uppercase tracking-wide text-ink-soft">
+                <p className="text-xs font-medium uppercase tracking-wide text-text-2">
                   {group.heading}
                 </p>
-                <ul className="mt-1 divide-y divide-line">
+                <ul className="mt-1 divide-y divide-border">
                   {group.rows.map((row) => (
                     <li key={row.href}>
                       <Link
                         href={row.href}
-                        className="flex items-center justify-between py-2.5 text-sm transition-colors hover:text-terracotta"
+                        className="flex items-center justify-between py-2.5 text-sm transition-colors hover:text-accent"
                       >
-                        <span className="text-ink-soft">{row.label}</span>
-                        <span className="tabular-nums text-ink">{rowValue(row.key, data)}</span>
+                        <span className="text-text-2">{row.label}</span>
+                        <span className="tabular-nums text-text">{rowValue(row.key, data)}</span>
                       </Link>
                     </li>
                   ))}
@@ -137,8 +139,8 @@ export function BriefingCard() {
             ))}
           </div>
 
-          <p className="mt-6 border-t border-line pt-5 text-sm text-ink-soft">
-            <span className="font-medium text-terracotta">MARVIN:</span>{' '}
+          <p className="mt-6 border-t border-border pt-5 text-sm text-text-2">
+            <span className="font-medium text-accent">MARVIN:</span>{' '}
             {data
               ? 'Counts are live where an integration is connected; an em-dash means that source needs credentials.'
               : "Start the sidecar (npm run sidecar) to populate live counts — until then this is the briefing shell."}

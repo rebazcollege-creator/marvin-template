@@ -28,6 +28,14 @@ import type { ChatMessage } from '@/lib/marvin-protocol';
 type Note = { id: number; text: string };
 type Approval = { id: string; tool: string; reason: string };
 
+const SUGGESTIONS = [
+  'What needs me today?',
+  'Draft a reply to my latest email',
+  'Summarise my unread Slack',
+  'Schedule focus time tomorrow morning',
+  'Fact-check a claim for me',
+];
+
 export function MarvinChat() {
   const [chatId, setChatId] = useState('');
   const [chats, setChats] = useState<Chat[]>([]);
@@ -37,6 +45,7 @@ export function MarvinChat() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const noteId = useRef(0);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     ensureStorageReady().then(() => {
@@ -49,6 +58,12 @@ export function MarvinChat() {
         setChatId(newChatId());
       }
     });
+  }, []);
+
+  useEffect(() => {
+    const focus = () => inputRef.current?.focus();
+    window.addEventListener('xani:ask-focus', focus);
+    return () => window.removeEventListener('xani:ask-focus', focus);
   }, []);
 
   const addNote = (text: string) => setNotes((n) => [...n, { id: noteId.current++, text }]);
@@ -193,8 +208,8 @@ export function MarvinChat() {
               key={i}
               className={
                 m.role === 'user'
-                  ? 'ml-auto max-w-[85%] rounded-xl bg-terracotta px-4 py-2 text-sm text-paper'
-                  : 'mr-auto max-w-[85%] whitespace-pre-wrap rounded-xl border border-line bg-paper-card px-4 py-2 text-sm text-ink'
+                  ? 'ml-auto max-w-[85%] rounded-xl bg-accent px-4 py-2 text-sm text-on-accent'
+                  : 'mr-auto max-w-[85%] whitespace-pre-wrap rounded-xl border border-border bg-surface px-4 py-2 text-sm text-text'
               }
             >
               {m.content || (busy && i === messages.length - 1 ? '…' : '')}
@@ -202,22 +217,22 @@ export function MarvinChat() {
           ))}
 
           {approvals.map((a) => (
-            <div key={a.id} className="rounded-xl border border-amber bg-paper-card p-3 text-sm">
-              <p className="text-ink">
+            <div key={a.id} className="rounded-xl border border-accent bg-surface p-3 text-sm">
+              <p className="text-text">
                 MARVIN wants to run <span className="font-medium">{a.tool}</span>. {a.reason}
               </p>
               <div className="mt-2 flex gap-2">
                 <button
                   type="button"
                   onClick={() => decide(a.id, true)}
-                  className="rounded-lg bg-terracotta px-3 py-1 text-xs font-medium text-paper hover:bg-terracotta-dim"
+                  className="rounded-lg bg-accent px-3 py-1 text-xs font-medium text-on-accent hover:bg-accent-dim"
                 >
                   Approve
                 </button>
                 <button
                   type="button"
                   onClick={() => decide(a.id, false)}
-                  className="rounded-lg border border-line px-3 py-1 text-xs text-ink-soft hover:text-ink"
+                  className="rounded-lg border border-border px-3 py-1 text-xs text-text-2 hover:text-text"
                 >
                   Reject
                 </button>
@@ -244,29 +259,75 @@ export function MarvinChat() {
       )}
 
       <form
-        className="flex items-center gap-3 rounded-xl border border-line bg-paper-card p-3 shadow-sm"
+        className="rounded-[22px] border border-border bg-surface px-4 pb-3 pt-4 shadow-[0_10px_34px_-16px_rgba(31,31,29,.18)]"
         onSubmit={(e) => {
           e.preventDefault();
           void send();
         }}
       >
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          aria-label="Ask MARVIN"
-          placeholder="Ask MARVIN…"
+          aria-label="Ask Xanî"
+          placeholder="Ask Xanî to draft, fact-check, schedule — or just talk…"
           disabled={busy}
-          className="flex-1 bg-transparent px-2 text-sm text-ink outline-none placeholder:text-ink-soft disabled:opacity-60"
+          className="w-full bg-transparent px-1 pb-3 text-[15px] text-text outline-none placeholder:text-muted disabled:opacity-60"
         />
-        <button
-          type="submit"
-          disabled={busy || input.trim().length === 0}
-          className="rounded-lg bg-terracotta px-4 py-2 text-sm font-medium text-paper transition-colors hover:bg-terracotta-dim disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {busy ? '…' : 'Send'}
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            type="button"
+            disabled
+            title="Attachments — coming soon"
+            aria-label="Attach (coming soon)"
+            className="grid h-9 w-9 cursor-not-allowed place-items-center rounded-[10px] border border-border text-text-2 opacity-50"
+          >
+            <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M10 5v10M5 10h10" /></svg>
+          </button>
+          <div className="flex-1" />
+          <button
+            type="button"
+            disabled
+            title="Voice — coming soon"
+            aria-label="Voice (coming soon)"
+            className="grid h-[38px] w-[38px] cursor-not-allowed place-items-center rounded-full border border-border text-text-2 opacity-50"
+          >
+            <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><rect x="7.5" y="2.5" width="5" height="9" rx="2.5" /><path d="M5 9.5a5 5 0 0 0 10 0M10 14.5v3" /></svg>
+          </button>
+          <button
+            type="submit"
+            disabled={busy || input.trim().length === 0}
+            title="Send"
+            aria-label="Send"
+            className="grid h-[38px] w-[38px] place-items-center rounded-full bg-accent text-on-accent transition-colors hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {busy ? (
+              <span className="text-sm">…</span>
+            ) : (
+              <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 10h11M10 5.5 14.5 10 10 14.5" /></svg>
+            )}
+          </button>
+        </div>
       </form>
+
+      {messages.length === 0 && (
+        <div className="mt-4 flex flex-wrap justify-center gap-2.5">
+          {SUGGESTIONS.map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => {
+                setInput(s);
+                inputRef.current?.focus();
+              }}
+              className="rounded-full border border-border bg-surface px-4 py-2 text-[12.5px] font-medium text-text-2 transition-colors hover:bg-hover"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

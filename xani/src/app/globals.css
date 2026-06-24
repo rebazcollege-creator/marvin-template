@@ -2,22 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Design tokens (light) ── */
 :root {
-  /* Warm cream / paper palette */
-  --paper: #f5f0e8;
-  --paper-card: #fbf8f2;
-  --terracotta: #c0613a;
-  --terracotta-dim: #a8512e;
-  --amber: #d89a4e;
-  --ink: #2c2c2c;
-  --ink-soft: #5a554c;
-  --line: #e3dbcc;
+  --bg: #f7f6f3;
+  --surface: #ffffff;
+  --surface-2: #f8f8f5;
+  --hover: #f1f1ed;
+  --line: #f1f0ec;
+  --border: #e8e7e2;
+  --border-2: #eeede8;
+  --text: #1f1f1d;
+  --text-2: #59574f;
+  --muted: #97948c;
+  --on-accent: #fbf8f2;
+  --accent-soft: #f4f3f0;
+  --accent-soft-2: #eeede9;
+  --accent-soft-border: #e4e2dc;
+  --accent: #c0613a;
+  --accent-dim: #a8512e;
+}
+
+/* ── Design tokens (dark) ── */
+:root[data-xtheme='dark'] {
+  --bg: #15171a;
+  --surface: #1e2126;
+  --surface-2: #262a30;
+  --hover: #2a2e35;
+  --line: #23262c;
+  --border: #30343c;
+  --border-2: #272b31;
+  --text: #ecedea;
+  --text-2: #b2b6bc;
+  --muted: #7f838b;
+  --on-accent: #fbf8f2;
+  --accent-soft: #262a30;
+  --accent-soft-2: #2b2f36;
+  --accent-soft-border: #383c44;
+  --accent: #c0613a;
+  --accent-dim: #a8512e;
 }
 
 html,
 body {
-  background-color: var(--paper);
-  color: var(--ink);
+  background-color: var(--bg);
+  color: var(--text);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -30,4 +58,106 @@ h2,
 h3,
 .wordmark {
   font-family: var(--font-playfair), Georgia, serif;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 116, 108, 0.28);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Entry animations + skeleton (from design) ── */
+@keyframes xpop {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes xfade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes xshimmer {
+  0% {
+    background-position: -360px 0;
+  }
+  100% {
+    background-position: 360px 0;
+  }
+}
+.xpop {
+  animation: xpop 0.3s ease both;
+}
+.xfade {
+  animation: xfade 0.3s ease both;
+}
+.xsk {
+  background: linear-gradient(90deg, var(--border-2) 0%, var(--bg) 50%, var(--border-2) 100%);
+  background-size: 720px 100%;
+  animation: xshimmer 1.4s infinite linear;
+  border-radius: 7px;
+}
+
+/* ── Orb (Home) ── */
+@keyframes orbFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes orbBreath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+@keyframes orbSpin {
+  to { transform: rotate(360deg); }
+}
+@keyframes orbSpinR {
+  to { transform: rotate(-360deg); }
+}
+@keyframes orbRing {
+  0% { transform: translate(-50%, -50%) scale(0.52); opacity: 0.5; }
+  70% { opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1.18); opacity: 0; }
+}
+@keyframes orbCap {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+@keyframes orbBar {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+@keyframes orbScene {
+  0%, 100% { transform: rotateX(15deg) rotateY(-18deg); }
+  50% { transform: rotateX(-11deg) rotateY(18deg); }
+}
+@keyframes orbZ {
+  to { transform: rotateZ(360deg); }
+}
+@keyframes orbZr {
+  to { transform: rotateZ(-360deg); }
+}
+@keyframes orbCore {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.05); filter: brightness(1.12); }
+}
+@keyframes orbHalo {
+  0%, 100% { opacity: 0.58; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.95; transform: translate(-50%, -50%) scale(1.09); }
 }

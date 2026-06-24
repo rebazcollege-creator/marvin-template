@@ -16,12 +16,21 @@ type Item = { label: string; href: string; keywords?: string };
 const NAV: Item[] = [
   { label: 'Home / Briefing', href: '/' },
   { label: 'Inbox', href: '/inbox', keywords: 'email gmail mail' },
+  { label: 'Drive', href: '/drive', keywords: 'files documents' },
   { label: 'Trello', href: '/trello', keywords: 'cards board tasks' },
   { label: 'Calendar', href: '/calendar', keywords: 'events schedule' },
   { label: 'Buffer', href: '/buffer', keywords: 'social queue posts' },
   { label: 'Slack', href: '/slack', keywords: 'messages mentions' },
   { label: 'Memory', href: '/memory', keywords: 'learned facts adjustments' },
   { label: 'Settings', href: '/settings', keywords: 'prompts days off models' },
+];
+
+const ASSISTANT: Item[] = [
+  { label: 'Activity', href: '/activity', keywords: 'feed open loops' },
+  { label: 'Notetaker', href: '/notetaker', keywords: 'meeting notes transcript' },
+  { label: 'Automations', href: '/automations', keywords: 'standing instructions schedule' },
+  { label: 'Connections', href: '/connections', keywords: 'integrations connect' },
+  { label: 'Approvals', href: '/approvals', keywords: 'autonomy trust gate' },
 ];
 
 const STUDIOS: Item[] = [
@@ -43,8 +52,13 @@ export function CommandPalette() {
         setOpen((o) => !o);
       }
     };
+    const onOpen = () => setOpen(true);
     document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
+    window.addEventListener('xani:command', onOpen);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      window.removeEventListener('xani:command', onOpen);
+    };
   }, []);
 
   const go = (href: string) => {
@@ -87,6 +101,21 @@ export function CommandPalette() {
           className="px-2 py-1 text-xs uppercase tracking-wide text-ink-soft"
         >
           {STUDIOS.map((item) => (
+            <Command.Item
+              key={item.href}
+              value={`${item.label} ${item.keywords ?? ''}`}
+              onSelect={() => go(item.href)}
+              className="cursor-pointer rounded-lg px-3 py-2 text-sm text-ink data-[selected=true]:bg-paper data-[selected=true]:text-terracotta"
+            >
+              {item.label}
+            </Command.Item>
+          ))}
+        </Command.Group>
+        <Command.Group
+          heading="Assistant"
+          className="px-2 py-1 text-xs uppercase tracking-wide text-ink-soft"
+        >
+          {ASSISTANT.map((item) => (
             <Command.Item
               key={item.href}
               value={`${item.label} ${item.keywords ?? ''}`}

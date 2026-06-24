@@ -17,6 +17,10 @@ const sphere: CSSProperties = {
   inset: 0,
   borderRadius: '50%',
   overflow: 'hidden',
+  // clip-path reliably clips the blurred/blended ribbon layers to the circle
+  // (overflow:hidden + border-radius alone leaks a soft square in Chromium).
+  clipPath: 'circle(50% at 50% 50%)',
+  isolation: 'isolate',
   background: [
     'radial-gradient(circle at 32% 24%, rgba(255,255,255,.95), rgba(255,255,255,.34) 14%, transparent 26%)',
     'radial-gradient(circle at 42% 44%, rgba(125,245,214,.72), transparent 42%)',

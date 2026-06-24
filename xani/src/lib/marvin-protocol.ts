@@ -96,6 +96,10 @@ export interface DriveData {
   connected: boolean;
   files: { id: string; name: string; kind: DriveKind; modified: string; starred: boolean }[];
 }
+export interface GithubData {
+  connected: boolean;
+  items: { title: string; repo: string; url: string; isPR: boolean }[];
+}
 
 /**
  * Outward actions the sidecar can actually perform (POST /act), once approved.

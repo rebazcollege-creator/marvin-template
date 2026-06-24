@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
 import { loadCreds, setCred, credStatus } from './creds.ts';
-import { startGoogleLogin } from './google-oauth.ts';
+import { startOAuthLogin } from './google-oauth.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
 import {
@@ -17,6 +17,7 @@ import {
   getSlack,
   getTrello,
   getBuffer,
+  getGithub,
   executeAction,
 } from './connectors.ts';
 import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload } from '../src/lib/marvin-protocol.ts';
@@ -118,6 +119,8 @@ const server = createServer(async (req, res) => {
           return json(res, 200, await getTrello());
         case '/data/buffer':
           return json(res, 200, await getBuffer());
+        case '/data/github':
+          return json(res, 200, await getGithub());
         default:
           return json(res, 404, { error: 'Unknown data endpoint.' });
       }
@@ -130,14 +133,14 @@ const server = createServer(async (req, res) => {
     return json(res, 200, credStatus());
   }
 
-  if (req.method === 'POST' && req.url === '/oauth/google/start') {
+  if (req.method === 'POST' && req.url === '/oauth/start') {
     try {
       const { integration, clientId, clientSecret } = JSON.parse(await readBody(req)) as {
         integration: string;
         clientId: string;
         clientSecret: string;
       };
-      const result = await startGoogleLogin({ integration, clientId, clientSecret });
+      const result = await startOAuthLogin({ integration, clientId, clientSecret });
       return json(res, 200, result);
     } catch (err) {
       return json(res, 400, { ok: false, error: (err as Error).message });

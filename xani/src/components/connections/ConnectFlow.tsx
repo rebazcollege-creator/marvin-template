@@ -5,9 +5,15 @@ import { Modal } from '@/components/ui/Modal';
 import { methodsFor, type ConnectMethod } from '@/lib/connect-flows';
 import type { Connection, ConnState } from '@/lib/connections';
 import { isTauri } from '@/lib/storage';
-import { setRuntimeCred, startGoogleOAuth } from '@/lib/marvin-client';
+import { setRuntimeCred, startOAuth } from '@/lib/marvin-client';
 
-const GOOGLE = new Set(['gmail', 'gcal', 'drive']);
+/** Integrations with a real one-click loopback sign-in, + their setup hints. */
+const OAUTH: Record<string, { label: string; docsUrl: string; docsLabel: string; note: string }> = {
+  gmail: { label: 'Sign in with Google', docsUrl: 'https://console.cloud.google.com/apis/credentials', docsLabel: 'Open Google Cloud →', note: 'Create a Google OAuth client (type: Desktop app) and paste its Client ID + secret. Then sign in — Google opens, you approve, it connects.' },
+  gcal: { label: 'Sign in with Google', docsUrl: 'https://console.cloud.google.com/apis/credentials', docsLabel: 'Open Google Cloud →', note: 'Create a Google OAuth client (type: Desktop app) and paste its Client ID + secret. Then sign in — Google opens, you approve, it connects.' },
+  drive: { label: 'Sign in with Google', docsUrl: 'https://console.cloud.google.com/apis/credentials', docsLabel: 'Open Google Cloud →', note: 'Create a Google OAuth client (type: Desktop app) and paste its Client ID + secret. Then sign in — Google opens, you approve, it connects.' },
+  github: { label: 'Sign in with GitHub', docsUrl: 'https://github.com/settings/developers', docsLabel: 'Open GitHub OAuth Apps →', note: 'Create a GitHub OAuth App with Authorization callback URL exactly http://127.0.0.1:8788, then paste its Client ID + secret. Then sign in — GitHub opens, you approve, it connects.' },
+};
 
 /**
  * The connection flow. Walks the real paths for an integration:
@@ -89,28 +95,29 @@ export function ConnectFlow({
     setStep('done');
   };
 
-  const isGoogle = GOOGLE.has(connection.id);
+  const oauthCfg = OAUTH[connection.id];
+  const isOAuth = !!oauthCfg;
 
-  const googleSignIn = async () => {
+  const oauthSignIn = async () => {
     const clientId = (values.clientId ?? '').trim();
     const clientSecret = (values.clientSecret ?? '').trim();
     if (!clientId || !clientSecret) {
-      setError('Enter your Google Client ID and secret first.');
+      setError('Enter your Client ID and secret first.');
       return;
     }
     setStep('connecting');
-    const r = await startGoogleOAuth(connection.id, clientId, clientSecret);
+    const r = await startOAuth(connection.id, clientId, clientSecret);
     if (r.ok) {
       onComplete({
         connected: true,
         method: 'oauth',
-        accounts: r.email ? [r.email] : undefined,
+        accounts: r.account ? [r.account] : undefined,
         scopes,
         connectedAt: new Date().toISOString(),
       });
       setStep('done');
     } else {
-      setError(r.error ?? 'Could not connect to Google.');
+      setError(r.error ?? `Could not connect to ${connection.name}.`);
       setStep('error');
     }
   };
@@ -180,20 +187,19 @@ export function ConnectFlow({
       {/* METHOD: OAUTH */}
       {step === 'method' && method?.kind === 'oauth' && (
         <div className="space-y-4">
-          {isGoogle && (
+          {isOAuth && oauthCfg && (
             <div className="space-y-2.5">
               <p className="rounded-[11px] border border-border bg-bg px-3.5 py-2.5 text-[11.5px] leading-relaxed text-text-2">
-                One-time setup: create a Google <strong className="text-text">OAuth client (type: Desktop app)</strong> and paste its Client ID + secret below. Then “Sign in with Google” opens Google, you approve, and it connects automatically.
-                {' '}
-                <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" className="font-semibold text-accent hover:underline">Open Google Cloud →</a>
+                One-time setup: {oauthCfg.note}{' '}
+                <a href={oauthCfg.docsUrl} target="_blank" rel="noreferrer" className="font-semibold text-accent hover:underline">{oauthCfg.docsLabel}</a>
               </p>
               <label className="block">
                 <span className="mb-1 block text-[12px] font-semibold text-text-2">Client ID</span>
-                <input value={values.clientId ?? ''} onChange={(e) => setValues((v) => ({ ...v, clientId: e.target.value }))} placeholder="…apps.googleusercontent.com" className="w-full rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13.5px] text-text outline-none focus:border-accent" />
+                <input value={values.clientId ?? ''} onChange={(e) => setValues((v) => ({ ...v, clientId: e.target.value }))} placeholder="Client ID" className="w-full rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13.5px] text-text outline-none focus:border-accent" />
               </label>
               <label className="block">
                 <span className="mb-1 block text-[12px] font-semibold text-text-2">Client secret</span>
-                <input type="password" value={values.clientSecret ?? ''} onChange={(e) => setValues((v) => ({ ...v, clientSecret: e.target.value }))} placeholder="GOCSPX-…" className="w-full rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13.5px] text-text outline-none focus:border-accent" />
+                <input type="password" value={values.clientSecret ?? ''} onChange={(e) => setValues((v) => ({ ...v, clientSecret: e.target.value }))} placeholder="Client secret" className="w-full rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[13.5px] text-text outline-none focus:border-accent" />
               </label>
             </div>
           )}
@@ -229,23 +235,23 @@ export function ConnectFlow({
               })}
             </div>
           </div>
-          {!isGoogle && (
+          {!isOAuth && (
             <p className="rounded-[11px] border border-border bg-bg px-3.5 py-2.5 text-[11.5px] leading-relaxed text-muted">
               In the packaged app this opens {connection.name}’s sign-in and stores the token in your OS keychain.
               {method.envHint && <span className="mt-1 block">Runtime reads: <code className="text-text-2">{method.envHint}</code></span>}
             </p>
           )}
-          {isGoogle ? (
+          {isOAuth && oauthCfg ? (
             <div className="flex items-center justify-between pt-1">
               <button type="button" onClick={() => setStep('choose')} className="text-[13px] font-medium text-text-2 hover:text-text">← Back</button>
               <button
                 type="button"
-                onClick={() => void googleSignIn()}
+                onClick={() => void oauthSignIn()}
                 disabled={!(values.clientId ?? '').trim() || !(values.clientSecret ?? '').trim()}
                 className="flex items-center gap-2 rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M21.35 11.1H12v2.9h5.35c-.25 1.5-1.8 4.4-5.35 4.4a5.4 5.4 0 1 1 0-10.8c1.55 0 2.6.66 3.2 1.22l2.18-2.1A8.3 8.3 0 0 0 12 3.6 8.4 8.4 0 1 0 20.4 12c0-.56-.06-.98-.15-1.4z" /></svg>
-                Sign in with Google
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" /></svg>
+                {oauthCfg.label}
               </button>
             </div>
           ) : (
@@ -294,7 +300,7 @@ export function ConnectFlow({
         <div className="flex flex-col items-center gap-3 py-10 text-center">
           <span className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" />
           <p className="text-[13px] text-text-2">
-            {isGoogle ? 'Waiting for Google sign-in in your browser… approve there, then come back.' : `Saving your ${connection.name} connection…`}
+            {isOAuth ? 'Waiting for sign-in in your browser… approve there, then come back.' : `Saving your ${connection.name} connection…`}
           </p>
         </div>
       )}

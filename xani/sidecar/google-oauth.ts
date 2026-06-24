@@ -3,35 +3,76 @@ import { spawn } from 'node:child_process';
 import { setCred } from './creds.ts';
 
 /**
- * Real "Sign in with Google" via the desktop **loopback** OAuth flow (the same
- * approach the gcloud CLI uses). The sidecar opens Google's consent screen in the
- * user's browser, runs a one-shot localhost server to catch the redirect, exchanges
- * the code for a refresh token, and stores the credentials in the runtime — so the
- * integration goes live immediately. Requires a one-time Google Cloud OAuth client
- * (type: Desktop app); loopback redirects to 127.0.0.1 need no port pre-registration.
+ * Real one-click sign-in via the desktop **loopback** OAuth flow (as the gcloud
+ * and gh CLIs do). The sidecar opens the provider's consent screen in the browser,
+ * runs a one-shot localhost server on a FIXED port to catch the redirect, exchanges
+ * the code for a token, and stores the credentials so the integration goes live.
+ *
+ * Works for providers that permit a loopback (http://127.0.0.1) redirect — Google
+ * and GitHub. Others (Slack/Notion/…) require HTTPS redirects and use a pasted token.
+ *
+ * Fixed port so the redirect URI is stable and can be registered where required
+ * (GitHub). Configurable via MARVIN_OAUTH_PORT.
  */
 
-const SCOPES: Record<string, string[]> = {
-  gmail: [
-    'https://mail.google.com/', // full mailbox: read, send, modify, delete, manage labels
-    'https://www.googleapis.com/auth/contacts',
-    'https://www.googleapis.com/auth/userinfo.email',
-    'https://www.googleapis.com/auth/userinfo.profile',
-  ],
-  gcal: [
-    'https://www.googleapis.com/auth/calendar', // full read/write on all calendars
-    'https://www.googleapis.com/auth/userinfo.email',
-  ],
-  drive: [
-    'https://www.googleapis.com/auth/drive', // full read/write on all Drive files
-    'https://www.googleapis.com/auth/userinfo.email',
-  ],
+const PORT = Number(process.env.MARVIN_OAUTH_PORT ?? 8788);
+
+type Provider = {
+  authUrl: string;
+  tokenUrl: string;
+  /** extra query params on the auth request */
+  authParams: Record<string, string>;
+  /** ask the token endpoint for JSON (GitHub returns form-encoded otherwise) */
+  jsonAccept?: boolean;
+  /** which stored token field to write: refresh (Google) or access (GitHub) */
+  tokenField: 'refresh_token' | 'access_token';
+  /** optional endpoint to fetch the account email/login for display */
+  whoUrl?: string;
+  whoField?: string;
 };
 
-const KEYS: Record<string, { id: string; secret: string; refresh: string }> = {
-  gmail: { id: 'GMAIL_CLIENT_ID_1', secret: 'GMAIL_CLIENT_SECRET_1', refresh: 'GMAIL_REFRESH_TOKEN_1' },
-  gcal: { id: 'GOOGLE_CALENDAR_CLIENT_ID', secret: 'GOOGLE_CALENDAR_CLIENT_SECRET', refresh: 'GOOGLE_CALENDAR_REFRESH_TOKEN' },
-  drive: { id: 'GOOGLE_DRIVE_CLIENT_ID', secret: 'GOOGLE_DRIVE_CLIENT_SECRET', refresh: 'GOOGLE_DRIVE_REFRESH_TOKEN' },
+const PROVIDERS: Record<string, Provider> = {
+  google: {
+    authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenUrl: 'https://oauth2.googleapis.com/token',
+    authParams: { access_type: 'offline', prompt: 'consent' },
+    tokenField: 'refresh_token',
+    whoUrl: 'https://www.googleapis.com/oauth2/v2/userinfo',
+    whoField: 'email',
+  },
+  github: {
+    authUrl: 'https://github.com/login/oauth/authorize',
+    tokenUrl: 'https://github.com/login/oauth/access_token',
+    authParams: {},
+    jsonAccept: true,
+    tokenField: 'access_token',
+    whoUrl: 'https://api.github.com/user',
+    whoField: 'login',
+  },
+};
+
+/** integration → { provider, scopes, the env keys to store } */
+const INTEGRATIONS: Record<string, { provider: string; scopes: string[]; keys: { id?: string; secret?: string; token: string } }> = {
+  gmail: {
+    provider: 'google',
+    scopes: ['https://mail.google.com/', 'https://www.googleapis.com/auth/contacts', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'],
+    keys: { id: 'GMAIL_CLIENT_ID_1', secret: 'GMAIL_CLIENT_SECRET_1', token: 'GMAIL_REFRESH_TOKEN_1' },
+  },
+  gcal: {
+    provider: 'google',
+    scopes: ['https://www.googleapis.com/auth/calendar', 'https://www.googleapis.com/auth/userinfo.email'],
+    keys: { id: 'GOOGLE_CALENDAR_CLIENT_ID', secret: 'GOOGLE_CALENDAR_CLIENT_SECRET', token: 'GOOGLE_CALENDAR_REFRESH_TOKEN' },
+  },
+  drive: {
+    provider: 'google',
+    scopes: ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/userinfo.email'],
+    keys: { id: 'GOOGLE_DRIVE_CLIENT_ID', secret: 'GOOGLE_DRIVE_CLIENT_SECRET', token: 'GOOGLE_DRIVE_REFRESH_TOKEN' },
+  },
+  github: {
+    provider: 'github',
+    scopes: ['repo', 'workflow', 'read:org', 'gist', 'notifications', 'user'],
+    keys: { token: 'GITHUB_TOKEN' },
+  },
 };
 
 function openBrowser(url: string): void {
@@ -40,27 +81,26 @@ function openBrowser(url: string): void {
   try {
     spawn(cmd, args, { stdio: 'ignore', detached: true }).unref();
   } catch {
-    /* user can paste the URL manually from authUrl */
+    /* user can paste authUrl manually */
   }
 }
 
-function portOf(addr: ReturnType<ReturnType<typeof createServer>['address']>): number {
-  return addr && typeof addr === 'object' ? addr.port : 0;
-}
+export type OAuthResult = { ok: boolean; account?: string; error?: string };
 
-export type GoogleLoginResult = { ok: boolean; email?: string; error?: string; authUrl?: string };
-
-export function startGoogleLogin(input: { integration: string; clientId: string; clientSecret: string }): Promise<GoogleLoginResult> {
+export function startOAuthLogin(input: { integration: string; clientId: string; clientSecret: string }): Promise<OAuthResult> {
   const { integration, clientId, clientSecret } = input;
-  const scopes = SCOPES[integration];
-  const keys = KEYS[integration];
-  if (!scopes || !keys) return Promise.resolve({ ok: false, error: 'Unsupported Google integration.' });
+  const cfg = INTEGRATIONS[integration];
+  if (!cfg) return Promise.resolve({ ok: false, error: 'Unsupported integration for one-click sign-in.' });
+  const provider = PROVIDERS[cfg.provider];
+  if (!provider) return Promise.resolve({ ok: false, error: 'Unknown OAuth provider.' });
   if (!clientId || !clientSecret) return Promise.resolve({ ok: false, error: 'Client ID and client secret are required.' });
 
-  return new Promise<GoogleLoginResult>((resolve) => {
+  const redirect = `http://127.0.0.1:${PORT}`;
+
+  return new Promise<OAuthResult>((resolve) => {
     let done = false;
     let timer: ReturnType<typeof setTimeout>;
-    const finish = (r: GoogleLoginResult) => {
+    const finish = (r: OAuthResult) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
@@ -73,7 +113,7 @@ export function startGoogleLogin(input: { integration: string; clientId: string;
     };
 
     const server = createServer(async (req, res) => {
-      const u = new URL(req.url ?? '/', 'http://127.0.0.1');
+      const u = new URL(req.url ?? '/', redirect);
       const code = u.searchParams.get('code');
       const err = u.searchParams.get('error');
       if (err) {
@@ -85,60 +125,49 @@ export function startGoogleLogin(input: { integration: string; clientId: string;
         return res.end();
       }
       try {
-        const redirect = `http://127.0.0.1:${portOf(server.address())}`;
-        const tr = await fetch('https://oauth2.googleapis.com/token', {
+        const tr = await fetch(provider.tokenUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(provider.jsonAccept ? { Accept: 'application/json' } : {}) },
           body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirect, grant_type: 'authorization_code' }),
         });
-        const tj = (await tr.json()) as { refresh_token?: string; access_token?: string; error?: string; error_description?: string };
-        if (!tr.ok || !tj.refresh_token) {
-          const msg = tj.error_description || tj.error || 'No refresh token returned. Remove Xanî from your Google account permissions and try again.';
+        const tj = (await tr.json()) as Record<string, string>;
+        const token = tj[provider.tokenField];
+        if (!tr.ok || !token) {
+          const msg = tj.error_description || tj.error || 'No token returned. Remove Xanî from your account permissions and try again.';
           res.end(page(`Could not connect — ${msg}`));
           return finish({ ok: false, error: msg });
         }
-        setCred(keys.id, clientId);
-        setCred(keys.secret, clientSecret);
-        setCred(keys.refresh, tj.refresh_token);
-        let email: string | undefined;
-        try {
-          const ir = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: `Bearer ${tj.access_token}` } });
-          if (ir.ok) email = ((await ir.json()) as { email?: string }).email;
-        } catch {
-          /* email is optional */
+        if (cfg.keys.id) setCred(cfg.keys.id, clientId);
+        if (cfg.keys.secret) setCred(cfg.keys.secret, clientSecret);
+        setCred(cfg.keys.token, token);
+        let account: string | undefined;
+        if (provider.whoUrl && provider.whoField) {
+          try {
+            const ir = await fetch(provider.whoUrl, { headers: { Authorization: `Bearer ${tj.access_token ?? token}`, Accept: 'application/json', 'User-Agent': 'xani' } });
+            if (ir.ok) account = ((await ir.json()) as Record<string, string>)[provider.whoField];
+          } catch {
+            /* account label is optional */
+          }
         }
-        res.end(page(`✅ ${integration} connected${email ? ` as ${email}` : ''}. You can close this tab and return to Xanî.`));
-        finish({ ok: true, email });
+        res.end(page(`✅ ${integration} connected${account ? ` as ${account}` : ''}. You can close this tab and return to Xanî.`));
+        finish({ ok: true, account });
       } catch (e) {
         res.end(page('Something went wrong during sign-in.'));
         finish({ ok: false, error: (e as Error).message });
       }
     });
 
-    server.listen(0, '127.0.0.1', () => {
-      const redirect = `http://127.0.0.1:${portOf(server.address())}`;
+    server.on('error', (e) => finish({ ok: false, error: `Could not start local sign-in server on port ${PORT}: ${(e as Error).message}` }));
+    server.listen(PORT, '127.0.0.1', () => {
       const authUrl =
-        'https://accounts.google.com/o/oauth2/v2/auth?' +
-        new URLSearchParams({
-          client_id: clientId,
-          redirect_uri: redirect,
-          response_type: 'code',
-          access_type: 'offline',
-          prompt: 'consent',
-          scope: scopes.join(' '),
-        }).toString();
+        provider.authUrl +
+        '?' +
+        new URLSearchParams({ client_id: clientId, redirect_uri: redirect, response_type: 'code', scope: cfg.scopes.join(' '), ...provider.authParams }).toString();
       openBrowser(authUrl);
-      // expose the URL so the UI can offer a manual "open" link too
-      pendingAuthUrl = authUrl;
     });
 
-    timer = setTimeout(() => finish({ ok: false, error: 'Timed out waiting for Google sign-in.' }), 4 * 60 * 1000);
+    timer = setTimeout(() => finish({ ok: false, error: 'Timed out waiting for sign-in.' }), 4 * 60 * 1000);
   });
-}
-
-let pendingAuthUrl = '';
-export function lastAuthUrl(): string {
-  return pendingAuthUrl;
 }
 
 function page(msg: string): string {

@@ -148,6 +148,20 @@ free Google OAuth client **once**. ~5 minutes:
 You do step 1–4 once; afterwards every Google sign-in is one click. The same client
 works for Calendar and Drive (just enable those APIs and Connect them too).
 
+## 4c. Sign in with GitHub (one-click, like Google)
+
+GitHub also supports the loopback flow, so it gets a real one-click sign-in too:
+
+1. <https://github.com/settings/developers> → **OAuth Apps → New OAuth App**.
+2. **Authorization callback URL** must be exactly `http://127.0.0.1:8788` (Xanî's
+   loopback port). Homepage URL can be anything.
+3. Create it → copy the **Client ID**, then **Generate a new client secret** → copy it.
+4. In Xanî: **Connections → GitHub → Connect → Sign in with GitHub** → paste both →
+   sign in → approve. The card flips to **Live** and your assigned issues/PRs appear.
+
+> If you ever change Xanî's loopback port (`MARVIN_OAUTH_PORT`), update the callback
+> URL to match.
+
 ## 5. The other integrations (quick notes)
 
 - **Anthropic key** — without it, MARVIN chat and Studio drafting return an error;

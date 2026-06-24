@@ -166,6 +166,26 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
       fields: [{ key: 'accessToken', label: 'Access token', type: 'password', placeholder: '1/…', envKey: 'BUFFER_ACCESS_TOKEN' }],
     },
   ],
+  github: [
+    {
+      id: 'oauth',
+      label: 'Sign in with GitHub',
+      blurb: 'Connect with a GitHub OAuth app — one click, full scopes (repos, issues, PRs, orgs, gists, notifications).',
+      kind: 'oauth',
+      recommended: true,
+      scopes: [{ id: 'full', label: 'Full access', desc: 'Repositories, issues, pull requests, orgs, gists, notifications and your profile.', required: true }],
+    },
+    {
+      id: 'token',
+      label: 'Paste a personal access token',
+      blurb: 'Use a GitHub personal access token (classic) with the broadest scopes you want.',
+      kind: 'form',
+      envHint: 'GITHUB_TOKEN',
+      docsLabel: 'GitHub · Tokens',
+      docsUrl: 'https://github.com/settings/tokens',
+      fields: [{ key: 'token', label: 'Personal access token', type: 'password', placeholder: 'ghp_…', envKey: 'GITHUB_TOKEN' }],
+    },
+  ],
 };
 
 /** Generic fallback for integrations without bespoke paths yet. */

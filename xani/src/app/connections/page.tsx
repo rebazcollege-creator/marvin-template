@@ -23,6 +23,7 @@ const REQUIRED: Record<string, string[]> = {
   slack: ['SLACK_AMARGI_BOT_TOKEN'],
   trello: ['TRELLO_API_KEY', 'TRELLO_TOKEN', 'TRELLO_BOARD_ID'],
   buffer: ['BUFFER_ACCESS_TOKEN'],
+  github: ['GITHUB_TOKEN'],
 };
 
 function Card({ c, state, credsReady, onOpen }: { c: Connection; state?: ConnState; credsReady: boolean; onOpen: () => void }) {

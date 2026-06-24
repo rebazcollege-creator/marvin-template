@@ -6,6 +6,7 @@ import type {
   SlackData,
   BufferData,
   DriveData,
+  GithubData,
 } from '@/lib/marvin-protocol';
 
 /**
@@ -69,6 +70,7 @@ export const PATHS = {
   drive: '/data/drive',
   slack: '/data/slack',
   buffer: '/data/buffer',
+  github: '/data/github',
 } as const;
 
 export const fetchBriefingData = () => get<BriefingData>(PATHS.briefing);
@@ -78,3 +80,4 @@ export const fetchCalendar = () => get<CalendarData>(PATHS.calendar);
 export const fetchDrive = () => get<DriveData>(PATHS.drive);
 export const fetchSlack = () => get<SlackData>(PATHS.slack);
 export const fetchBuffer = () => get<BufferData>(PATHS.buffer);
+export const fetchGithub = () => get<GithubData>(PATHS.github);

@@ -7,6 +7,7 @@ import type {
   SlackData,
   BufferData,
   DriveData,
+  GithubData,
   ActPayload,
   ActResult,
 } from '../src/lib/marvin-protocol.ts';
@@ -292,6 +293,29 @@ export async function getBuffer(): Promise<BufferData> {
     return { connected: true, drafts, scheduled, byPlatform };
   } catch {
     return { connected: true, drafts: 0, scheduled: 0, byPlatform: [] };
+  }
+}
+
+// ── GitHub (REST: OAuth token) ────────────────────────────────────
+
+export async function getGithub(): Promise<GithubData> {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) return { connected: false, items: [] };
+  try {
+    const r = await fetch('https://api.github.com/issues?filter=assigned&state=open&per_page=20', {
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'xani' },
+    });
+    if (!r.ok) return { connected: true, items: [] };
+    const j = (await r.json()) as { title?: string; html_url?: string; pull_request?: unknown; repository?: { full_name?: string } }[];
+    const items = (Array.isArray(j) ? j : []).map((i) => ({
+      title: i.title ?? '(untitled)',
+      repo: i.repository?.full_name ?? '',
+      url: i.html_url ?? '',
+      isPR: Boolean(i.pull_request),
+    }));
+    return { connected: true, items };
+  } catch {
+    return { connected: true, items: [] };
   }
 }
 

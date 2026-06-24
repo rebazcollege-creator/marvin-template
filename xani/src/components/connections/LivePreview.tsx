@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { fetchInbox, fetchCalendar, fetchDrive, fetchSlack, fetchTrello, fetchBuffer } from '@/lib/marvin-data';
+import { fetchInbox, fetchCalendar, fetchDrive, fetchSlack, fetchTrello, fetchBuffer, fetchGithub } from '@/lib/marvin-data';
 
 /**
  * Live embedded preview of a connected integration — pulls real data from the
@@ -46,6 +46,11 @@ async function loadLive(id: string): Promise<Live | 'offline'> {
       if (!d) return 'offline';
       return { connected: d.connected, summary: `${d.drafts} drafts · ${d.scheduled} scheduled`, rows: d.byPlatform.slice(0, 3).map((p) => `${p.platform}: ${p.count}`) };
     }
+    case 'github': {
+      const d = await fetchGithub();
+      if (!d) return 'offline';
+      return { connected: d.connected, summary: `${d.items.length} assigned`, rows: d.items.slice(0, 3).map((i) => `${i.isPR ? 'PR' : 'Issue'} · ${i.title}`) };
+    }
     default:
       return null;
   }
@@ -75,7 +80,7 @@ export function LivePreview({ id }: { id: string }) {
   useEffect(() => {
     aliveRef.current = true;
     void load();
-    if (id === 'notion' || id === 'github' || id === 'linear' || id === 'hubspot' || id === 'zoom' || id === 'whatsapp') {
+    if (id === 'notion' || id === 'linear' || id === 'hubspot' || id === 'zoom' || id === 'whatsapp') {
       return () => {
         aliveRef.current = false;
       };

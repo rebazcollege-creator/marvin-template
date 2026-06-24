@@ -116,27 +116,16 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
   ],
   slack: [
     {
-      id: 'oauth',
-      label: 'Add to Slack',
-      blurb: 'Install the MARVIN app to your workspace with the scopes you pick.',
-      kind: 'oauth',
-      recommended: true,
-      envHint: 'SLACK_<WORKSPACE>_BOT_TOKEN',
-      scopes: [
-        { id: 'channels', label: 'Read channels', desc: 'Watch the channels you choose.', required: true },
-        { id: 'history', label: 'Read messages', desc: 'Surface what’s relevant to you.', required: true },
-        { id: 'post', label: 'Post messages', desc: 'Send messages you approve.' },
-      ],
-    },
-    {
       id: 'token',
-      label: 'Paste a bot token',
-      blurb: 'Use a bot token from your own Slack app.',
+      label: 'Bot token (full scopes)',
+      blurb:
+        'Create a Slack app, add the broadest bot scopes (channels/groups/im/mpim: read+history, chat:write, users:read, files:read, reactions, search), install it, and paste the Bot User OAuth Token. (Slack requires HTTPS redirects, so a local one-click sign-in isn’t possible — the token is the way.)',
       kind: 'form',
-      envHint: 'SLACK_<WORKSPACE>_BOT_TOKEN',
+      recommended: true,
+      envHint: 'SLACK_AMARGI_BOT_TOKEN',
       docsLabel: 'Slack API · Your apps',
       docsUrl: 'https://api.slack.com/apps',
-      fields: [{ key: 'botToken', label: 'Bot token', type: 'password', placeholder: 'xoxb-…', envKey: 'SLACK_AMARGI_BOT_TOKEN' }],
+      fields: [{ key: 'botToken', label: 'Bot User OAuth Token', type: 'password', placeholder: 'xoxb-…', envKey: 'SLACK_AMARGI_BOT_TOKEN' }],
     },
   ],
   trello: [
@@ -185,22 +174,12 @@ export function methodsFor(id: string, name: string): ConnectMethod[] {
   if (flow) return flow;
   return [
     {
-      id: 'oauth',
-      label: `Sign in with ${name}`,
-      blurb: `Connect ${name} with a sign-in. Native OAuth for ${name} is on the way — for now this records your intent so MARVIN knows it’s available.`,
-      kind: 'oauth',
-      recommended: true,
-      scopes: [
-        { id: 'read', label: 'Read', desc: `Let MARVIN read from ${name}.`, required: true },
-        { id: 'write', label: 'Act', desc: `Let MARVIN take actions you approve in ${name}.` },
-      ],
-    },
-    {
       id: 'token',
-      label: 'Paste an API token',
-      blurb: `Use an API token or key from ${name}.`,
+      label: 'Paste an API token (full access)',
+      blurb: `Create an API token/key in ${name} with the broadest scopes it offers, then paste it here. (${name}'s OAuth needs an HTTPS redirect, so a local one-click sign-in isn't possible — the token is the way.)`,
       kind: 'form',
-      fields: [{ key: 'token', label: 'API token', type: 'password', placeholder: `Your ${name} token` }],
+      recommended: true,
+      fields: [{ key: 'token', label: `${name} API token`, type: 'password', placeholder: `Your ${name} token` }],
     },
   ];
 }

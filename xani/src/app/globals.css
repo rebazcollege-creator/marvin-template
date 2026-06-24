@@ -161,3 +161,34 @@ h3,
   0%, 100% { opacity: 0.58; transform: translate(-50%, -50%) scale(1); }
   50% { opacity: 0.95; transform: translate(-50%, -50%) scale(1.09); }
 }
+
+/* ── Aurora Glass Orb (Home) ── */
+@keyframes auroraOrbBreath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+@keyframes auroraRibbonA {
+  0%, 100% { transform: translate(-9%, 2%) rotate(-6deg); }
+  50% { transform: translate(9%, -2%) rotate(8deg); }
+}
+@keyframes auroraRibbonB {
+  to { transform: rotate(360deg); }
+}
+@keyframes auroraRibbonC {
+  0%, 100% { opacity: 0.5; transform: translateY(3%) scale(1); }
+  50% { opacity: 0.85; transform: translateY(-3%) scale(1.06); }
+}
+@keyframes auroraOrbitPulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.8; }
+}
+@keyframes auroraSpark {
+  0%, 100% { opacity: 0.25; transform: translateY(0) scale(0.8); }
+  50% { opacity: 1; transform: translateY(-3px) scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-xani-orb],
+  [data-xani-orb] * {
+    animation: none !important;
+  }
+}

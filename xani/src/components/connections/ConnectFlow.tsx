@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { methodsFor, GMAIL_ACCOUNTS, type ConnectMethod } from '@/lib/connect-flows';
 import type { Connection, ConnState } from '@/lib/connections';
@@ -60,6 +60,12 @@ export function ConnectFlow({
     setError('');
     setStep('method');
   };
+
+  // With a single connection method, skip the one-item chooser.
+  useEffect(() => {
+    if (step === 'choose' && methods.length === 1 && methods[0]) pick(methods[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const finish = async () => {
     if (!method) return;

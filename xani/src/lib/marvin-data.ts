@@ -75,6 +75,11 @@ export const PATHS = {
 
 export const fetchBriefingData = () => get<BriefingData>(PATHS.briefing);
 export const fetchInbox = () => get<InboxData>(PATHS.inbox);
+/** Per-folder inbox fetch (Inbox/Starred/Sent/Drafts/Spam/Trash). */
+export const fetchInboxFolder = (folder: string) => get<InboxData>(`${PATHS.inbox}?folder=${encodeURIComponent(folder)}`);
+/** Full body of one message, for the reading pane. */
+export const fetchMessageBody = (account: string, id: string) =>
+  get<{ ok: boolean; body?: string; error?: string }>(`/data/message?account=${encodeURIComponent(account)}&id=${encodeURIComponent(id)}`);
 export const fetchTrello = () => get<TrelloData>(PATHS.trello);
 export const fetchCalendar = () => get<CalendarData>(PATHS.calendar);
 export const fetchDrive = () => get<DriveData>(PATHS.drive);

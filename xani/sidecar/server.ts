@@ -12,6 +12,7 @@ import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
 import {
   getBriefingData,
   getInbox,
+  getMessageBody,
   getCalendar,
   getDrive,
   getSlack,
@@ -104,11 +105,14 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'GET' && req.url?.startsWith('/data/')) {
     try {
-      switch (req.url) {
+      const u = new URL(req.url, 'http://localhost');
+      switch (u.pathname) {
         case '/data/briefing':
           return json(res, 200, await getBriefingData());
         case '/data/inbox':
-          return json(res, 200, await getInbox());
+          return json(res, 200, await getInbox(u.searchParams.get('folder') ?? 'inbox'));
+        case '/data/message':
+          return json(res, 200, await getMessageBody(u.searchParams.get('account') ?? '', u.searchParams.get('id') ?? ''));
         case '/data/calendar':
           return json(res, 200, await getCalendar());
         case '/data/drive':

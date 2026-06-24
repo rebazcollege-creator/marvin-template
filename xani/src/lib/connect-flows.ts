@@ -54,27 +54,12 @@ export const GMAIL_ACCOUNTS: { role: string; slot: number; label: string; note?:
   { role: 'amargi', slot: 5, label: 'Amargi' },
 ];
 
-const googleService = (prefix: string): ConnectMethod => ({
-  id: 'service',
-  label: 'Use OAuth app credentials',
-  blurb: 'Paste an OAuth client + refresh token you generated yourself. Best for power users and headless setups.',
-  kind: 'form',
-  envHint: `${prefix}_CLIENT_ID / _CLIENT_SECRET / _REFRESH_TOKEN`,
-  docsLabel: 'Google Cloud console',
-  docsUrl: 'https://console.cloud.google.com/apis/credentials',
-  fields: [
-    { key: 'clientId', label: 'Client ID', placeholder: '…apps.googleusercontent.com', envKey: `${prefix}_CLIENT_ID` },
-    { key: 'clientSecret', label: 'Client secret', type: 'password', placeholder: 'GOCSPX-…', envKey: `${prefix}_CLIENT_SECRET` },
-    { key: 'refreshToken', label: 'Refresh token', type: 'password', placeholder: '1//0g…', envKey: `${prefix}_REFRESH_TOKEN` },
-  ],
-});
-
 export const FLOWS: Record<string, ConnectMethod[]> = {
   gmail: [
     {
       id: 'oauth',
       label: 'Sign in with Google',
-      blurb: 'Connect one or more Gmail accounts with Google sign-in. You choose exactly what MARVIN may do.',
+      blurb: 'Connect one or more Gmail accounts with Google sign-in — just your Client ID and secret, then one click. No refresh token to paste.',
       kind: 'oauth',
       recommended: true,
       multiAccount: true,
@@ -83,20 +68,6 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
         { id: 'mail', label: 'Full mailbox access', desc: 'Read, search, send, organise, label and delete across your mail.', required: true },
         { id: 'contacts', label: 'Contacts', desc: 'Read and manage your contacts so MARVIN knows who people are.', required: true },
         { id: 'profile', label: 'Account & profile', desc: 'Your email address and basic profile.', required: true },
-      ],
-    },
-    {
-      id: 'service',
-      label: 'Use OAuth app credentials',
-      blurb: 'Paste an OAuth client + refresh token for one account. Best for power users and headless setups.',
-      kind: 'form',
-      envHint: 'GMAIL_CLIENT_ID_1 / _SECRET_1 / _REFRESH_TOKEN_1',
-      docsLabel: 'Google Cloud console',
-      docsUrl: 'https://console.cloud.google.com/apis/credentials',
-      fields: [
-        { key: 'clientId', label: 'Client ID', placeholder: '…apps.googleusercontent.com', envKey: 'GMAIL_CLIENT_ID_1' },
-        { key: 'clientSecret', label: 'Client secret', type: 'password', placeholder: 'GOCSPX-…', envKey: 'GMAIL_CLIENT_SECRET_1' },
-        { key: 'refreshToken', label: 'Refresh token', type: 'password', placeholder: '1//0g…', envKey: 'GMAIL_REFRESH_TOKEN_1' },
       ],
     },
   ],
@@ -112,7 +83,6 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
         { id: 'calendar', label: 'Full calendar access', desc: 'See, create, move, decline and delete events across all your calendars.', required: true },
       ],
     },
-    googleService('GOOGLE_CALENDAR'),
   ],
   drive: [
     {
@@ -126,7 +96,6 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
         { id: 'drive', label: 'Full Drive access', desc: 'List, open, create, edit and organise all your files and folders.', required: true },
       ],
     },
-    googleService('GOOGLE_DRIVE'),
   ],
   slack: [
     {

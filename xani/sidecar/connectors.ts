@@ -165,6 +165,67 @@ export async function getInbox(folder = 'inbox'): Promise<InboxData> {
   return { connected: any, messages, error };
 }
 
+/** Decode a base64url Gmail body part to text. */
+function decodeB64(data: string): string {
+  try {
+    return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
+  } catch {
+    return '';
+  }
+}
+
+/** Walk a Gmail payload tree, preferring text/plain; fall back to stripped HTML. */
+function extractBody(payload: unknown): string {
+  type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[] };
+  const plains: string[] = [];
+  const htmls: string[] = [];
+  const walk = (p?: Part) => {
+    if (!p) return;
+    if (p.body?.data) {
+      if (p.mimeType === 'text/plain') plains.push(decodeB64(p.body.data));
+      else if (p.mimeType === 'text/html') htmls.push(decodeB64(p.body.data));
+    }
+    for (const c of p.parts ?? []) walk(c);
+  };
+  walk(payload as Part);
+  if (plains.length) return plains.join('\n').trim();
+  if (htmls.length) {
+    return htmls
+      .join('\n')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<br\s*\/?>(?=)/gi, '\n')
+      .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+  return '';
+}
+
+/** Full body of a single message, for the reading pane. Cred-gated per account. */
+export async function getMessageBody(accountRole: string, id: string): Promise<{ ok: boolean; body?: string; error?: string }> {
+  const acct = GMAIL_ACCOUNTS.find((a) => a.role === accountRole);
+  const c = acct ? gmailCreds(acct.n) : null;
+  if (!c || !id) return { ok: false, error: 'Not connected.' };
+  const { token, error } = await googleToken(c.id, c.secret, c.refresh);
+  if (!token) return { ok: false, error: error ?? 'auth failed' };
+  try {
+    const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) return { ok: false, error: `Gmail API ${r.status}` };
+    const j = (await r.json()) as { payload?: unknown; snippet?: string };
+    const body = extractBody(j.payload) || (j.snippet ?? '');
+    return { ok: true, body };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 // ── Google Calendar ───────────────────────────────────────────────
 
 export async function getCalendar(): Promise<CalendarData> {

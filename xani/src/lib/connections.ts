@@ -1,10 +1,11 @@
 import { readJson, writeJson } from '@/lib/storage';
 
 /**
- * Integration catalogue. The list of integrations is static; whether each is
- * connected is user-driven and persisted (key 'xani.connections.v1'). Everything
- * defaults to NOT connected — real credentials are added in Settings / .env / the
- * OS keychain, so we never pretend a source is live.
+ * Integration catalogue + connection state. The list of integrations is static;
+ * HOW each is connected is user-driven and persisted. Everything defaults to NOT
+ * connected — real credentials live in Settings / .env / the OS keychain, so we
+ * never pretend a source is live. The connection record captures the chosen
+ * method, any linked accounts and granted scopes so the manage view is real.
  */
 
 export type Connection = {
@@ -32,12 +33,37 @@ export const CONNECTIONS: Connection[] = [
   { id: 'whatsapp', glyph: 'W', name: 'WhatsApp', category: 'Messaging', desc: 'Reach MARVIN from your phone.', tint: 'var(--hover)', edge: 'var(--text-2)' },
 ];
 
-const KEY = 'xani.connections.v1';
+export type ConnState = {
+  connected: boolean;
+  method?: string;
+  accounts?: string[];
+  scopes?: string[];
+  connectedAt?: string;
+};
 
-export function getConnected(): Record<string, boolean> {
-  return readJson<Record<string, boolean>>(KEY, {});
+const KEY = 'xani.connections.v2';
+const LEGACY_KEY = 'xani.connections.v1';
+
+export function getConnections(): Record<string, ConnState> {
+  const v2 = readJson<Record<string, ConnState>>(KEY, {});
+  if (Object.keys(v2).length > 0) return v2;
+  // migrate the old boolean map, if any
+  const legacy = readJson<Record<string, boolean>>(LEGACY_KEY, {});
+  const migrated: Record<string, ConnState> = {};
+  for (const [id, on] of Object.entries(legacy)) {
+    if (on) migrated[id] = { connected: true, method: 'oauth' };
+  }
+  return migrated;
 }
 
-export function setConnected(map: Record<string, boolean>): void {
-  writeJson(KEY, map);
+export function setConnection(id: string, state: ConnState): void {
+  const all = getConnections();
+  all[id] = state;
+  writeJson(KEY, all);
+}
+
+export function removeConnection(id: string): void {
+  const all = getConnections();
+  delete all[id];
+  writeJson(KEY, all);
 }

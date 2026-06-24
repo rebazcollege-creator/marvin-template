@@ -57,15 +57,11 @@ function fmtTime(iso: string): string {
 }
 const fullTime = (iso: string) => (iso && !Number.isNaN(new Date(iso).getTime()) ? new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
-// Smart-triage split (mirrors the handoff heuristics) — only used in Inbox.
-function splitOf(m: Msg): 'important' | 'calendar' | 'news' | 'other' {
-  const t = `${m.subject} ${m.snippet}`;
-  if (m.account === 'leadstories' || (m.unread && /urgent|time-sensitive|sign-off|queue|verify|deadline/i.test(t))) return 'important';
-  if (/termin|aufenthalt|deck|sync|review|meeting|calendar|invite/i.test(m.subject)) return 'calendar';
-  if (m.account === 'amargi' || m.account === 'moonshot' || /report|reached|usage|newsletter|digest|sale|% off/i.test(m.subject)) return 'news';
-  return 'other';
-}
+// Triage split comes from the runtime (real Gmail IMPORTANT / category labels).
+const splitOf = (m: Msg): string => m.split ?? 'other';
 const SPLIT_DEFS: [string, string][] = [['important', 'Important'], ['calendar', 'Calendar'], ['news', 'News'], ['other', 'Other']];
+// All accounts always shown in the rail (handoff design), in this order.
+const ACCOUNT_ORDER = ['personal', 'moonshot', 'leadstories', 'zoho', 'amargi'];
 
 export default function InboxPage() {
   const [folder, setFolder] = useState('inbox');
@@ -83,7 +79,12 @@ export default function InboxPage() {
   const { data, state } = useLiveData<InboxData>(`${PATHS.inbox}?folder=${folder}`, fetcher);
 
   const messages = useMemo(() => data?.messages ?? [], [data]);
-  const accounts = useMemo(() => Array.from(new Set(messages.map((m) => m.account))), [messages]);
+  // Show every account (design), ordered; append any unknown roles that show up.
+  const accounts = useMemo(() => {
+    const present = new Set(messages.map((m) => m.account));
+    const extra = [...present].filter((a) => !ACCOUNT_ORDER.includes(a));
+    return [...ACCOUNT_ORDER, ...extra];
+  }, [messages]);
   const unreadByAccount = (k: string) => messages.filter((m) => m.account === k && m.unread).length;
   const totalUnread = messages.filter((m) => m.unread).length;
 

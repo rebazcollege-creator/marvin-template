@@ -74,6 +74,8 @@ export interface InboxData {
     snippet: string;
     receivedAt: string;
     unread: boolean;
+    /** Smart-triage bucket derived from Gmail labels (IMPORTANT / categories). */
+    split?: 'important' | 'calendar' | 'news' | 'other';
   }[];
 }
 export interface TrelloData {

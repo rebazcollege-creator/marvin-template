@@ -126,8 +126,11 @@ export function ConnectFlow({
     setStep('connecting');
     const r = await startOAuth(connection.id, clientId, clientSecret, gmailSlot);
     if (r.ok) {
+      // One canonical label per account. For Gmail use the role (tied to the slot)
+      // so re-connecting the same account updates in place instead of adding a
+      // second entry; non-Gmail uses the signed-in identity.
       const label = isGmail ? GMAIL_ACCOUNTS.find((a) => a.slot === gmailSlot)?.role : r.account;
-      const merged = Array.from(new Set([...(state?.accounts ?? []), label, r.account].filter(Boolean))) as string[];
+      const merged = Array.from(new Set([...(state?.accounts ?? []), label].filter(Boolean))) as string[];
       onComplete({
         connected: true,
         method: 'oauth',

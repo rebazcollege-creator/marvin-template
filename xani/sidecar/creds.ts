@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { bumpInboxCache } from './connectors.ts';
 
 /**
  * Dev-side credential store for keys entered in the app's Connections screen.
@@ -60,14 +61,30 @@ export function loadCreds(): void {
 
 export function setCred(name: string, value: string): boolean {
   if (!ALLOW.has(name)) return false;
+  if (!value) return clearCred(name); // empty value == disconnect
   store[name] = value;
   process.env[name] = value;
+  persist();
+  bumpInboxCache(); // a new credential invalidates any cached inbox
+  return true;
+}
+
+/** Remove a credential entirely (disconnect): drop from the store and process.env. */
+export function clearCred(name: string): boolean {
+  if (!ALLOW.has(name)) return false;
+  delete store[name];
+  delete process.env[name];
+  persist();
+  bumpInboxCache();
+  return true;
+}
+
+function persist(): void {
   try {
     writeFileSync(FILE, JSON.stringify(store, null, 2));
   } catch {
     /* in-memory still applied */
   }
-  return true;
 }
 
 /** Which known integration keys currently have a value (env or stored). */

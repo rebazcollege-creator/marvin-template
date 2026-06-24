@@ -102,67 +102,117 @@ const FOLDER_QUERY: Record<string, string> = {
   trash: 'in:trash',
 };
 
-export async function getInbox(folder = 'inbox'): Promise<InboxData> {
-  const q = FOLDER_QUERY[folder] ?? FOLDER_QUERY.inbox;
-  const messages: InboxData['messages'] = [];
-  let any = false;
-  let tokenErr = '';
-  let apiErr = '';
-  for (const a of GMAIL_ACCOUNTS) {
-    const c = gmailCreds(a.n);
-    if (!c) continue;
-    any = true;
-    const { token, error } = await googleToken(c.id, c.secret, c.refresh);
-    if (!token) {
-      tokenErr = tokenErr || `${a.role}: ${error ?? 'authentication failed'}`;
-      continue;
+/** Run async `fn` over `items` with bounded concurrency, preserving order. */
+async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let i = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (i < items.length) {
+      const idx = i++;
+      out[idx] = await fn(items[idx]!);
     }
-    try {
-      // Recent mail in this folder (read + unread), newest first — a faithful mailbox view.
-      const list = await fetch(
-        `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=25`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (!list.ok) {
-        apiErr = apiErr || `${a.role}: Gmail API ${list.status} — ${(await list.text()).slice(0, 180)}`;
-        continue;
+  });
+  await Promise.all(workers);
+  return out;
+}
+
+/** Classify a message into a triage split from its real Gmail labels + subject. */
+function splitFor(labelIds: string[], subject: string): 'important' | 'calendar' | 'news' | 'other' {
+  if (labelIds.includes('IMPORTANT')) return 'important';
+  if (/invite|invitation|termin|meeting|calendar|rsvp|reschedul|agenda/i.test(subject)) return 'calendar';
+  if (labelIds.some((l) => l === 'CATEGORY_PROMOTIONS' || l === 'CATEGORY_UPDATES' || l === 'CATEGORY_FORUMS' || l === 'CATEGORY_SOCIAL')) return 'news';
+  return 'other';
+}
+
+// Short-TTL cache so re-renders and folder toggles don't re-hit Gmail. Busted on
+// any credential change (connect/disconnect) via bumpInboxCache().
+type InboxCacheEntry = { ts: number; ver: number; data: InboxData };
+const inboxCache = new Map<string, InboxCacheEntry>();
+let inboxCacheVer = 0;
+const INBOX_TTL_MS = 25_000;
+export function bumpInboxCache(): void {
+  inboxCacheVer++;
+  inboxCache.clear();
+}
+
+export async function getInbox(folder = 'inbox'): Promise<InboxData> {
+  const cached = inboxCache.get(folder);
+  if (cached && cached.ver === inboxCacheVer && Date.now() - cached.ts < INBOX_TTL_MS) return cached.data;
+
+  const q = FOLDER_QUERY[folder] ?? FOLDER_QUERY.inbox;
+  const connectedAccounts = GMAIL_ACCOUNTS.map((a) => ({ a, c: gmailCreds(a.n) })).filter((x) => x.c);
+  const errs: string[] = [];
+
+  // All accounts in parallel; within each, all per-message metadata gets in parallel
+  // (bounded) instead of the previous one-at-a-time await — the N+1 that made the
+  // inbox take minutes.
+  const perAccount = await Promise.all(
+    connectedAccounts.map(async ({ a, c }) => {
+      const { token, error } = await googleToken(c!.id, c!.secret, c!.refresh);
+      if (!token) {
+        errs.push(`${a.role}: ${error ?? 'authentication failed'}`);
+        return [] as InboxData['messages'];
       }
-      const lj = (await list.json()) as { messages?: { id: string }[] };
-      for (const m of lj.messages ?? []) {
-        const det = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+      try {
+        const list = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=25`,
           { headers: { Authorization: `Bearer ${token}` } },
         );
-        if (!det.ok) continue;
-        const dj = (await det.json()) as {
-          snippet?: string;
-          internalDate?: string;
-          labelIds?: string[];
-          payload?: { headers?: { name: string; value: string }[] };
-        };
-        const header = (name: string) =>
-          dj.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? '';
-        messages.push({
-          id: m.id,
-          account: a.role,
-          from: header('from'),
-          subject: header('subject'),
-          snippet: dj.snippet ?? '',
-          receivedAt: dj.internalDate ? new Date(Number(dj.internalDate)).toISOString() : '',
-          unread: (dj.labelIds ?? []).includes('UNREAD'),
+        if (!list.ok) {
+          errs.push(`${a.role}: Gmail API ${list.status} — ${(await list.text()).slice(0, 160)}`);
+          return [];
+        }
+        const lj = (await list.json()) as { messages?: { id: string }[] };
+        const ids = lj.messages ?? [];
+        const rows = await mapPool(ids, 12, async (m) => {
+          try {
+            const det = await fetch(
+              `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
+              { headers: { Authorization: `Bearer ${token}` } },
+            );
+            if (!det.ok) return null;
+            const dj = (await det.json()) as {
+              snippet?: string;
+              internalDate?: string;
+              labelIds?: string[];
+              payload?: { headers?: { name: string; value: string }[] };
+            };
+            const header = (name: string) => dj.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? '';
+            const labels = dj.labelIds ?? [];
+            const subject = header('subject');
+            return {
+              id: m.id,
+              account: a.role,
+              from: header('from'),
+              subject,
+              snippet: dj.snippet ?? '',
+              receivedAt: dj.internalDate ? new Date(Number(dj.internalDate)).toISOString() : '',
+              unread: labels.includes('UNREAD'),
+              split: splitFor(labels, subject),
+            } as InboxData['messages'][number];
+          } catch {
+            return null;
+          }
         });
+        return rows.filter((r): r is InboxData['messages'][number] => r != null);
+      } catch (e) {
+        errs.push(`${a.role}: ${(e as Error).message}`);
+        return [];
       }
-    } catch {
-      /* skip account */
-    }
-  }
-  messages.sort((a, b) => (b.receivedAt > a.receivedAt ? 1 : b.receivedAt < a.receivedAt ? -1 : 0));
+    }),
+  );
+
+  const messages = perAccount.flat();
+  messages.sort((x, y) => (y.receivedAt > x.receivedAt ? 1 : y.receivedAt < x.receivedAt ? -1 : 0));
   let error: string | undefined;
-  if (messages.length === 0) {
-    if (tokenErr) error = `Couldn’t sign in to Gmail — ${tokenErr}. The refresh token likely doesn’t match the Client ID/secret; reconnect with “Sign in with Google”.`;
-    else if (apiErr) error = apiErr;
+  if (messages.length === 0 && errs.length) {
+    error = errs.some((e) => /auth/i.test(e))
+      ? `Couldn’t sign in to Gmail — ${errs[0]}. Reconnect with “Sign in with Google”.`
+      : errs[0];
   }
-  return { connected: any, messages, error };
+  const data: InboxData = { connected: connectedAccounts.length > 0, messages, error };
+  inboxCache.set(folder, { ts: Date.now(), ver: inboxCacheVer, data });
+  return data;
 }
 
 /** Decode a base64url Gmail body part to text. */

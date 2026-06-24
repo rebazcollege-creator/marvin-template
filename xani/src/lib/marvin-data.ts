@@ -40,6 +40,16 @@ export function dataAge(path: string): number {
   return e ? Date.now() - e.ts : Infinity;
 }
 
+/** Drop cached entries whose path starts with `prefix` (or all). Used on disconnect
+ *  so a removed account's mail can't linger in the UI. */
+export function clearDataCache(prefix?: string): void {
+  if (!prefix) {
+    cache.clear();
+    return;
+  }
+  for (const k of [...cache.keys()]) if (k.startsWith(prefix)) cache.delete(k);
+}
+
 async function get<T>(path: string): Promise<T | null> {
   const existing = inflight.get(path);
   if (existing) return existing as Promise<T | null>;

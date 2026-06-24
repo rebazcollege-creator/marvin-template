@@ -135,6 +135,20 @@ export async function setRuntimeCred(name: string, value: string): Promise<boole
   }
 }
 
+/** Remove integration credentials from the runtime (disconnect). */
+export async function clearRuntimeCreds(names: string[]): Promise<boolean> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/creds/clear`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ names }),
+    });
+    return resp.ok;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Real one-click sign-in — asks the sidecar to run the loopback OAuth flow (opens
  * the provider in the browser, captures the redirect, stores the token). Resolves

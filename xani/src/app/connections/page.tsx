@@ -10,10 +10,12 @@ import {
   type Connection,
   type ConnState,
 } from '@/lib/connections';
+import { credKeysFor } from '@/lib/connect-flows';
 import { ConnectFlow } from '@/components/connections/ConnectFlow';
 import { LivePreview } from '@/components/connections/LivePreview';
 import { logActivity } from '@/lib/activity';
-import { getCredStatus } from '@/lib/marvin-client';
+import { getCredStatus, clearRuntimeCreds } from '@/lib/marvin-client';
+import { clearDataCache } from '@/lib/marvin-data';
 
 /** Env-vars the runtime needs before an integration can actually fetch/act. */
 const REQUIRED: Record<string, string[]> = {
@@ -98,6 +100,14 @@ export default function ConnectionsPage() {
     removeConnection(id);
     setMap(getConnections());
     setActiveId(null);
+    // Actually revoke the stored credentials so live reads stop, and drop any
+    // cached data for this integration so the UI can't keep showing it.
+    const keys = credKeysFor(id);
+    if (keys.length) void clearRuntimeCreds(keys).then(() => void refreshCreds());
+    if (id === 'gmail') clearDataCache('/data/inbox');
+    else if (id === 'gcal') clearDataCache('/data/calendar');
+    else if (id === 'drive') clearDataCache('/data/drive');
+    else clearDataCache(`/data/${id}`);
     const name = CONNECTIONS.find((c) => c.id === id)?.name ?? id;
     logActivity({ kind: 'connection', title: `Disconnected ${name}` });
   };

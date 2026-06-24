@@ -172,6 +172,31 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
 };
 
 /** Generic fallback for integrations without bespoke paths yet. */
+/**
+ * Every runtime credential key an integration owns — cleared on disconnect so a
+ * removed account stops feeding live data. Gmail spans all five account slots.
+ */
+export function credKeysFor(id: string): string[] {
+  switch (id) {
+    case 'gmail':
+      return [1, 2, 3, 4, 5].flatMap((n) => [`GMAIL_CLIENT_ID_${n}`, `GMAIL_CLIENT_SECRET_${n}`, `GMAIL_REFRESH_TOKEN_${n}`]);
+    case 'gcal':
+      return ['GOOGLE_CALENDAR_CLIENT_ID', 'GOOGLE_CALENDAR_CLIENT_SECRET', 'GOOGLE_CALENDAR_REFRESH_TOKEN'];
+    case 'drive':
+      return ['GOOGLE_DRIVE_CLIENT_ID', 'GOOGLE_DRIVE_CLIENT_SECRET', 'GOOGLE_DRIVE_REFRESH_TOKEN'];
+    case 'slack':
+      return ['SLACK_AMARGI_BOT_TOKEN'];
+    case 'trello':
+      return ['TRELLO_API_KEY', 'TRELLO_TOKEN', 'TRELLO_BOARD_ID'];
+    case 'buffer':
+      return ['BUFFER_ACCESS_TOKEN'];
+    case 'github':
+      return ['GITHUB_TOKEN'];
+    default:
+      return [];
+  }
+}
+
 export function methodsFor(id: string, name: string): ConnectMethod[] {
   const flow = FLOWS[id];
   if (flow) return flow;

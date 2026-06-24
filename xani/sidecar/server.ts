@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
-import { loadCreds, setCred, credStatus } from './creds.ts';
+import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
@@ -157,6 +157,17 @@ const server = createServer(async (req, res) => {
       const { name, value } = JSON.parse(await readBody(req)) as { name: string; value: string };
       const ok = setCred(name, String(value ?? ''));
       return json(res, ok ? 200 : 400, ok ? { ok: true } : { ok: false, error: `Unknown credential key: ${name}` });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: (err as Error).message });
+    }
+  }
+
+  // Disconnect: actually remove the stored credentials (so live reads stop).
+  if (req.method === 'POST' && req.url === '/creds/clear') {
+    try {
+      const { names } = JSON.parse(await readBody(req)) as { names: string[] };
+      for (const n of names ?? []) clearCred(n);
+      return json(res, 200, { ok: true });
     } catch (err) {
       return json(res, 400, { ok: false, error: (err as Error).message });
     }

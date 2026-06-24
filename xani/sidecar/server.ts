@@ -135,12 +135,13 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'POST' && req.url === '/oauth/start') {
     try {
-      const { integration, clientId, clientSecret } = JSON.parse(await readBody(req)) as {
+      const { integration, clientId, clientSecret, slot } = JSON.parse(await readBody(req)) as {
         integration: string;
         clientId: string;
         clientSecret: string;
+        slot?: number;
       };
-      const result = await startOAuthLogin({ integration, clientId, clientSecret });
+      const result = await startOAuthLogin({ integration, clientId, clientSecret, slot });
       return json(res, 200, result);
     } catch (err) {
       return json(res, 400, { ok: false, error: (err as Error).message });

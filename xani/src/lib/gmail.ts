@@ -14,7 +14,7 @@ import type { EmailMessage, GmailAccountRole, GmailAccountSummary } from '@/type
 export const GMAIL_ACCOUNTS: { role: GmailAccountRole; envSuffix: number }[] = [
   { role: 'personal', envSuffix: 1 },
   { role: 'moonshot', envSuffix: 2 },
-  { role: 'leadstories', envSuffix: 3 }, // read/alert only — never auto-send
+  { role: 'leadstories', envSuffix: 3 },
   { role: 'zoho', envSuffix: 4 },
   { role: 'amargi', envSuffix: 5 },
 ];
@@ -42,11 +42,11 @@ export async function listMessages(
 }
 
 /**
- * LeadStories is a read/alert-only integration. Sending from it requires
- * explicit per-message confirmation and is never automated.
+ * Every account can send. Sending still requires explicit per-message
+ * confirmation through Approvals; it is never auto-sent without the user.
  */
-export function canAutoSend(account: GmailAccountRole): boolean {
-  return account !== 'leadstories';
+export function canAutoSend(_account: GmailAccountRole): boolean {
+  return true;
 }
 
 export { hasCredentials as gmailAccountConfigured };

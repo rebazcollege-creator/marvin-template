@@ -73,7 +73,7 @@ interface InboxData {
   messages: { account: string; from: string; subject: string; snippet: string; receivedAt: string; unread: boolean }[];
 }
 ```
-Colour-code by `account`. LeadStories rows: **read-only, no compose/send control.**
+Colour-code by `account`. Every account (incl. LeadStories) supports compose/reply; sending is gated by Approvals.
 
 ## Trello  ·  `fetchTrello(): TrelloData | null`
 ```ts

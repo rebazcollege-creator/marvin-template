@@ -7,10 +7,6 @@ import type { SlackData } from '@/lib/marvin-protocol';
 import { Modal } from '@/components/ui/Modal';
 import { enqueueApproval } from '@/lib/approvals';
 
-function isMonitorOnly(channel: string): boolean {
-  return /lead\s*stories|leadstories/i.test(channel);
-}
-
 export default function SlackPage() {
   const { data, state } = useLiveData<SlackData>(PATHS.slack, fetchSlack);
   const [active, setActive] = useState<string | null>(null);
@@ -27,7 +23,7 @@ export default function SlackPage() {
 
   const post = () => {
     const ch = channel.trim().replace(/^#/, '');
-    if (ch.length === 0 || text.trim().length === 0 || isMonitorOnly(ch)) return;
+    if (ch.length === 0 || text.trim().length === 0) return;
     enqueueApproval({
       kind: 'slack',
       title: `Message #${ch}`,
@@ -65,7 +61,7 @@ export default function SlackPage() {
         <div className="px-8 py-7">
           {state === 'loading' && <div className="xsk h-24 rounded-2xl" />}
           {state === 'offline' && <Note>MARVIN’s runtime isn’t reachable. Start it with <code className="rounded bg-bg px-1">npm run sidecar</code>. You can still draft a message — it waits in Approvals.</Note>}
-          {state === 'loaded' && data && !data.connected && <Note>Slack isn’t connected. Add SLACK_&lt;WORKSPACE&gt;_BOT_TOKEN (or connect on Connections) to watch your channels. You can still draft a message — it waits in Approvals. LeadStories Slack is monitor-only — MARVIN never posts there.</Note>}
+          {state === 'loaded' && data && !data.connected && <Note>Slack isn’t connected. Add SLACK_&lt;WORKSPACE&gt;_BOT_TOKEN (or connect on Connections) to watch your channels. You can still draft a message — it waits in Approvals.</Note>}
           {state === 'loaded' && data?.connected && messages.length === 0 && <Note>No recent messages in the watched channels.</Note>}
         </div>
       ) : (
@@ -77,7 +73,6 @@ export default function SlackPage() {
               {channels.map((c) => (
                 <button key={c} type="button" onClick={() => setActive(c)} className={`flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-[13px] transition ${current === c ? 'bg-accent-soft font-semibold text-text' : 'text-text-2 hover:bg-hover'}`}>
                   <span className="text-muted">#</span>{c}
-                  {isMonitorOnly(c) && <span className="ml-auto rounded-full bg-surface-2 px-1.5 py-0.5 text-[9.5px] font-semibold text-muted">monitor</span>}
                 </button>
               ))}
             </div>
@@ -86,7 +81,6 @@ export default function SlackPage() {
           <div className="flex-1 overflow-y-auto px-7 py-6">
             <div className="mb-4 flex items-center gap-2 text-[13px] font-semibold text-text">
               <span className="text-muted">#</span>{current}
-              {current && isMonitorOnly(current) && <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10.5px] font-semibold text-muted">Monitor-only</span>}
             </div>
             <div className="space-y-3">
               {channelMsgs.map((m, i) => (
@@ -102,7 +96,7 @@ export default function SlackPage() {
                 </div>
               ))}
             </div>
-            {current && !isMonitorOnly(current) && (
+            {current && (
               <button type="button" onClick={() => { setComposing(true); setChannel(`#${current}`); }} className="mt-6 w-full rounded-[12px] border border-dashed border-border bg-surface px-4 py-3 text-left text-[13px] text-muted transition hover:bg-hover">
                 Message #{current}…
               </button>
@@ -121,17 +115,12 @@ export default function SlackPage() {
             <span className="mb-1 block text-[11.5px] font-semibold text-muted">Message</span>
             <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Write your message…" className="min-h-32 w-full resize-y rounded-[10px] border border-border bg-bg px-3 py-3 text-[13.5px] leading-relaxed text-text outline-none focus:border-accent" />
           </label>
-          {isMonitorOnly(channel) && (
-            <p className="rounded-[11px] border border-border bg-bg px-3.5 py-2.5 text-[11.5px] leading-relaxed text-accent">
-              LeadStories Slack is monitor-only — MARVIN never posts there. Pick another channel.
-            </p>
-          )}
         </div>
         <div className="mt-4 flex items-center justify-between">
           <p className="text-[11.5px] text-muted">The Amargi Studio can compose this for you.</p>
           <div className="flex gap-2.5">
             <button type="button" onClick={() => setComposing(false)} className="rounded-[10px] border border-border bg-surface px-4 py-2 text-[13px] font-semibold text-text-2 hover:bg-hover">Cancel</button>
-            <button type="button" onClick={post} disabled={channel.trim().length === 0 || text.trim().length === 0 || isMonitorOnly(channel)} className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent-dim disabled:opacity-40">Post</button>
+            <button type="button" onClick={post} disabled={channel.trim().length === 0 || text.trim().length === 0} className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent-dim disabled:opacity-40">Post</button>
           </div>
         </div>
       </Modal>

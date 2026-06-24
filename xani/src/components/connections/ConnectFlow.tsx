@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
-import { methodsFor, type ConnectMethod } from '@/lib/connect-flows';
+import { methodsFor, GMAIL_ACCOUNTS, type ConnectMethod } from '@/lib/connect-flows';
 import type { Connection, ConnState } from '@/lib/connections';
 import { isTauri } from '@/lib/storage';
 import { setRuntimeCred, startOAuth } from '@/lib/marvin-client';
@@ -47,6 +47,11 @@ export function ConnectFlow({
   const [account, setAccount] = useState('');
   const [error, setError] = useState('');
 
+  // Gmail is multi-account: `account` holds the chosen role, which fixes the slot.
+  const isGmail = connection.id === 'gmail';
+  const gmailSlot = isGmail ? GMAIL_ACCOUNTS.find((a) => a.role === account)?.slot : undefined;
+  const gmailNeedsAccount = isGmail && !account;
+
   const pick = (m: ConnectMethod) => {
     setMethod(m);
     setScopes((m.scopes ?? []).filter((s) => s.required).map((s) => s.id));
@@ -67,16 +72,19 @@ export function ConnectFlow({
       for (const f of method.fields ?? []) {
         const v = (values[f.key] ?? '').trim();
         if (!f.envKey || !v) continue;
+        // Gmail credentials are per-account: route the _1 keys to the chosen slot
+        // so connecting a second account never overwrites the first.
+        const envKey = isGmail && gmailSlot ? f.envKey.replace(/_1$/, `_${gmailSlot}`) : f.envKey;
         if (isTauri()) {
           try {
             const { invoke } = await import('@tauri-apps/api/core');
-            await invoke('set_integration_cred', { name: f.envKey, value: v });
+            await invoke('set_integration_cred', { name: envKey, value: v });
           } catch {
             /* still record the connection below */
           }
         } else {
           // dev: hand the credential to the running sidecar so it takes effect now
-          await setRuntimeCred(f.envKey, v);
+          await setRuntimeCred(envKey, v);
         }
       }
     } else {
@@ -105,13 +113,19 @@ export function ConnectFlow({
       setError('Enter your Client ID and secret first.');
       return;
     }
+    if (gmailNeedsAccount) {
+      setError('Choose which account you’re connecting first.');
+      return;
+    }
     setStep('connecting');
-    const r = await startOAuth(connection.id, clientId, clientSecret);
+    const r = await startOAuth(connection.id, clientId, clientSecret, gmailSlot);
     if (r.ok) {
+      const label = isGmail ? GMAIL_ACCOUNTS.find((a) => a.slot === gmailSlot)?.role : r.account;
+      const merged = Array.from(new Set([...(state?.accounts ?? []), label, r.account].filter(Boolean))) as string[];
       onComplete({
         connected: true,
         method: 'oauth',
-        accounts: r.account ? [r.account] : undefined,
+        accounts: merged.length ? merged : undefined,
         scopes,
         connectedAt: new Date().toISOString(),
       });
@@ -123,9 +137,10 @@ export function ConnectFlow({
   };
 
   const canFinish =
-    method?.kind === 'oauth'
+    (method?.kind === 'oauth'
       ? (!method.multiAccount || account.trim().length > 0) && scopes.length > 0
-      : (method?.fields ?? []).every((f) => (values[f.key] ?? '').trim().length > 0);
+      : (method?.fields ?? []).every((f) => (values[f.key] ?? '').trim().length > 0)) &&
+    !gmailNeedsAccount;
 
   const title =
     step === 'manage'
@@ -187,6 +202,7 @@ export function ConnectFlow({
       {/* METHOD: OAUTH */}
       {step === 'method' && method?.kind === 'oauth' && (
         <div className="space-y-4">
+          {isGmail && <GmailAccountPicker selected={account} onSelect={setAccount} existing={state?.accounts ?? []} />}
           {isOAuth && oauthCfg && (
             <div className="space-y-2.5">
               <p className="rounded-[11px] border border-border bg-bg px-3.5 py-2.5 text-[11.5px] leading-relaxed text-text-2">
@@ -247,7 +263,7 @@ export function ConnectFlow({
               <button
                 type="button"
                 onClick={() => void oauthSignIn()}
-                disabled={!(values.clientId ?? '').trim() || !(values.clientSecret ?? '').trim()}
+                disabled={!(values.clientId ?? '').trim() || !(values.clientSecret ?? '').trim() || gmailNeedsAccount}
                 className="flex items-center gap-2 rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3" /></svg>
@@ -268,6 +284,7 @@ export function ConnectFlow({
       {/* METHOD: FORM */}
       {step === 'method' && method?.kind === 'form' && (
         <div className="space-y-3.5">
+          {isGmail && <GmailAccountPicker selected={account} onSelect={setAccount} existing={state?.accounts ?? []} />}
           {(method.fields ?? []).map((f) => (
             <label key={f.key} className="block">
               <span className="mb-1 block text-[12px] font-semibold text-text-2">{f.label}</span>
@@ -353,6 +370,43 @@ export function ConnectFlow({
         </div>
       )}
     </Modal>
+  );
+}
+
+/** Pick which Gmail account this connection is for — each maps to its own slot. */
+function GmailAccountPicker({ selected, onSelect, existing }: { selected: string; onSelect: (role: string) => void; existing: string[] }) {
+  return (
+    <div>
+      <div className="mb-2 text-[11px] font-bold tracking-[0.07em] text-muted">WHICH ACCOUNT?</div>
+      <div className="grid grid-cols-2 gap-1.5">
+        {GMAIL_ACCOUNTS.map((a) => {
+          const on = selected === a.role;
+          const already = existing.includes(a.role);
+          return (
+            <button
+              key={a.role}
+              type="button"
+              onClick={() => onSelect(a.role)}
+              className={`flex items-center justify-between gap-2 rounded-[11px] border px-3 py-2.5 text-left transition ${
+                on ? 'border-accent bg-accent-soft' : 'border-border bg-bg hover:bg-hover'
+              }`}
+            >
+              <span className="min-w-0">
+                <span className="block text-[13px] font-semibold text-text">{a.label}</span>
+                {a.note && <span className="mt-0.5 block text-[11px] leading-snug text-muted">{a.note}</span>}
+              </span>
+              {already && !on && <span className="shrink-0 rounded-full bg-green-soft px-1.5 py-0.5 text-[9.5px] font-semibold text-green-ink">linked</span>}
+              {on && (
+                <span className="grid h-4 w-4 shrink-0 place-items-center rounded-full bg-accent text-on-accent">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m5 12.5 4.5 4.5L19 7" /></svg>
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <p className="mt-2 text-[11px] leading-relaxed text-muted">Each account is stored separately, so connecting one never disconnects another. Re-pick an account to update its sign-in.</p>
+    </div>
   );
 }
 

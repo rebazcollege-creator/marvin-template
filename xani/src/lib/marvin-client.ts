@@ -145,12 +145,14 @@ export async function startOAuth(
   integration: string,
   clientId: string,
   clientSecret: string,
+  /** Gmail only: which account slot (1–5) to store this account into. */
+  slot?: number,
 ): Promise<{ ok: boolean; account?: string; error?: string; offline?: boolean }> {
   try {
     const resp = await fetch(`${SIDECAR_URL}/oauth/start`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ integration, clientId, clientSecret }),
+      body: JSON.stringify({ integration, clientId, clientSecret, slot }),
     });
     if (!resp.ok) return { ok: false, error: `Runtime responded ${resp.status}.` };
     return (await resp.json()) as { ok: boolean; account?: string; error?: string };

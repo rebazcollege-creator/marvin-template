@@ -15,6 +15,6 @@ Pasted claim text or a TikTok video description.
 ## Hard constraints
 - No Arabic text in the output. English only.
 - Do not fabricate sources. If you cannot verify, VERDICT = Unverified.
-- This Studio drafts notes only. It must never write into TCS or any LeadStories
-  official system — those are manual, closed, and off-limits to automation.
+- This Studio drafts notes only. It must never write into TCS — that app is
+  closed, has no API, and stays manual.
 `;

@@ -7,8 +7,7 @@ import type { SlackMention, SlackWorkspace } from '@/types';
  *   #general   C0HRYE891
  *   #tt-arabic C052Z75EY73
  * Workspace 2 — LeadStories:
- *   Check-in/check-out + emergency trend drops. READ/MONITOR ONLY.
- *   MARVIN never posts or logs here — it only alerts Rebaz to mentions.
+ *   Check-in/check-out + emergency trend drops, plus mentions.
  *
  * Status: Amargi wired via direct MCP; LeadStories pending OAuth.
  */
@@ -24,7 +23,7 @@ export async function getMentions(): Promise<SlackMention[]> {
   return [];
 }
 
-/** LeadStories is monitor-only — automated posting is forbidden. */
-export function canPost(workspace: SlackWorkspace): boolean {
-  return workspace !== 'leadstories';
+/** All workspaces can be posted to (still gated by Approvals confirmation). */
+export function canPost(_workspace: SlackWorkspace): boolean {
+  return true;
 }

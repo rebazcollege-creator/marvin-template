@@ -40,6 +40,20 @@ export type ConnectMethod = {
   docsUrl?: string;
 };
 
+/**
+ * Gmail accounts map to fixed credential slots (_1 … _5). The slot is *not*
+ * cosmetic: the runtime keys creds by slot and the inbox derives each message's
+ * account role from its slot. So a Gmail account must be connected into its own
+ * dedicated slot, never auto-assigned, or accounts clobber each other.
+ */
+export const GMAIL_ACCOUNTS: { role: string; slot: number; label: string; note?: string }[] = [
+  { role: 'personal', slot: 1, label: 'Personal' },
+  { role: 'moonshot', slot: 2, label: 'Moonshot' },
+  { role: 'leadstories', slot: 3, label: 'LeadStories' },
+  { role: 'zoho', slot: 4, label: 'Zoho' },
+  { role: 'amargi', slot: 5, label: 'Amargi' },
+];
+
 const googleService = (prefix: string): ConnectMethod => ({
   id: 'service',
   label: 'Use OAuth app credentials',

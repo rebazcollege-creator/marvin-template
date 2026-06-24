@@ -21,8 +21,7 @@ import type {
  *
  * Mechanisms follow the settled architecture:
  *   - Gmail (5 accounts) + Google Calendar: real REST via OAuth refresh tokens.
- *   - Slack: real via @slack/web-api (bot token), read-only. LeadStories Slack is
- *     monitor-only and must never be written to.
+ *   - Slack: real via @slack/web-api (bot token). Posting is gated by Approvals.
  *   - Trello: Zapier MCP — pending MCP wiring (gated).
  *   - Buffer: Direct MCP — pending MCP wiring (gated).
  */
@@ -348,8 +347,6 @@ async function sendGmail(p: { to: string; subject: string; body: string; account
   const acct = GMAIL_ACCOUNTS.find((a) => a.role === p.account) ?? GMAIL_ACCOUNTS.find((a) => gmailCreds(a.n));
   const c = acct ? gmailCreds(acct.n) : null;
   if (!c) return { ok: false, note: 'Gmail not connected — add GMAIL_* credentials.' };
-  // LeadStories send-restriction (locked rule).
-  if (acct?.role === 'leadstories') return { ok: false, error: 'LeadStories is send-restricted — MARVIN never sends from it.' };
   const token = await googleAccessToken(c.id, c.secret, c.refresh);
   if (!token) return { ok: false, error: 'Could not authorise Gmail.' };
   const raw = base64url(`To: ${p.to}\r\nSubject: ${p.subject}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${p.body}`);
@@ -391,7 +388,6 @@ async function createCalendarEvent(p: { title: string; start?: string; end?: str
 }
 
 async function postSlack(p: { channel: string; text: string }): Promise<ActResult> {
-  if (/lead\s*stories/i.test(p.channel)) return { ok: false, error: 'LeadStories Slack is monitor-only — MARVIN never posts there.' };
   const token = process.env.SLACK_AMARGI_BOT_TOKEN;
   if (!token) return { ok: false, note: 'Slack not connected — add SLACK_AMARGI_BOT_TOKEN.' };
   try {

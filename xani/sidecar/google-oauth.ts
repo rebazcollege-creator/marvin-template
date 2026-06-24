@@ -87,10 +87,16 @@ function openBrowser(url: string): void {
 
 export type OAuthResult = { ok: boolean; account?: string; error?: string };
 
-export function startOAuthLogin(input: { integration: string; clientId: string; clientSecret: string }): Promise<OAuthResult> {
-  const { integration, clientId, clientSecret } = input;
-  const cfg = INTEGRATIONS[integration];
-  if (!cfg) return Promise.resolve({ ok: false, error: 'Unsupported integration for one-click sign-in.' });
+export function startOAuthLogin(input: { integration: string; clientId: string; clientSecret: string; slot?: number }): Promise<OAuthResult> {
+  const { integration, clientId, clientSecret, slot } = input;
+  const baseCfg = INTEGRATIONS[integration];
+  if (!baseCfg) return Promise.resolve({ ok: false, error: 'Unsupported integration for one-click sign-in.' });
+  // Gmail is multi-account: store into the slot the user chose (1–5) so a second
+  // account never overwrites the first. Other integrations use their fixed keys.
+  const cfg =
+    integration === 'gmail' && slot && slot >= 1 && slot <= 5
+      ? { ...baseCfg, keys: { id: `GMAIL_CLIENT_ID_${slot}`, secret: `GMAIL_CLIENT_SECRET_${slot}`, token: `GMAIL_REFRESH_TOKEN_${slot}` } }
+      : baseCfg;
   const provider = PROVIDERS[cfg.provider];
   if (!provider) return Promise.resolve({ ok: false, error: 'Unknown OAuth provider.' });
   if (!clientId || !clientSecret) return Promise.resolve({ ok: false, error: 'Client ID and client secret are required.' });

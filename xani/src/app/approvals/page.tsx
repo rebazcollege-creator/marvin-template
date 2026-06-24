@@ -201,7 +201,7 @@ export default function ApprovalsPage() {
         })}
       </div>
       <p className="mt-3 text-[12px] text-muted">
-        These gates back the runtime’s action guard. Locked rules (e.g. LeadStories monitor-only) always apply on top and can’t be loosened here.
+        These gates back the runtime’s action guard. Locked rules (e.g. confirm before every send, nothing on days off) always apply on top and can’t be loosened here.
       </p>
 
       <ConfirmModal

@@ -11,7 +11,10 @@ export default function SlackComposerPage() {
         {
           key: 'workspace',
           label: 'Workspace',
-          options: [{ value: 'amargi', label: 'The Amargi' }],
+          options: [
+            { value: 'amargi', label: 'The Amargi' },
+            { value: 'leadstories', label: 'LeadStories' },
+          ],
         },
       ]}
       textInputs={[{ key: 'channel', label: 'Channel', placeholder: '#general' }]}
@@ -21,7 +24,7 @@ export default function SlackComposerPage() {
         `Draft a Slack message for the ${f.workspace} workspace, channel ${f.channel || '#general'}. ` +
         `Intent: ${intent}. Message text only, friendly and concise. Draft only — do not post.`
       }
-      note="Drafts only — posting always requires your confirmation. LeadStories Slack is monitor-only and is not offered here."
+      note="Drafts only — posting always requires your confirmation."
     />
   );
 }

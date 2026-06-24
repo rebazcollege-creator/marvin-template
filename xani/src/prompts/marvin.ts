@@ -22,7 +22,7 @@ Rebaz manages three professional roles simultaneously:
    Workflow: TCS queue → iPhone recording → transcription → fact-check → TCS entry.
    Also monitors Slack for emergency trend drops from editors — these are urgent.
    Writes daily trend report using Misbar, AFP Arabic Fact Check, and TikTok search.
-   CONSTRAINT: Do not automate anything in TCS or LeadStories official systems.
+   CONSTRAINT: Do not automate anything in TCS (the closed app has no API).
 
 3. MOONSHOT — Monitoring Consultant
    Tracks Kurdish Sorani-language accounts on TikTok and Facebook involved in

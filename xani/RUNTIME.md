@@ -60,7 +60,7 @@ TRELLO_BOARD_ID=683dafe308be04e369b8434c
 # Buffer — read queue counts + draft posts on approval
 BUFFER_ACCESS_TOKEN=
 
-# Slack (Amargi) — read #general/#tt-arabic + post on approval (LeadStories is monitor-only)
+# Slack (Amargi) — read #general/#tt-arabic + post on approval
 SLACK_AMARGI_BOT_TOKEN=xoxb-…
 
 # Google Calendar — read today + create/hold events on approval
@@ -170,8 +170,7 @@ GitHub also supports the loopback flow, so it gets a real one-click sign-in too:
   OAuth client in the Google Cloud console, authorise the scopes once, and store the
   client id/secret + refresh token. (Gmail is per-account: `…_1` … `…_5`.)
 - **Slack** — create a Slack app, add a bot token (`xoxb-…`) with `channels:history`,
-  `channels:read`, `chat:write`. **LeadStories Slack is monitor-only** — Xanî refuses
-  to post there by design.
+  `channels:read`, `chat:write`. Posting is gated by Approvals.
 - **Buffer** — get a personal access token at
   <https://publish.buffer.com/settings/api>.
 

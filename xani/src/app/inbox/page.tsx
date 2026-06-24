@@ -16,7 +16,6 @@ const ACCOUNT_COLORS: Record<string, string> = {
   amargi: '#4F76B8',
 };
 const colorFor = (a: string) => ACCOUNT_COLORS[a] ?? '#97948C';
-const isReadOnly = (a: string) => a === 'leadstories';
 
 const FOLDERS = [
   { id: 'inbox', label: 'Inbox' },
@@ -150,7 +149,6 @@ export default function InboxPage() {
                         <span className={m.unread ? 'font-semibold text-text' : 'text-text'}>{m.subject || '(no subject)'}</span>
                         <span className="text-text-2"> — {m.snippet}</span>
                       </span>
-                      {isReadOnly(m.account) && <span className="flex-none rounded border border-border px-1.5 text-[9.5px] text-muted">read-only</span>}
                       <span className={`flex-none text-[11.5px] ${m.unread ? 'font-bold text-text' : 'text-muted'}`}>{fmtTime(m.receivedAt)}</span>
                     </button>
                   );
@@ -188,18 +186,12 @@ export default function InboxPage() {
                   <div className="mt-6 flex flex-wrap items-center gap-2.5 rounded-xl border border-border bg-accent-soft px-3.5 py-3">
                     <span className="grid h-5 w-5 place-items-center rounded-full bg-accent text-[11px] font-bold text-on-accent">✦</span>
                     <span className="text-[12px] font-bold text-text-2">MARVIN</span>
-                    {!isReadOnly(open.account) && (
-                      <button type="button" onClick={() => setCompose({ mode: 'reply', to: parseFrom(open.from).email, subject: open.subject?.startsWith('Re:') ? open.subject : `Re: ${open.subject ?? ''}`, account: open.account })} className="rounded-lg border border-border bg-surface px-3 py-1.5 text-[12px] font-semibold text-text-2 hover:bg-hover">Draft a reply</button>
-                    )}
+                    <button type="button" onClick={() => setCompose({ mode: 'reply', to: parseFrom(open.from).email, subject: open.subject?.startsWith('Re:') ? open.subject : `Re: ${open.subject ?? ''}`, account: open.account })} className="rounded-lg border border-border bg-surface px-3 py-1.5 text-[12px] font-semibold text-text-2 hover:bg-hover">Draft a reply</button>
                   </div>
 
-                  {isReadOnly(open.account) ? (
-                    <div className="mt-5 rounded-[10px] border border-dashed border-border px-3.5 py-3 text-[12.5px] text-muted">This is a LeadStories account — monitored read-only. No replies are sent from Xanî.</div>
-                  ) : (
-                    <div className="mt-5 flex gap-2.5">
-                      <button type="button" onClick={() => setCompose({ mode: 'reply', to: parseFrom(open.from).email, subject: open.subject?.startsWith('Re:') ? open.subject : `Re: ${open.subject ?? ''}`, account: open.account })} className="rounded-[20px] border border-border bg-surface px-5 py-2 text-[13.5px] font-medium text-text hover:bg-bg">Reply</button>
-                    </div>
-                  )}
+                  <div className="mt-5 flex gap-2.5">
+                    <button type="button" onClick={() => setCompose({ mode: 'reply', to: parseFrom(open.from).email, subject: open.subject?.startsWith('Re:') ? open.subject : `Re: ${open.subject ?? ''}`, account: open.account })} className="rounded-[20px] border border-border bg-surface px-5 py-2 text-[13.5px] font-medium text-text hover:bg-bg">Reply</button>
+                  </div>
                 </div>
               </div>
             )}

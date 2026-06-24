@@ -17,8 +17,8 @@ why, what changed in code, and what is deliberately deferred.
   never enters the renderer bundle; `anthropic.ts` is now sidecar-only with a
   browser guard.
 - **Confirmation enforced at the runtime**, not the prompt: `src/lib/actions/guard.ts`
-  classifies every tool call read/write, blocks writes to read/monitor-only
-  scopes (LeadStories), and blocks initiating actions on days off.
+  classifies every tool call read/write, requires explicit confirmation for every
+  write, and blocks initiating actions on days off.
 
 ### Memory & learning (scaled for a single user)
 - **No vector DB.** Contrarian-but-supported finding: at single-user scale a

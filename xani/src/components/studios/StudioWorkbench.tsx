@@ -22,7 +22,7 @@ type Run = { id: string; at: string; input: string; output: string };
 
 const CONNECTORS: Record<StudioId, string[]> = {
   amargi: ['Buffer', 'Slack', 'Instagram'],
-  leadstories: ['Gmail (read)', 'Web'],
+  leadstories: ['Gmail', 'Slack', 'Web'],
   moonshot: ['Drive', 'Calendar'],
 };
 

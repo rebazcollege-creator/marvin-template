@@ -40,11 +40,12 @@ export interface ActionVerdict {
   reason: string;
 }
 
-/** Integrations/scopes that are read/monitor-only — writes are never allowed. */
-const READ_ONLY_SCOPES = new Set<string>([
-  'gmail:leadstories', // LeadStories Gmail — read/alert only
-  'slack:leadstories', // LeadStories Slack — monitor only, never post/log
-]);
+/**
+ * Integrations/scopes that are read/monitor-only — writes are never allowed.
+ * (LeadStories was here; it's now a full-access account like any other, so writes
+ * to it go through the same confirm-before-send gate as every other write.)
+ */
+const READ_ONLY_SCOPES = new Set<string>([]);
 
 /** Classify a tool by name. Anything not clearly a read is treated as a write. */
 const READ_PREFIXES = ['list', 'get', 'read', 'search', 'fetch', 'count', 'summar'];

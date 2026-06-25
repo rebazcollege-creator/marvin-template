@@ -4,6 +4,7 @@ import type {
   TrelloData,
   CalendarData,
   SlackData,
+  SlackHistory,
   BufferData,
   DriveData,
   GithubData,
@@ -204,5 +205,18 @@ export const fetchTrello = () => get<TrelloData>(PATHS.trello);
 export const fetchCalendar = () => get<CalendarData>(PATHS.calendar);
 export const fetchDrive = () => get<DriveData>(PATHS.drive);
 export const fetchSlack = () => get<SlackData>(PATHS.slack);
+/** On-demand full history for one Slack conversation (paginated via cursor). */
+export async function fetchSlackHistory(p: { workspace: string; channel: string; cursor?: string; limit?: number }): Promise<SlackHistory | null> {
+  try {
+    const q = new URLSearchParams({ workspace: p.workspace, channel: p.channel });
+    if (p.cursor) q.set('cursor', p.cursor);
+    if (p.limit) q.set('limit', String(p.limit));
+    const resp = await fetch(`${SIDECAR_URL}/data/slack/history?${q}`);
+    if (!resp.ok) return null;
+    return (await resp.json()) as SlackHistory;
+  } catch {
+    return null;
+  }
+}
 export const fetchBuffer = () => get<BufferData>(PATHS.buffer);
 export const fetchGithub = () => get<GithubData>(PATHS.github);

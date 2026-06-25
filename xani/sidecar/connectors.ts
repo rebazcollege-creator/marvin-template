@@ -5,6 +5,7 @@ import type {
   TrelloData,
   CalendarData,
   SlackData,
+  SlackHistory,
   BufferData,
   DriveData,
   GithubData,
@@ -439,84 +440,188 @@ export async function getDrive(): Promise<DriveData> {
 // (no hardcoded IDs): we list the channels the bot is a member of and pull recent
 // history. Display names + reactions come straight from Slack — never mocked.
 
+// Each workspace can have a USER token (xoxp — unlocks unread + DMs, used for
+// reads) and/or a BOT token (xoxb — used for posting). Reads prefer the user token.
 const SLACK_WORKSPACES = [
-  { role: 'amargi', name: 'The Amargi', env: 'SLACK_AMARGI_BOT_TOKEN', avBg: '#C0613A' },
-  { role: 'leadstories', name: 'LeadStories', env: 'SLACK_LEADSTORIES_BOT_TOKEN', avBg: '#6E8B6A' },
+  { role: 'amargi', name: 'The Amargi', env: 'SLACK_AMARGI_BOT_TOKEN', userEnv: 'SLACK_AMARGI_USER_TOKEN', avBg: '#C0613A' },
+  { role: 'leadstories', name: 'LeadStories', env: 'SLACK_LEADSTORIES_BOT_TOKEN', userEnv: 'SLACK_LEADSTORIES_USER_TOKEN', avBg: '#6E8B6A' },
 ];
+type SlackWs = (typeof SLACK_WORKSPACES)[number];
 
-const slackWorkspaceToken = (role: string) => {
-  const ws = SLACK_WORKSPACES.find((w) => w.role === role);
-  return ws ? process.env[ws.env] : undefined;
-};
+const slackReadToken = (w: SlackWs) => process.env[w.userEnv] || process.env[w.env];
+const slackTokenKind = (w: SlackWs): 'user' | 'bot' | undefined =>
+  process.env[w.userEnv] ? 'user' : process.env[w.env] ? 'bot' : undefined;
+const slackPostToken = (w: SlackWs) => process.env[w.env] || process.env[w.userEnv];
 
 const EMERGENCY_RE = /\b(emergency|urgent|asap|breaking|trend drop)\b/i;
-const MAX_SLACK_CHANNELS = 12;
-const SLACK_HISTORY_LIMIT = 15;
+const MAX_SLACK_CONVOS = 60;
 
+/** Inject display names into bare user mentions (<@U123> → <@U123|Name>) so the
+ *  renderer can show "@Name" without shipping the whole user directory. */
+function resolveMentions(text: string, names: Map<string, string>): string {
+  return text.replace(/<@([A-Z0-9]+)>/g, (m, id) => (names.has(id) ? `<@${id}|${names.get(id)}>` : m));
+}
+
+// Cache the user-id → display-name map per workspace (users.list is heavy and
+// shouldn't run on every history fetch). 5-minute TTL.
+const slackNamesCache = new Map<string, { at: number; map: Map<string, string> }>();
+async function slackNames(role: string, client: WebClient): Promise<Map<string, string>> {
+  const cached = slackNamesCache.get(role);
+  if (cached && Date.now() - cached.at < 300_000) return cached.map;
+  const map = new Map<string, string>();
+  try {
+    let cursor: string | undefined;
+    do {
+      const ul = await client.users.list({ limit: 200, ...(cursor ? { cursor } : {}) });
+      for (const u of ul.members ?? []) {
+        if (u.id) map.set(u.id, u.profile?.display_name || u.real_name || u.name || u.id);
+      }
+      cursor = ul.response_metadata?.next_cursor || undefined;
+    } while (cursor);
+  } catch {
+    /* users:read may be absent — fall back to ids */
+  }
+  slackNamesCache.set(role, { at: Date.now(), map });
+  return map;
+}
+
+/**
+ * Channel/DM list with unread state — deliberately uses only conversations.list +
+ * conversations.info (Tier 3, NOT the rate-limited history method), so the sidebar
+ * loads fast even for apps on Slack's new 15-msg/min history tier. Full message
+ * history is fetched on demand by getSlackHistory.
+ *
+ * Unread is real only with a USER token: conversations.info returns the calling
+ * user's last_read + unread_count_display. A bot token has no read state, so
+ * unread is reported as 0/false (we never fake it).
+ */
 export async function getSlack(): Promise<SlackData> {
-  const active = SLACK_WORKSPACES.filter((w) => process.env[w.env]);
-  const workspaces = active.map((w) => ({ role: w.role, name: w.name, avBg: w.avBg }));
+  const active = SLACK_WORKSPACES.filter((w) => slackReadToken(w));
   if (active.length === 0) return { connected: false, workspaces: [], channels: [], messages: [] };
 
+  const workspaces: SlackData['workspaces'] = [];
   const channels: SlackData['channels'] = [];
   const messages: SlackData['messages'] = [];
-  const errs: string[] = [];
+  const topErrs: string[] = [];
 
   await Promise.all(
     active.map(async (w) => {
-      const client = new WebClient(process.env[w.env]);
+      const kind = slackTokenKind(w);
+      const wsRec = { role: w.role, name: w.name, avBg: w.avBg, tokenKind: kind } as SlackData['workspaces'][number];
+      workspaces.push(wsRec);
+      const client = new WebClient(slackReadToken(w));
       try {
-        // Display-name map (one call) so messages show people, not Uxxxx ids.
-        const names = new Map<string, string>();
-        try {
-          const ul = await client.users.list({ limit: 200 });
-          for (const u of ul.members ?? []) {
-            if (u.id) names.set(u.id, u.profile?.display_name || u.real_name || u.name || u.id);
-          }
-        } catch {
-          /* users:read may be absent — fall back to ids */
-        }
+        await client.auth.test(); // fail fast with a precise error (invalid_auth, token_revoked…)
+        const names = await slackNames(w.role, client);
+        // DMs only exist for user tokens (a bot can't see your DMs).
+        const types = kind === 'user' ? 'public_channel,private_channel,im,mpim' : 'public_channel,private_channel';
+        const list = await client.conversations.list({ types, exclude_archived: true, limit: 1000 });
+        const convos = (list.channels ?? []).filter((c) => c.is_member || c.is_im || c.is_mpim).slice(0, MAX_SLACK_CONVOS);
 
-        const list = await client.conversations.list({
-          types: 'public_channel,private_channel',
-          exclude_archived: true,
-          limit: 200,
-        });
-        const member = (list.channels ?? []).filter((c) => c.is_member).slice(0, MAX_SLACK_CHANNELS);
         await Promise.all(
-          member.map(async (ch) => {
-            if (!ch.id || !ch.name) return;
-            channels.push({ workspace: w.role, id: ch.id, name: ch.name, topic: ch.topic?.value || undefined });
+          convos.map(async (c) => {
+            if (!c.id) return;
+            let info: typeof c = c;
             try {
-              const hist = await client.conversations.history({ channel: ch.id, limit: SLACK_HISTORY_LIMIT });
-              for (const m of (hist.messages ?? []).slice().reverse()) {
-                if (m.subtype) continue; // skip joins/bot system messages
-                const text = m.text ?? '';
-                messages.push({
-                  workspace: w.role,
-                  channel: ch.name!,
-                  user: (m.user && names.get(m.user)) || m.user || m.username || 'unknown',
-                  text,
-                  ts: m.ts ?? '',
-                  emergency: EMERGENCY_RE.test(text),
-                  reactions: (m.reactions ?? []).map((r) => ({ emoji: r.name ?? '', count: r.count ?? 0 })),
-                  replies: m.reply_count || undefined,
-                });
-              }
+              const r = await client.conversations.info({ channel: c.id });
+              if (r.channel) info = r.channel as typeof c;
             } catch {
-              /* not_in_channel / missing scope — skip this channel */
+              /* keep the list entry */
+            }
+            const lastRead = (info as { last_read?: string }).last_read;
+            const latest = (info as { latest?: { text?: string; user?: string; ts?: string; reactions?: { name?: string; count?: number }[]; reply_count?: number } }).latest;
+            const unreadCount = typeof (info as { unread_count_display?: number }).unread_count_display === 'number'
+              ? (info as { unread_count_display: number }).unread_count_display
+              : 0;
+            const latestTs = latest?.ts;
+            const hasUnread = unreadCount > 0 || Boolean(lastRead && latestTs && Number(latestTs) > Number(lastRead));
+            const ckind: SlackData['channels'][number]['kind'] = c.is_im ? 'dm' : c.is_mpim ? 'group' : 'channel';
+            const name = c.is_im
+              ? (c.user && names.get(c.user)) || 'direct message'
+              : c.name || (c.is_mpim ? 'group message' : 'channel');
+
+            channels.push({
+              workspace: w.role,
+              id: c.id,
+              name,
+              kind: ckind,
+              topic: c.topic?.value || undefined,
+              unread: unreadCount,
+              hasUnread,
+              lastTs: latestTs,
+              preview: latest?.text || undefined,
+            });
+            if (latest?.text) {
+              messages.push({
+                workspace: w.role,
+                channelId: c.id,
+                channel: name,
+                user: (latest.user && names.get(latest.user)) || latest.user || 'unknown',
+                userId: latest.user,
+                text: resolveMentions(latest.text, names),
+                ts: latest.ts || '',
+                emergency: EMERGENCY_RE.test(latest.text),
+                reactions: (latest.reactions ?? []).map((r) => ({ emoji: r.name ?? '', count: r.count ?? 0 })),
+                replies: latest.reply_count || undefined,
+              });
             }
           }),
         );
       } catch (e) {
-        errs.push(`${w.name}: ${(e as Error).message}`);
+        wsRec.error = (e as Error).message;
+        topErrs.push(`${w.name}: ${(e as Error).message}`);
       }
     }),
   );
 
-  channels.sort((a, b) => a.name.localeCompare(b.name));
-  const error = messages.length === 0 && errs.length ? errs[0] : undefined;
-  return { connected: true, workspaces, channels, messages, error };
+  // Unread first, then alphabetical; DMs and channels mixed (the page splits them).
+  channels.sort((a, b) => Number(b.hasUnread) - Number(a.hasUnread) || a.name.localeCompare(b.name));
+  return {
+    connected: true,
+    workspaces,
+    channels,
+    messages,
+    error: channels.length === 0 && topErrs.length ? topErrs.join(' · ') : undefined,
+  };
+}
+
+/**
+ * One page of full message history for a single conversation. This is the ONLY
+ * place that calls conversations.history (Slack's rate-limited method), so the
+ * throttle is confined to opening a channel rather than the whole sidebar load.
+ * Returns newest-first plus a cursor for older messages.
+ */
+export async function getSlackHistory(p: { workspace: string; channel: string; cursor?: string; limit?: number }): Promise<SlackHistory> {
+  const w = SLACK_WORKSPACES.find((x) => x.role === p.workspace);
+  const token = w ? slackReadToken(w) : undefined;
+  const base = { workspace: p.workspace, channelId: p.channel };
+  if (!w || !token) return { ...base, ok: false, error: 'not_connected', messages: [] };
+  try {
+    const client = new WebClient(token);
+    const names = await slackNames(w.role, client);
+    const res = await client.conversations.history({
+      channel: p.channel,
+      limit: p.limit ?? 50,
+      ...(p.cursor ? { cursor: p.cursor } : {}),
+    });
+    const messages = (res.messages ?? [])
+      .filter((m) => !m.subtype || m.subtype === 'thread_broadcast')
+      .map((m) => ({
+        workspace: p.workspace,
+        channelId: p.channel,
+        channel: '',
+        user: (m.user && names.get(m.user)) || m.user || m.username || 'unknown',
+        userId: m.user,
+        text: resolveMentions(m.text ?? '', names),
+        ts: m.ts ?? '',
+        emergency: EMERGENCY_RE.test(m.text ?? ''),
+        reactions: (m.reactions ?? []).map((r) => ({ emoji: r.name ?? '', count: r.count ?? 0 })),
+        replies: m.reply_count || undefined,
+      }));
+    return { ...base, ok: true, messages, nextCursor: res.response_metadata?.next_cursor || undefined };
+  } catch (e) {
+    return { ...base, ok: false, error: (e as Error).message, messages: [] };
+  }
 }
 
 // ── Trello (REST: API key + token + board) ────────────────────────
@@ -648,9 +753,10 @@ async function createCalendarEvent(p: { title: string; start?: string; end?: str
 
 async function postSlack(p: { channel: string; text: string; workspace?: string }): Promise<ActResult> {
   // Default to the first connected workspace if none specified.
-  const role = p.workspace ?? SLACK_WORKSPACES.find((w) => process.env[w.env])?.role;
-  const token = role ? slackWorkspaceToken(role) : undefined;
-  if (!token) return { ok: false, note: 'Slack not connected — add a workspace bot token on Connections.' };
+  const w = (p.workspace ? SLACK_WORKSPACES.find((x) => x.role === p.workspace) : undefined)
+    ?? SLACK_WORKSPACES.find((x) => slackPostToken(x));
+  const token = w ? slackPostToken(w) : undefined;
+  if (!token) return { ok: false, note: 'Slack not connected — add a workspace token on Connections.' };
   try {
     const client = new WebClient(token);
     const name = p.channel.replace(/^#/, '');

@@ -105,17 +105,19 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
       id: 'token',
       label: 'Bot tokens (per workspace)',
       blurb:
-        'Slack needs an HTTPS redirect, so a local one-click sign-in isn’t possible — connect each workspace with its Bot User OAuth Token. For each: create a Slack app, add the broadest bot scopes (channels/groups: read+history, chat:write, users:read, reactions:read), install it, then paste the xoxb- token. Connect either workspace or both — channels are discovered automatically.',
+        'Connect each workspace with its OAuth tokens. The USER token (xoxp-) is what unlocks unread badges and your DMs — a bot token cannot see either. For each app, add User Token Scopes (channels/groups/im/mpim: read+history, users:read, reactions:read, files:read), reinstall, then paste the xoxp- token. The bot token (xoxb-) is optional and used for posting. Connect either workspace or both — channels are discovered automatically.',
       kind: 'form',
       recommended: true,
       requireAllFields: false,
       multiAccount: true,
-      envHint: 'SLACK_AMARGI_BOT_TOKEN / SLACK_LEADSTORIES_BOT_TOKEN',
+      envHint: 'SLACK_AMARGI_USER_TOKEN / SLACK_LEADSTORIES_USER_TOKEN (+ optional _BOT_ tokens)',
       docsLabel: 'Slack API · Your apps',
       docsUrl: 'https://api.slack.com/apps',
       fields: [
-        { key: 'amargi', label: 'The Amargi — Bot User OAuth Token', type: 'password', placeholder: 'xoxb-…', envKey: 'SLACK_AMARGI_BOT_TOKEN' },
-        { key: 'leadstories', label: 'LeadStories — Bot User OAuth Token', type: 'password', placeholder: 'xoxb-…', envKey: 'SLACK_LEADSTORIES_BOT_TOKEN' },
+        { key: 'amargiUser', label: 'The Amargi — User OAuth Token (unread + DMs)', type: 'password', placeholder: 'xoxp-…', envKey: 'SLACK_AMARGI_USER_TOKEN' },
+        { key: 'amargiBot', label: 'The Amargi — Bot Token (optional, for posting)', type: 'password', placeholder: 'xoxb-…', envKey: 'SLACK_AMARGI_BOT_TOKEN' },
+        { key: 'leadstoriesUser', label: 'LeadStories — User OAuth Token (unread + DMs)', type: 'password', placeholder: 'xoxp-…', envKey: 'SLACK_LEADSTORIES_USER_TOKEN' },
+        { key: 'leadstoriesBot', label: 'LeadStories — Bot Token (optional, for posting)', type: 'password', placeholder: 'xoxb-…', envKey: 'SLACK_LEADSTORIES_BOT_TOKEN' },
       ],
     },
   ],
@@ -193,7 +195,7 @@ export function credKeysFor(id: string): string[] {
     case 'drive':
       return ['GOOGLE_DRIVE_CLIENT_ID', 'GOOGLE_DRIVE_CLIENT_SECRET', 'GOOGLE_DRIVE_REFRESH_TOKEN'];
     case 'slack':
-      return ['SLACK_AMARGI_BOT_TOKEN', 'SLACK_LEADSTORIES_BOT_TOKEN'];
+      return ['SLACK_AMARGI_USER_TOKEN', 'SLACK_AMARGI_BOT_TOKEN', 'SLACK_LEADSTORIES_USER_TOKEN', 'SLACK_LEADSTORIES_BOT_TOKEN'];
     case 'trello':
       return ['TRELLO_API_KEY', 'TRELLO_TOKEN', 'TRELLO_BOARD_ID'];
     case 'buffer':

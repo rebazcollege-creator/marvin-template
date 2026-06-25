@@ -92,20 +92,42 @@ export interface CalendarData {
 export interface SlackData {
   connected: boolean;
   error?: string;
-  /** Workspaces the runtime can see (a bot token is present), in display order. */
-  workspaces: { role: string; name: string; avBg: string }[];
-  /** Channels the bot is a member of, across all connected workspaces. */
-  channels: { workspace: string; id: string; name: string; topic?: string }[];
+  /** Workspaces the runtime can see, with which token type is in use and any auth error. */
+  workspaces: { role: string; name: string; avBg: string; tokenKind?: 'user' | 'bot'; error?: string }[];
+  /** Channels, private groups and DMs the token can see. Unread is best-effort (user tokens only). */
+  channels: {
+    workspace: string;
+    id: string;
+    name: string;
+    kind: 'channel' | 'dm' | 'group';
+    topic?: string;
+    unread: number;
+    hasUnread: boolean;
+    lastTs?: string;
+    preview?: string;
+  }[];
+  /** Latest message per conversation (cheap, no throttled calls). Full history is on-demand. */
   messages: {
     workspace: string;
+    channelId: string;
     channel: string;
     user: string;
+    userId?: string;
     text: string;
     ts: string;
     emergency: boolean;
     reactions?: { emoji: string; count: number }[];
     replies?: number;
   }[];
+}
+/** A page of full channel history (on-demand; isolates the rate-limited conversations.history). */
+export interface SlackHistory {
+  ok: boolean;
+  error?: string;
+  workspace: string;
+  channelId: string;
+  messages: SlackData['messages'];
+  nextCursor?: string;
 }
 export interface BufferData {
   connected: boolean;

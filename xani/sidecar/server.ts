@@ -16,6 +16,7 @@ import {
   getCalendar,
   getDrive,
   getSlack,
+  getSlackHistory,
   getTrello,
   getBuffer,
   getGithub,
@@ -119,6 +120,13 @@ const server = createServer(async (req, res) => {
           return json(res, 200, await getDrive());
         case '/data/slack':
           return json(res, 200, await getSlack());
+        case '/data/slack/history':
+          return json(res, 200, await getSlackHistory({
+            workspace: u.searchParams.get('workspace') ?? '',
+            channel: u.searchParams.get('channel') ?? '',
+            cursor: u.searchParams.get('cursor') ?? undefined,
+            limit: u.searchParams.get('limit') ? Number(u.searchParams.get('limit')) : undefined,
+          }));
         case '/data/trello':
           return json(res, 200, await getTrello());
         case '/data/buffer':

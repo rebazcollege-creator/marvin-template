@@ -1,13 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { fetchSlack, PATHS, draftReply, summarizeThread } from '@/lib/marvin-data';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { fetchSlack, fetchSlackHistory, PATHS, draftReply, summarizeThread } from '@/lib/marvin-data';
 import { useLiveData } from '@/lib/use-live-data';
 import { RefreshButton } from '@/components/ui/RefreshButton';
 import type { SlackData } from '@/lib/marvin-protocol';
 import { enqueueApproval } from '@/lib/approvals';
+import { SlackText, emojiFor } from '@/lib/slack-mrkdwn';
 
 type Msg = SlackData['messages'][number];
+type Chan = SlackData['channels'][number];
 
 const AV_PALETTE = ['#C0613A', '#6E8B6A', '#D89A4E', '#7A6E9C', '#A8512E'];
 function colorFor(name: string): string {
@@ -31,51 +33,70 @@ function fmtTs(ts: string): string {
   return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
-// A few common Slack reaction shortcodes → glyphs; otherwise show :name:.
-const EMOJI: Record<string, string> = {
-  white_check_mark: '✅', heavy_check_mark: '✔️', warning: '⚠️', eyes: '👀', tada: '🎉',
-  fire: '🔥', rocket: '🚀', coffee: '☕', '+1': '👍', '-1': '👎', heart: '❤️', pray: '🙏',
-  raised_hands: '🙌', clap: '👏', thinking_face: '🤔', sos: '🆘', rotating_light: '🚨',
-};
-const emojiFor = (name: string) => EMOJI[name] ?? `:${name}:`;
-
 export default function SlackPage() {
   const { data, state, refresh, refreshing } = useLiveData<SlackData>(PATHS.slack, fetchSlack);
 
   const workspaces = useMemo(() => data?.workspaces ?? [], [data]);
   const allChannels = useMemo(() => data?.channels ?? [], [data]);
-  const allMessages = useMemo(() => data?.messages ?? [], [data]);
 
   const [ws, setWs] = useState<string | null>(null);
-  const [ch, setCh] = useState<string | null>(null);
+  const [chId, setChId] = useState<string | null>(null);
   const [hover, setHover] = useState<string | null>(null);
   const [marvin, setMarvin] = useState<{ title: string; text: string; loading?: boolean } | null>(null);
   const [composeText, setComposeText] = useState('');
   const [queued, setQueued] = useState(false);
 
-  // Default the active workspace/channel once data arrives.
-  const activeWs = ws ?? workspaces[0]?.role ?? null;
-  const wsChannels = useMemo(() => allChannels.filter((c) => c.workspace === activeWs), [allChannels, activeWs]);
-  const activeCh = ch ?? wsChannels[0]?.name ?? null;
-  useEffect(() => { setCh(null); }, [activeWs]);
-
-  const currentChannel = wsChannels.find((c) => c.name === activeCh) ?? null;
-  const channelMsgs = useMemo(
-    () => allMessages.filter((m) => m.workspace === activeWs && m.channel === activeCh).slice().sort((a, b) => Number(a.ts) - Number(b.ts)),
-    [allMessages, activeWs, activeCh],
+  // Per-open-channel history (oldest→newest), with a cursor for older pages.
+  const [hist, setHist] = useState<{ messages: Msg[]; cursor?: string; loading: boolean; loadingMore: boolean; error?: string }>(
+    { messages: [], loading: false, loadingMore: false },
   );
+
+  const activeWs = ws ?? workspaces[0]?.role ?? null;
+  const activeWsRec = workspaces.find((w) => w.role === activeWs) ?? null;
+  const wsChannels = useMemo(() => allChannels.filter((c) => c.workspace === activeWs && c.kind === 'channel'), [allChannels, activeWs]);
+  const wsGroups = useMemo(() => allChannels.filter((c) => c.workspace === activeWs && c.kind === 'group'), [allChannels, activeWs]);
+  const wsDms = useMemo(() => allChannels.filter((c) => c.workspace === activeWs && c.kind === 'dm'), [allChannels, activeWs]);
+  const sidebarConvos = useMemo(() => [...wsChannels, ...wsGroups], [wsChannels, wsGroups]);
+
+  const activeChan: Chan | null = allChannels.find((c) => c.workspace === activeWs && c.id === chId) ?? null;
+
+  // Default workspace's first conversation; reset channel when workspace changes.
+  useEffect(() => { setChId(null); }, [activeWs]);
+  const effectiveChId = chId ?? sidebarConvos[0]?.id ?? wsDms[0]?.id ?? null;
+
+  const loadHistory = useCallback(async (workspace: string, channel: string) => {
+    setHist({ messages: [], loading: true, loadingMore: false });
+    const r = await fetchSlackHistory({ workspace, channel, limit: 50 });
+    if (!r) { setHist({ messages: [], loading: false, loadingMore: false, error: 'Runtime unreachable.' }); return; }
+    if (!r.ok) { setHist({ messages: [], loading: false, loadingMore: false, error: r.error }); return; }
+    setHist({ messages: r.messages.slice().reverse(), cursor: r.nextCursor, loading: false, loadingMore: false });
+  }, []);
+
+  const loadOlder = useCallback(async () => {
+    if (!activeWs || !effectiveChId || !hist.cursor || hist.loadingMore) return;
+    setHist((h) => ({ ...h, loadingMore: true }));
+    const r = await fetchSlackHistory({ workspace: activeWs, channel: effectiveChId, cursor: hist.cursor, limit: 50 });
+    if (!r || !r.ok) { setHist((h) => ({ ...h, loadingMore: false, error: r?.error ?? 'Could not load older.' })); return; }
+    setHist((h) => ({ ...h, messages: [...r.messages.slice().reverse(), ...h.messages], cursor: r.nextCursor, loadingMore: false }));
+  }, [activeWs, effectiveChId, hist.cursor, hist.loadingMore]);
+
+  // Load history whenever the active conversation changes.
+  useEffect(() => {
+    if (activeWs && effectiveChId) void loadHistory(activeWs, effectiveChId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWs, effectiveChId]);
 
   const badge = state === 'loading' ? 'Loading…' : state === 'offline' ? 'Sidecar offline' : data?.connected ? 'Live' : 'Not connected';
 
-  const enqueue = (channel: string, text: string) => {
-    if (!channel || !text.trim()) return;
+  const enqueue = (channelName: string, text: string) => {
+    if (!channelName || !text.trim()) return;
     enqueueApproval({
       kind: 'slack',
-      title: `Message #${channel}`,
-      source: `Slack · ${workspaces.find((w) => w.role === activeWs)?.name ?? activeWs} · #${channel}`,
-      preview: `#${channel}\n\n${text.trim()}`,
+      title: `Message ${activeChan?.kind === 'dm' ? channelName : `#${channelName}`}`,
+      source: `Slack · ${activeWsRec?.name ?? activeWs} · ${channelName}`,
+      preview: `${activeChan?.kind === 'dm' ? channelName : `#${channelName}`}\n\n${text.trim()}`,
       actionLabel: 'Post to Slack',
-      payload: { kind: 'slack', channel, text: text.trim(), workspace: activeWs ?? undefined },
+      payload: { kind: 'slack', channel: activeChan?.id ?? channelName, text: text.trim(), workspace: activeWs ?? undefined },
     });
     setComposeText('');
     setQueued(true);
@@ -84,24 +105,24 @@ export default function SlackPage() {
 
   const aiDraft = async (m: Msg) => {
     setMarvin({ title: 'DRAFT REPLY', text: '', loading: true });
-    const draft = await draftReply({ account: m.workspace, from: m.user, subject: m.channel, body: m.text, medium: 'slack' });
+    const draft = await draftReply({ account: m.workspace, from: m.user, subject: activeChan?.name ?? '', body: m.text, medium: 'slack' });
     setMarvin(null);
     if (draft) setComposeText(draft);
     else setMarvin({ title: 'DRAFT REPLY', text: 'Couldn’t draft a reply — is the runtime running with an API key?' });
   };
   const summarise = async () => {
-    if (!activeCh) return;
+    if (!activeChan) return;
     setMarvin({ title: 'THREAD SUMMARY', text: '', loading: true });
-    const text = channelMsgs.map((m) => `${m.user}: ${m.text}`).join('\n');
-    const sum = await summarizeThread({ title: activeCh, text });
+    const text = hist.messages.map((m) => `${m.user}: ${m.text}`).join('\n');
+    const sum = await summarizeThread({ title: activeChan.name, text });
     setMarvin({ title: 'THREAD SUMMARY', text: sum || 'Couldn’t summarise — is the runtime running with an API key?' });
   };
   const addToQueue = (m: Msg) => {
     enqueueApproval({
       kind: 'task',
       title: `Verify: ${m.text.slice(0, 60)}`,
-      source: `Slack · #${m.channel}`,
-      preview: `From ${m.user} in #${m.channel}\n\n${m.text}`,
+      source: `Slack · ${activeChan?.name ?? ''}`,
+      preview: `From ${m.user} in ${activeChan?.name ?? ''}\n\n${m.text}`,
       actionLabel: 'Create Trello card',
       payload: { kind: 'task', name: `Verify: ${m.text.slice(0, 80)}` },
     });
@@ -109,7 +130,7 @@ export default function SlackPage() {
     window.setTimeout(() => setQueued(false), 3500);
   };
 
-  // Not connected / offline / empty — honest states, no mock data.
+  // Not connected / offline — honest states.
   if (state !== 'loaded' || !data?.connected) {
     return (
       <div className="flex h-full flex-col">
@@ -119,8 +140,8 @@ export default function SlackPage() {
           {state === 'offline' && <Note>MARVIN’s runtime isn’t reachable. Start it with <code className="rounded bg-bg px-1">npm run dev:all</code>.</Note>}
           {state === 'loaded' && data && !data.connected && (
             <Note>
-              No Slack workspace connected yet. Add a workspace bot token on the{' '}
-              <a href="/connections" className="font-semibold text-accent hover:underline">Connections</a> page (The Amargi and/or LeadStories) to watch your channels here.
+              No Slack workspace connected. Add a <strong>User OAuth Token (xoxp-)</strong> per workspace on the{' '}
+              <a href="/connections" className="font-semibold text-accent hover:underline">Connections</a> page. The user token is what unlocks unread badges and your DMs — a bot token can’t see either.
             </Note>
           )}
         </div>
@@ -129,21 +150,24 @@ export default function SlackPage() {
   }
 
   return (
-    <div className="flex h-full min-w-0 bg-surface" style={{ fontFamily: 'var(--font-inter), system-ui, sans-serif' }}>
+    <div className="flex h-full min-w-0 bg-surface">
       {/* workspace rail */}
       <div className="flex w-[66px] flex-none flex-col items-center gap-3 border-r border-border bg-surface-2 pb-3.5 pt-3">
         {workspaces.map((w) => {
           const on = w.role === activeWs;
+          const wsUnread = allChannels.some((c) => c.workspace === w.role && c.hasUnread);
           return (
             <button
               key={w.role}
               type="button"
-              title={w.name}
+              title={w.error ? `${w.name}: ${w.error}` : w.name}
               onClick={() => setWs(w.role)}
-              className="grid h-[42px] w-[42px] place-items-center rounded-[13px] text-base font-extrabold text-on-accent transition"
+              className="relative grid h-[42px] w-[42px] place-items-center rounded-[13px] text-base font-extrabold text-on-accent transition"
               style={{ background: w.avBg, boxShadow: on ? '0 0 0 2px var(--surface-2), 0 0 0 4px var(--text-2)' : 'none' }}
             >
               {w.name[0]}
+              {w.error && <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-surface-2 bg-accent" />}
+              {!w.error && wsUnread && <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full border-2 border-surface-2 bg-text" />}
             </button>
           );
         })}
@@ -155,36 +179,40 @@ export default function SlackPage() {
       {/* channel sidebar */}
       <div className="flex w-[248px] flex-none flex-col border-r border-border bg-bg">
         <div className="flex h-[50px] flex-none items-center gap-2 border-b border-border px-4">
-          <span className="flex-1 truncate text-[16px] font-extrabold text-text">{workspaces.find((w) => w.role === activeWs)?.name}</span>
+          <span className="flex-1 truncate text-[16px] font-extrabold text-text">{activeWsRec?.name}</span>
           <RefreshButton onClick={refresh} refreshing={refreshing} />
         </div>
-        <div className="flex-1 overflow-y-auto px-2 pb-4 pt-2">
-          {['Threads', 'Huddles', 'Drafts & sent'].map((label) => (
-            <div key={label} className="flex cursor-default items-center gap-[11px] rounded-[7px] px-2.5 py-1.5 text-[14px] text-text-2">
-              <span className="text-muted">•</span>{label}
-            </div>
-          ))}
 
-          <div className="px-2.5 pb-1 pt-3.5 text-[13px] font-semibold text-muted">Channels</div>
-          {wsChannels.map((c) => {
-            const on = c.name === activeCh;
-            return (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => setCh(c.name)}
-                className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-left transition"
-                style={{ background: on ? 'var(--accent-soft)' : 'transparent' }}
-              >
-                <span className="text-[15px] leading-none" style={{ color: on ? 'var(--text)' : 'var(--muted)' }}>#</span>
-                <span className="flex-1 truncate text-[14px]" style={{ color: on ? 'var(--text)' : 'var(--text-2)', fontWeight: on ? 700 : 400 }}>{c.name}</span>
-              </button>
-            );
-          })}
-          {wsChannels.length === 0 && <div className="px-2.5 py-2 text-[12.5px] text-muted">No channels — add the bot to a channel in Slack.</div>}
+        {/* token-kind honesty line */}
+        <div className="border-b border-border px-4 py-1.5 text-[11px] text-muted">
+          {activeWsRec?.tokenKind === 'user'
+            ? 'Reading as you · unread + DMs on'
+            : activeWsRec?.tokenKind === 'bot'
+              ? 'Bot token · no unread or DMs (add a user token)'
+              : '—'}
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2 pb-4 pt-2">
+          {activeWsRec?.error && (
+            <div className="mx-1 mb-2 rounded-[9px] border border-accent/30 bg-accent-soft px-2.5 py-2 text-[11.5px] text-text-2">
+              Slack error: <span className="font-semibold">{activeWsRec.error}</span>
+            </div>
+          )}
+
+          <div className="px-2.5 pb-1 pt-1 text-[13px] font-semibold text-muted">Channels</div>
+          {sidebarConvos.map((c) => <ConvoRow key={c.id} c={c} active={c.id === effectiveChId} onClick={() => setChId(c.id)} />)}
+          {sidebarConvos.length === 0 && <div className="px-2.5 py-2 text-[12.5px] text-muted">No channels — invite the app to a channel in Slack.</div>}
           <a href="/connections" className="mt-0.5 flex items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-[14px] text-muted transition hover:bg-hover">
             <span className="grid h-5 w-5 place-items-center rounded-[6px] bg-hover text-[15px] leading-none">+</span> Add channels
           </a>
+
+          <div className="px-2.5 pb-1 pt-3.5 text-[13px] font-semibold text-muted">Direct messages</div>
+          {wsDms.map((c) => <ConvoRow key={c.id} c={c} active={c.id === effectiveChId} dm onClick={() => setChId(c.id)} />)}
+          {wsDms.length === 0 && (
+            <div className="px-2.5 py-2 text-[12px] leading-snug text-muted">
+              {activeWsRec?.tokenKind === 'user' ? 'No direct messages.' : 'DMs need a user token (xoxp-).'}
+            </div>
+          )}
 
           <div className="px-2.5 pb-1 pt-3.5 text-[13px] font-semibold text-muted">Apps</div>
           <div className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-[14px] text-text-2">
@@ -196,16 +224,33 @@ export default function SlackPage() {
       {/* message pane */}
       <div className="flex min-w-0 flex-1 flex-col bg-surface">
         <div className="flex h-[50px] flex-none items-center gap-2.5 border-b border-border px-[18px]">
-          <span className="text-[15.5px] font-bold text-text"># {activeCh ?? '—'}</span>
-          {currentChannel?.topic && <><div className="h-[18px] w-px bg-border" /><span className="truncate text-[12.5px] text-text-2">{currentChannel.topic}</span></>}
+          <span className="text-[15.5px] font-bold text-text">{activeChan?.kind === 'dm' ? activeChan.name : `# ${activeChan?.name ?? '—'}`}</span>
+          {activeChan?.topic && <><div className="h-[18px] w-px bg-border" /><span className="truncate text-[12.5px] text-text-2">{activeChan.topic}</span></>}
           <div className="flex-1" />
-          <button type="button" onClick={summarise} className="rounded-[8px] border border-border px-2.5 py-1 text-[11.5px] font-semibold text-text-2 transition hover:bg-hover">✦ Summarise</button>
+          <button type="button" onClick={summarise} disabled={hist.messages.length === 0} className="rounded-[8px] border border-border px-2.5 py-1 text-[11.5px] font-semibold text-text-2 transition hover:bg-hover disabled:opacity-40">✦ Summarise</button>
         </div>
 
         <div className="flex-1 overflow-y-auto py-3.5">
-          {channelMsgs.length === 0 && <div className="px-5 py-10 text-center text-[13px] text-muted">No recent messages in #{activeCh}.</div>}
-          {channelMsgs.map((m, i) => {
-            const id = `${m.workspace}:${m.channel}:${i}`;
+          {/* load older */}
+          {!hist.loading && hist.cursor && (
+            <div className="flex justify-center pb-2">
+              <button type="button" onClick={() => void loadOlder()} disabled={hist.loadingMore} className="rounded-full border border-border bg-bg px-3.5 py-1 text-[12px] font-semibold text-text-2 transition hover:bg-hover disabled:opacity-50">
+                {hist.loadingMore ? 'Loading…' : 'Load older messages'}
+              </button>
+            </div>
+          )}
+          {hist.loading && <div className="px-5 py-10 text-center text-[13px] text-muted">Loading messages…</div>}
+          {hist.error && !hist.loading && (
+            <div className="mx-5 my-4 rounded-[10px] border border-accent/30 bg-accent-soft px-4 py-3 text-[13px] text-text-2">
+              Couldn’t load this conversation: <span className="font-semibold">{hist.error}</span>
+              {hist.error.includes('missing_scope') && <div className="mt-1 text-[12px] text-muted">Add the listed scope to your Slack app’s User Token Scopes and reinstall.</div>}
+              {hist.error.includes('ratelimited') && <div className="mt-1 text-[12px] text-muted">This app is on Slack’s 1-request/minute history tier. Keep the app internal (public distribution off) for full speed.</div>}
+            </div>
+          )}
+          {!hist.loading && !hist.error && hist.messages.length === 0 && <div className="px-5 py-10 text-center text-[13px] text-muted">No messages yet.</div>}
+
+          {hist.messages.map((m, i) => {
+            const id = `${m.channelId}:${m.ts}:${i}`;
             const col = colorFor(m.user);
             return (
               <div
@@ -222,11 +267,11 @@ export default function SlackPage() {
                     <span className="text-[11.5px] text-muted">{fmtTs(m.ts)}</span>
                     {m.emergency && <span className="rounded-[9px] bg-accent px-2 py-px text-[10.5px] font-bold text-on-accent">Urgent</span>}
                   </div>
-                  <div className="mt-px whitespace-pre-line text-[14px] leading-[1.5] text-text">{m.text}</div>
+                  <div className="mt-px text-[14px] leading-[1.5] text-text"><SlackText text={m.text} /></div>
                   {m.reactions && m.reactions.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1.5">
                       {m.reactions.map((r, ri) => (
-                        <span key={ri} className="flex h-6 items-center gap-1.5 rounded-xl border px-2 text-[12px] font-semibold text-text-2" style={{ background: 'var(--accent-soft)', borderColor: '#E8D6B8' }}>
+                        <span key={ri} className="flex h-6 items-center gap-1.5 rounded-xl border px-2 text-[12px] font-semibold text-text-2" style={{ background: 'var(--accent-soft)', borderColor: 'var(--accent-soft-border)' }}>
                           {emojiFor(r.emoji)} {r.count}
                         </span>
                       ))}
@@ -253,7 +298,7 @@ export default function SlackPage() {
             <textarea
               value={composeText}
               onChange={(e) => setComposeText(e.target.value)}
-              placeholder={`Message #${activeCh ?? ''}`}
+              placeholder={`Message ${activeChan ? (activeChan.kind === 'dm' ? activeChan.name : `#${activeChan.name}`) : ''}`}
               className="min-h-[58px] w-full resize-y bg-surface px-3.5 py-3 text-[14px] text-text outline-none placeholder:text-muted"
             />
             <div className="flex items-center gap-2 border-t border-border bg-surface-2 px-2.5 py-1.5">
@@ -264,8 +309,8 @@ export default function SlackPage() {
               <div className="flex-1" />
               <button
                 type="button"
-                onClick={() => activeCh && enqueue(activeCh, composeText)}
-                disabled={!activeCh || composeText.trim().length === 0}
+                onClick={() => activeChan && enqueue(activeChan.name, composeText)}
+                disabled={!activeChan || composeText.trim().length === 0}
                 className="rounded-[8px] bg-accent px-4 py-1.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim disabled:opacity-40"
               >
                 Send
@@ -283,7 +328,7 @@ export default function SlackPage() {
 
       {marvin && (
         <div onClick={() => setMarvin(null)} className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(20,20,18,.34)' }}>
-          <div onClick={(e) => e.stopPropagation()} className="w-[420px] rounded-2xl border border-border bg-surface p-5 shadow-2xl xpop">
+          <div onClick={(e) => e.stopPropagation()} className="w-[420px] rounded-2xl border border-border bg-surface p-5 shadow-2xl">
             <div className="mb-3 flex items-center gap-2">
               <span className="grid h-6 w-6 place-items-center rounded-[7px] text-[12px] font-bold text-on-accent" style={{ background: '#C0613A' }}>✦</span>
               <span className="text-[12px] font-bold text-text-2">MARVIN</span>
@@ -302,6 +347,30 @@ export default function SlackPage() {
         </div>
       )}
     </div>
+  );
+}
+
+function ConvoRow({ c, active, dm, onClick }: { c: Chan; active: boolean; dm?: boolean; onClick: () => void }) {
+  const strong = c.hasUnread;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-left transition"
+      style={{ background: active ? 'var(--accent-soft)' : 'transparent' }}
+    >
+      {dm ? (
+        <span className="grid h-5 w-5 flex-none place-items-center rounded-[6px] text-[10px] font-bold text-on-accent" style={{ background: colorFor(c.name) }}>{initials(c.name)}</span>
+      ) : (
+        <span className="text-[15px] leading-none" style={{ color: active || strong ? 'var(--text)' : 'var(--muted)' }}>{c.kind === 'group' ? '⌗' : '#'}</span>
+      )}
+      <span className="flex-1 truncate text-[14px]" style={{ color: active || strong ? 'var(--text)' : 'var(--text-2)', fontWeight: strong ? 700 : active ? 600 : 400 }}>{c.name}</span>
+      {c.unread > 0 ? (
+        <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent px-1 text-[10.5px] font-bold text-on-accent">{c.unread}</span>
+      ) : strong ? (
+        <span className="h-2 w-2 rounded-full bg-accent" />
+      ) : null}
+    </button>
   );
 }
 

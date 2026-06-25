@@ -110,7 +110,7 @@ const server = createServer(async (req, res) => {
         case '/data/briefing':
           return json(res, 200, await getBriefingData());
         case '/data/inbox':
-          return json(res, 200, await getInbox(u.searchParams.get('folder') ?? 'inbox'));
+          return json(res, 200, await getInbox(u.searchParams.get('folder') ?? 'inbox', u.searchParams.get('cursor') ?? ''));
         case '/data/message':
           return json(res, 200, await getMessageBody(u.searchParams.get('account') ?? '', u.searchParams.get('id') ?? ''));
         case '/data/calendar':

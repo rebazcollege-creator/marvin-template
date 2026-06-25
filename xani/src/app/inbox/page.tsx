@@ -80,7 +80,39 @@ export default function InboxPage() {
   const fetcher = useCallback(() => fetchInboxFolder(folder), [folder]);
   const { data, state, refresh, refreshing } = useLiveData<InboxData>(`${PATHS.inbox}?folder=${folder}`, fetcher);
 
-  const messages = useMemo(() => data?.messages ?? [], [data]);
+  // Older pages, loaded on demand (so the first paint stays small and fast).
+  const [more, setMore] = useState<Msg[]>([]);
+  const [moreCursor, setMoreCursor] = useState<string | undefined>(undefined);
+  const [pagedOnce, setPagedOnce] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  useEffect(() => { setMore([]); setMoreCursor(undefined); setPagedOnce(false); }, [folder]);
+
+  const messages = useMemo(() => {
+    const base = data?.messages ?? [];
+    if (more.length === 0) return base;
+    const seen = new Set(base.map((m) => m.id));
+    const merged = [...base, ...more.filter((m) => !seen.has(m.id))];
+    merged.sort((x, y) => (y.receivedAt > x.receivedAt ? 1 : y.receivedAt < x.receivedAt ? -1 : 0));
+    return merged;
+  }, [data, more]);
+
+  const nextCursor = pagedOnce ? moreCursor : data?.cursor;
+  const canLoadMore = Boolean(nextCursor) && acct === 'all' && split === 'all';
+
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    const resp = await fetchInboxFolder(folder, nextCursor);
+    if (resp) {
+      setMore((prev) => {
+        const seen = new Set([...(data?.messages ?? []), ...prev].map((m) => m.id));
+        return [...prev, ...resp.messages.filter((m) => !seen.has(m.id))];
+      });
+      setMoreCursor(resp.cursor);
+      setPagedOnce(true);
+    }
+    setLoadingMore(false);
+  }, [folder, nextCursor, loadingMore, data]);
   // Show every account (design), ordered; append any unknown roles that show up.
   const accounts = useMemo(() => {
     const present = new Set(messages.map((m) => m.account));
@@ -231,7 +263,7 @@ export default function InboxPage() {
               ⟳
             </button>
             <div className="flex-1" />
-            <span className="text-[12px] text-muted">1–{rows.length} of {rows.length}</span>
+            <span className="text-[12px] text-muted">{rows.length === 0 ? '0' : `1–${rows.length}`}{canLoadMore ? '+' : ''}</span>
           </div>
 
           {inSplitMode && splitTabs.length > 1 && (
@@ -254,7 +286,13 @@ export default function InboxPage() {
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto">
+          <div
+            className="flex-1 overflow-y-auto"
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              if (canLoadMore && !loadingMore && el.scrollHeight - el.scrollTop - el.clientHeight < 240) loadMore();
+            }}
+          >
             {state === 'loading' && <div className="flex flex-col gap-px p-3">{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="xsk h-9" />)}</div>}
             {state === 'offline' && <Centered title="The runtime is offline" body="Live mail is paused. Start it with npm run dev:all." />}
             {state === 'loaded' && data && !data.connected && <Centered title="No accounts connected" body="Connect Gmail on the Connections page to see your mail here." href="/connections" cta="Connect Gmail" />}
@@ -274,7 +312,7 @@ export default function InboxPage() {
                   onKeyDown={(e) => { if (e.key === 'Enter') setOpenId(m.id); }}
                   className="flex h-11 cursor-pointer items-center gap-[11px] border-b border-line px-3.5"
                   style={{ background: sel ? 'var(--accent-soft)' : 'transparent', boxShadow: m.account === 'leadstories' && m.unread ? 'inset 3px 0 0 #C0613A' : 'none' }}
-                  onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = '#F5EEDF'; }}
+                  onMouseEnter={(e) => { if (!sel) e.currentTarget.style.background = '#F5EEDF'; void fetchMessageBody(m.account, m.id); }}
                   onMouseLeave={(e) => { if (!sel) e.currentTarget.style.background = 'transparent'; }}
                 >
                   <span className="h-[15px] w-[15px] flex-none rounded-[3px] border-2 border-border" />
@@ -297,6 +335,17 @@ export default function InboxPage() {
                 </div>
               );
             })}
+
+            {state === 'loaded' && data?.connected && canLoadMore && (
+              <button
+                type="button"
+                onClick={() => loadMore()}
+                disabled={loadingMore}
+                className="flex h-11 w-full items-center justify-center gap-2 border-b border-line text-[12.5px] font-medium text-muted transition hover:bg-hover hover:text-text disabled:opacity-60"
+              >
+                {loadingMore ? <span className="animate-spin">⟳</span> : '↓'} {loadingMore ? 'Loading older mail…' : 'Load older mail'}
+              </button>
+            )}
           </div>
         </div>
 

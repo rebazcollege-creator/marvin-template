@@ -66,6 +66,9 @@ export interface InboxData {
   connected: boolean;
   /** When present, why the list is empty (auth failure, API disabled, etc.). */
   error?: string;
+  /** Opaque per-account page cursor (JSON map account→pageToken). Present when more
+   *  history can be loaded; pass it back to fetch the next batch. Absent when done. */
+  cursor?: string;
   messages: {
     id: string;
     account: string;

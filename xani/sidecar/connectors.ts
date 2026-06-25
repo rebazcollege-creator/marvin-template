@@ -134,66 +134,136 @@ export function bumpInboxCache(): void {
   inboxCache.clear();
 }
 
-export async function getInbox(folder = 'inbox'): Promise<InboxData> {
-  const cached = inboxCache.get(folder);
+const META_PARAMS = 'format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date';
+const PAGE_SIZE = 30;
+
+/** Fetch metadata for many message ids in ONE HTTP request via Gmail's batch
+ *  endpoint (https://gmail.googleapis.com/batch/gmail/v1), instead of one request
+ *  per id. This collapses N network round-trips into 1 — the single biggest reason
+ *  a cold inbox felt slow. Returns null on failure so the caller can fall back to
+ *  individual gets. Quota cost is unchanged; latency is hugely reduced. */
+async function gmailBatchGetMetadata(token: string, ids: string[]): Promise<Record<string, unknown>[] | null> {
+  if (ids.length === 0) return [];
+  const boundary = `xani_batch_${ids.length}_${ids[0]}`;
+  const body =
+    ids
+      .map(
+        (id) =>
+          `--${boundary}\r\nContent-Type: application/http\r\n\r\n` +
+          `GET /gmail/v1/users/me/messages/${id}?${META_PARAMS}\r\n\r\n`,
+      )
+      .join('') + `--${boundary}--`;
+  try {
+    const r = await fetch('https://gmail.googleapis.com/batch/gmail/v1', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/mixed; boundary=${boundary}` },
+      body,
+    });
+    if (!r.ok) return null;
+    // Google replies with its own boundary; read it from the response Content-Type.
+    const ct = r.headers.get('content-type') ?? '';
+    const bm = ct.match(/boundary=([^;]+)/);
+    const respBoundary = bm ? bm[1].trim().replace(/^"|"$/g, '') : null;
+    const text = await r.text();
+    const parts = respBoundary ? text.split(`--${respBoundary}`) : [text];
+    const out: Record<string, unknown>[] = [];
+    for (const part of parts) {
+      // Each part wraps one HTTP response whose body is a single JSON object.
+      const s = part.indexOf('{');
+      const e = part.lastIndexOf('}');
+      if (s === -1 || e <= s) continue;
+      try {
+        out.push(JSON.parse(part.slice(s, e + 1)) as Record<string, unknown>);
+      } catch {
+        /* skip a malformed part */
+      }
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+/** Shape one Gmail message JSON (metadata format) into an inbox row. */
+function rowFromMessage(dj: unknown, accountRole: string): InboxData['messages'][number] | null {
+  if (!dj || typeof dj !== 'object') return null;
+  const j = dj as { id?: string; snippet?: string; internalDate?: string; labelIds?: string[]; payload?: { headers?: { name: string; value: string }[] } };
+  if (!j.id) return null;
+  const header = (name: string) => j.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? '';
+  const labels = j.labelIds ?? [];
+  const subject = header('subject');
+  return {
+    id: j.id,
+    account: accountRole,
+    from: header('from'),
+    subject,
+    snippet: j.snippet ?? '',
+    receivedAt: j.internalDate ? new Date(Number(j.internalDate)).toISOString() : '',
+    unread: labels.includes('UNREAD'),
+    split: splitFor(labels, subject),
+  };
+}
+
+/**
+ * Inbox for the given folder. Fetches metadata in one batched request per account
+ * (fast cold-load), and supports cursor-based pagination so older history loads on
+ * demand instead of all at once. `cursorRaw` is the opaque per-account page cursor
+ * returned in the previous response; omit it for the first page.
+ */
+export async function getInbox(folder = 'inbox', cursorRaw = ''): Promise<InboxData> {
+  const cacheKey = `${folder}|${cursorRaw}`;
+  const cached = inboxCache.get(cacheKey);
   if (cached && cached.ver === inboxCacheVer && Date.now() - cached.ts < INBOX_TTL_MS) return cached.data;
 
   const q = FOLDER_QUERY[folder] ?? FOLDER_QUERY.inbox;
   const connectedAccounts = GMAIL_ACCOUNTS.map((a) => ({ a, c: gmailCreds(a.n) })).filter((x) => x.c);
   const errs: string[] = [];
 
-  // All accounts in parallel; within each, all per-message metadata gets in parallel
-  // (bounded) instead of the previous one-at-a-time await — the N+1 that made the
-  // inbox take minutes.
+  let cursor: Record<string, string> = {};
+  if (cursorRaw) {
+    try { cursor = JSON.parse(cursorRaw) as Record<string, string>; } catch { /* treat as first page */ }
+  }
+  const paged = Boolean(cursorRaw);
+  // On "load more", only re-hit accounts that still have more pages.
+  const targets = paged ? connectedAccounts.filter((x) => cursor[x.a.role]) : connectedAccounts;
+  const nextCursor: Record<string, string> = {};
+
   const perAccount = await Promise.all(
-    connectedAccounts.map(async ({ a, c }) => {
+    targets.map(async ({ a, c }) => {
       const { token, error } = await googleToken(c!.id, c!.secret, c!.refresh);
       if (!token) {
         errs.push(`${a.role}: ${error ?? 'authentication failed'}`);
         return [] as InboxData['messages'];
       }
       try {
-        const list = await fetch(
-          `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=25`,
-          { headers: { Authorization: `Bearer ${token}` } },
-        );
+        const pageToken = cursor[a.role];
+        const listUrl =
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=${PAGE_SIZE}` +
+          (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
+        const list = await fetch(listUrl, { headers: { Authorization: `Bearer ${token}` } });
         if (!list.ok) {
           errs.push(`${a.role}: Gmail API ${list.status} — ${(await list.text()).slice(0, 160)}`);
           return [];
         }
-        const lj = (await list.json()) as { messages?: { id: string }[] };
-        const ids = lj.messages ?? [];
-        const rows = await mapPool(ids, 12, async (m) => {
-          try {
-            const det = await fetch(
-              `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date`,
-              { headers: { Authorization: `Bearer ${token}` } },
-            );
-            if (!det.ok) return null;
-            const dj = (await det.json()) as {
-              snippet?: string;
-              internalDate?: string;
-              labelIds?: string[];
-              payload?: { headers?: { name: string; value: string }[] };
-            };
-            const header = (name: string) => dj.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? '';
-            const labels = dj.labelIds ?? [];
-            const subject = header('subject');
-            return {
-              id: m.id,
-              account: a.role,
-              from: header('from'),
-              subject,
-              snippet: dj.snippet ?? '',
-              receivedAt: dj.internalDate ? new Date(Number(dj.internalDate)).toISOString() : '',
-              unread: labels.includes('UNREAD'),
-              split: splitFor(labels, subject),
-            } as InboxData['messages'][number];
-          } catch {
-            return null;
-          }
-        });
-        return rows.filter((r): r is InboxData['messages'][number] => r != null);
+        const lj = (await list.json()) as { messages?: { id: string }[]; nextPageToken?: string };
+        const ids = (lj.messages ?? []).map((m) => m.id);
+        if (lj.nextPageToken) nextCursor[a.role] = lj.nextPageToken;
+        if (ids.length === 0) return [];
+
+        // One batched request; degrade to bounded parallel gets if batch fails.
+        let msgs = await gmailBatchGetMetadata(token, ids);
+        if (!msgs) {
+          msgs = (
+            await mapPool(ids, 12, async (id) => {
+              const det = await fetch(
+                `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?${META_PARAMS}`,
+                { headers: { Authorization: `Bearer ${token}` } },
+              );
+              return det.ok ? ((await det.json()) as Record<string, unknown>) : null;
+            })
+          ).filter((x): x is Record<string, unknown> => x != null);
+        }
+        return msgs.map((dj) => rowFromMessage(dj, a.role)).filter((r): r is InboxData['messages'][number] => r != null);
       } catch (e) {
         errs.push(`${a.role}: ${(e as Error).message}`);
         return [];
@@ -209,8 +279,13 @@ export async function getInbox(folder = 'inbox'): Promise<InboxData> {
       ? `Couldn’t sign in to Gmail — ${errs[0]}. Reconnect with “Sign in with Google”.`
       : errs[0];
   }
-  const data: InboxData = { connected: connectedAccounts.length > 0, messages, error };
-  inboxCache.set(folder, { ts: Date.now(), ver: inboxCacheVer, data });
+  const data: InboxData = {
+    connected: connectedAccounts.length > 0,
+    messages,
+    error,
+    cursor: Object.keys(nextCursor).length ? JSON.stringify(nextCursor) : undefined,
+  };
+  inboxCache.set(cacheKey, { ts: Date.now(), ver: inboxCacheVer, data });
   return data;
 }
 

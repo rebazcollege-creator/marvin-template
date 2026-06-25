@@ -28,10 +28,50 @@ type Entry = { data: unknown; ts: number };
 const cache = new Map<string, Entry>();
 const inflight = new Map<string, Promise<unknown>>();
 
-/** Last-known cached value for a path, read synchronously (null if never fetched). */
+// Persist a few high-value, small payloads to localStorage so the screen paints
+// last-session data INSTANTLY on app relaunch (then revalidates in the background).
+// Scoped to inbox + briefing; cleared on disconnect with the in-memory cache.
+const PERSIST_PREFIXES = ['/data/inbox', '/data/briefing'];
+const PERSIST_MAX_AGE = 24 * 60 * 60 * 1000;
+const persistKey = (path: string) => `xani:dc:${path}`;
+const shouldPersist = (path: string) => PERSIST_PREFIXES.some((p) => path.startsWith(p));
+
+function persist(path: string, data: unknown, ts: number): void {
+  if (typeof window === 'undefined' || !shouldPersist(path)) return;
+  try {
+    window.localStorage.setItem(persistKey(path), JSON.stringify({ data, ts }));
+  } catch {
+    /* quota or disabled storage — fine, in-memory cache still works */
+  }
+}
+
+function dropPersisted(predicate: (path: string) => boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    for (const k of Object.keys(window.localStorage)) {
+      if (k.startsWith('xani:dc:') && predicate(k.slice('xani:dc:'.length))) window.localStorage.removeItem(k);
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Last-known cached value for a path, read synchronously. Falls back to the
+ *  persisted (localStorage) copy on a cold start so the UI paints immediately. */
 export function peekData<T>(path: string): T | null {
   const e = cache.get(path);
-  return e ? (e.data as T) : null;
+  if (e) return e.data as T;
+  if (typeof window === 'undefined' || !shouldPersist(path)) return null;
+  try {
+    const raw = window.localStorage.getItem(persistKey(path));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { data: unknown; ts: number };
+    if (Date.now() - parsed.ts > PERSIST_MAX_AGE) return null;
+    cache.set(path, { data: parsed.data, ts: parsed.ts });
+    return parsed.data as T;
+  } catch {
+    return null;
+  }
 }
 
 /** Age in ms of the cached value for a path (Infinity if absent). */
@@ -45,6 +85,7 @@ export function dataAge(path: string): number {
 export function invalidate(path: string): void {
   cache.delete(path);
   inflight.delete(path);
+  dropPersisted((p) => p === path);
 }
 
 /** Drop cached entries whose path starts with `prefix` (or all). Used on disconnect
@@ -52,9 +93,11 @@ export function invalidate(path: string): void {
 export function clearDataCache(prefix?: string): void {
   if (!prefix) {
     cache.clear();
+    dropPersisted(() => true);
     return;
   }
   for (const k of [...cache.keys()]) if (k.startsWith(prefix)) cache.delete(k);
+  dropPersisted((p) => p.startsWith(prefix));
 }
 
 async function get<T>(path: string): Promise<T | null> {
@@ -66,7 +109,9 @@ async function get<T>(path: string): Promise<T | null> {
       const resp = await fetch(`${SIDECAR_URL}${path}`);
       if (!resp.ok) return null;
       const data = (await resp.json()) as T;
-      cache.set(path, { data, ts: Date.now() });
+      const ts = Date.now();
+      cache.set(path, { data, ts });
+      persist(path, data, ts);
       return data;
     } catch {
       return null;
@@ -92,13 +137,38 @@ export const PATHS = {
 
 export const fetchBriefingData = () => get<BriefingData>(PATHS.briefing);
 export const fetchInbox = () => get<InboxData>(PATHS.inbox);
-/** Per-folder inbox fetch (Inbox/Starred/Sent/Drafts/Spam/Trash). */
-export const fetchInboxFolder = (folder: string) => get<InboxData>(`${PATHS.inbox}?folder=${encodeURIComponent(folder)}`);
-/** Full body of one message, for the reading pane (real HTML + plain-text fallback). */
-export const fetchMessageBody = (account: string, id: string) =>
-  get<{ ok: boolean; html?: string; text?: string; body?: string; error?: string }>(
-    `/data/message?account=${encodeURIComponent(account)}&id=${encodeURIComponent(id)}`,
-  );
+/** Per-folder inbox fetch (Inbox/Starred/Sent/Drafts/Spam/Trash). Pass a `cursor`
+ *  from a previous response to load the next page of older history. */
+export const fetchInboxFolder = (folder: string, cursor?: string) =>
+  get<InboxData>(`${PATHS.inbox}?folder=${encodeURIComponent(folder)}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`);
+/** Full body of one message, for the reading pane (real HTML + plain-text fallback).
+ *  Email bodies are immutable, so a successful fetch is cached for the session — this
+ *  makes hover-prefetch effective and reopening a message instant. */
+type MessageBody = { ok: boolean; html?: string; text?: string; body?: string; error?: string };
+const bodyCache = new Map<string, MessageBody>();
+const bodyInflight = new Map<string, Promise<MessageBody | null>>();
+export async function fetchMessageBody(account: string, id: string): Promise<MessageBody | null> {
+  const key = `${account}:${id}`;
+  const hit = bodyCache.get(key);
+  if (hit) return hit;
+  const pending = bodyInflight.get(key);
+  if (pending) return pending;
+  const req = (async () => {
+    try {
+      const resp = await fetch(`${SIDECAR_URL}/data/message?account=${encodeURIComponent(account)}&id=${encodeURIComponent(id)}`);
+      if (!resp.ok) return null;
+      const r = (await resp.json()) as MessageBody;
+      if (r.ok) bodyCache.set(key, r);
+      return r;
+    } catch {
+      return null;
+    } finally {
+      bodyInflight.delete(key);
+    }
+  })();
+  bodyInflight.set(key, req);
+  return req;
+}
 /** Ask the runtime to draft a reply (Haiku). Returns the draft body text. POST, uncached. */
 export async function draftReply(p: { account: string; from: string; subject: string; body: string }): Promise<string | null> {
   try {

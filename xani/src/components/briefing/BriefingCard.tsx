@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady } from '@/lib/storage';
-import { fetchBriefingData, peekData, PATHS } from '@/lib/marvin-data';
+import { fetchBriefingData, invalidate, peekData, PATHS } from '@/lib/marvin-data';
+import { RefreshButton } from '@/components/ui/RefreshButton';
 import type { BriefingData } from '@/lib/marvin-protocol';
 
 /**
@@ -80,12 +81,21 @@ function todayLabel(date: Date, timezone: string): string {
 export function BriefingCard({ hideHeader = false }: { hideHeader?: boolean } = {}) {
   const [settings, setSettings] = useState<XaniSettings | null>(null);
   const [data, setData] = useState<BriefingData | null>(() => peekData<BriefingData>(PATHS.briefing));
+  const [refreshing, setRefreshing] = useState(false);
   const now = useMemo(() => new Date(), []);
 
   useEffect(() => {
     ensureStorageReady().then(() => setSettings(getSettings()));
     fetchBriefingData().then(setData);
   }, []);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    invalidate(PATHS.briefing);
+    const d = await fetchBriefingData();
+    if (d) setData(d);
+    setRefreshing(false);
+  };
 
   if (!settings) {
     return (
@@ -106,7 +116,10 @@ export function BriefingCard({ hideHeader = false }: { hideHeader?: boolean } = 
           <h1 className="text-3xl text-text">
             {greeting(hour)}, {settings.profile.name}.
           </h1>
-          <span className="text-sm text-text-2">{todayLabel(now, tz)}</span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-text-2">{todayLabel(now, tz)}</span>
+            <RefreshButton onClick={refresh} refreshing={refreshing} />
+          </div>
         </header>
       )}
 

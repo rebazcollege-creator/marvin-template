@@ -223,8 +223,24 @@ function decodeB64(data: string): string {
   }
 }
 
-/** Walk a Gmail payload tree, preferring text/plain; fall back to stripped HTML. */
-function extractBody(payload: unknown): string {
+/** Collapse an HTML body to readable plain text (fallback / for the AI drafter). */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>(?=)/gi, '\n')
+    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** Walk a Gmail payload tree, collecting the richest HTML and a plain-text fallback. */
+function extractBody(payload: unknown): { html: string; text: string } {
   type Part = { mimeType?: string; body?: { data?: string }; parts?: Part[] };
   const plains: string[] = [];
   const htmls: string[] = [];
@@ -237,26 +253,18 @@ function extractBody(payload: unknown): string {
     for (const c of p.parts ?? []) walk(c);
   };
   walk(payload as Part);
-  if (plains.length) return plains.join('\n').trim();
-  if (htmls.length) {
-    return htmls
-      .join('\n')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<br\s*\/?>(?=)/gi, '\n')
-      .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
-      .replace(/<[^>]+>/g, '')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  }
-  return '';
+  const html = htmls.join('\n').trim();
+  // Prefer a real plain part for the text fallback; else derive it from the HTML.
+  const text = (plains.join('\n').trim() || (html ? htmlToText(html) : '')).trim();
+  return { html, text };
 }
 
-/** Full body of a single message, for the reading pane. Cred-gated per account. */
-export async function getMessageBody(accountRole: string, id: string): Promise<{ ok: boolean; body?: string; error?: string }> {
+/** Full body of a single message, for the reading pane. Cred-gated per account.
+ *  Returns the original HTML (rendered sandboxed in the UI) + a plain-text fallback. */
+export async function getMessageBody(
+  accountRole: string,
+  id: string,
+): Promise<{ ok: boolean; html?: string; text?: string; body?: string; error?: string }> {
   const acct = GMAIL_ACCOUNTS.find((a) => a.role === accountRole);
   const c = acct ? gmailCreds(acct.n) : null;
   if (!c || !id) return { ok: false, error: 'Not connected.' };
@@ -268,8 +276,10 @@ export async function getMessageBody(accountRole: string, id: string): Promise<{
     });
     if (!r.ok) return { ok: false, error: `Gmail API ${r.status}` };
     const j = (await r.json()) as { payload?: unknown; snippet?: string };
-    const body = extractBody(j.payload) || (j.snippet ?? '');
-    return { ok: true, body };
+    const { html, text } = extractBody(j.payload);
+    const plain = text || (j.snippet ?? '');
+    // `body` kept for backward compatibility (plain text).
+    return { ok: true, html, text: plain, body: plain };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }

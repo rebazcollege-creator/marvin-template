@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { fetchTrello, PATHS } from '@/lib/marvin-data';
 import { useLiveData } from '@/lib/use-live-data';
+import { RefreshButton } from '@/components/ui/RefreshButton';
 import type { TrelloData } from '@/lib/marvin-protocol';
 import { Modal } from '@/components/ui/Modal';
 import { enqueueApproval } from '@/lib/approvals';
@@ -11,7 +12,7 @@ type Card = TrelloData['cards'][number];
 const LISTS = ['To do', 'Doing', 'In review', 'Done'];
 
 export default function TrelloPage() {
-  const { data, state } = useLiveData<TrelloData>(PATHS.trello, fetchTrello);
+  const { data, state, refresh, refreshing } = useLiveData<TrelloData>(PATHS.trello, fetchTrello);
   const [open, setOpen] = useState<Card | null>(null);
   const [creating, setCreating] = useState(false);
   const [queued, setQueued] = useState(false);
@@ -63,6 +64,7 @@ export default function TrelloPage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[11.5px] text-muted">{badge}</span>
+          <RefreshButton onClick={refresh} refreshing={refreshing} />
           <button type="button" onClick={() => setCreating(true)} className="rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">New card</button>
         </div>
       </div>

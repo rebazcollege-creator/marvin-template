@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { fetchDrive, PATHS } from '@/lib/marvin-data';
 import { useLiveData } from '@/lib/use-live-data';
+import { RefreshButton } from '@/components/ui/RefreshButton';
 import type { DriveData, DriveKind } from '@/lib/marvin-protocol';
 
 /**
@@ -58,7 +59,7 @@ function Star({ on }: { on: boolean }) {
 }
 
 export default function DrivePage() {
-  const { data, state } = useLiveData<DriveData>(PATHS.drive, fetchDrive);
+  const { data, state, refresh, refreshing } = useLiveData<DriveData>(PATHS.drive, fetchDrive);
   const [view, setView] = useState<'grid' | 'list'>('grid');
 
   const badge =
@@ -74,6 +75,7 @@ export default function DrivePage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[11.5px] text-muted">{badge}</span>
+          <RefreshButton onClick={refresh} refreshing={refreshing} />
           <div className="flex rounded-[10px] border border-border bg-surface p-0.5">
             {(['grid', 'list'] as const).map((v) => (
               <button

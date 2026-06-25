@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { fetchCalendar, PATHS } from '@/lib/marvin-data';
 import { useLiveData } from '@/lib/use-live-data';
+import { RefreshButton } from '@/components/ui/RefreshButton';
 import type { CalendarData } from '@/lib/marvin-protocol';
 import { Modal } from '@/components/ui/Modal';
 import { enqueueApproval } from '@/lib/approvals';
@@ -18,7 +19,7 @@ function timeOf(e: Ev): string {
 }
 
 export default function CalendarPage() {
-  const { data, state } = useLiveData<CalendarData>(PATHS.calendar, fetchCalendar);
+  const { data, state, refresh, refreshing } = useLiveData<CalendarData>(PATHS.calendar, fetchCalendar);
   const [open, setOpen] = useState<Ev | null>(null);
   const [focus, setFocus] = useState(false);
   const [queued, setQueued] = useState(false);
@@ -67,6 +68,7 @@ export default function CalendarPage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[11.5px] text-muted">{badge}</span>
+          <RefreshButton onClick={refresh} refreshing={refreshing} />
           <button type="button" onClick={() => setFocus(true)} className="rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">Protect focus</button>
         </div>
       </div>

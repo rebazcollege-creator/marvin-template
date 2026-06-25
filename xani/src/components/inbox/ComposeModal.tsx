@@ -14,6 +14,7 @@ export function ComposeModal({
   mode,
   initialTo = '',
   initialSubject = '',
+  initialBody = '',
   account,
   onClose,
   onQueued,
@@ -22,13 +23,14 @@ export function ComposeModal({
   mode: 'new' | 'reply';
   initialTo?: string;
   initialSubject?: string;
+  initialBody?: string;
   account?: string;
   onClose: () => void;
   onQueued: () => void;
 }) {
   const [to, setTo] = useState(initialTo);
   const [subject, setSubject] = useState(initialSubject);
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState(initialBody);
 
   const send = () => {
     if (to.trim().length === 0 || body.trim().length === 0) return;

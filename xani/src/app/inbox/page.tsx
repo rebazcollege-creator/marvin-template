@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { fetchInboxFolder, fetchMessageBody, PATHS } from '@/lib/marvin-data';
+import { draftReply, fetchInboxFolder, fetchMessageBody, PATHS } from '@/lib/marvin-data';
 import { useLiveData } from '@/lib/use-live-data';
 import type { InboxData } from '@/lib/marvin-protocol';
 import { ComposeModal } from '@/components/inbox/ComposeModal';
+import { EmailBody } from '@/components/inbox/EmailBody';
 import { enqueueApproval } from '@/lib/approvals';
 
 type Msg = InboxData['messages'][number];
@@ -69,14 +70,15 @@ export default function InboxPage() {
   const [split, setSplit] = useState('all');
   const [openId, setOpenId] = useState<string | null>(null);
   const [stars, setStars] = useState<Record<string, boolean>>({});
-  const [compose, setCompose] = useState<{ mode: 'new' | 'reply'; to?: string; subject?: string; account?: string } | null>(null);
+  const [compose, setCompose] = useState<{ mode: 'new' | 'reply'; to?: string; subject?: string; body?: string; account?: string } | null>(null);
   const [queued, setQueued] = useState(false);
   const [confirm, setConfirm] = useState<{ title: string; body: string; detail?: string; okLabel: string; onOk: () => void } | null>(null);
-  const [body, setBody] = useState('');
+  const [body, setBody] = useState<{ html?: string; text?: string }>({});
   const [bodyLoading, setBodyLoading] = useState(false);
+  const [drafting, setDrafting] = useState(false);
 
   const fetcher = useCallback(() => fetchInboxFolder(folder), [folder]);
-  const { data, state } = useLiveData<InboxData>(`${PATHS.inbox}?folder=${folder}`, fetcher);
+  const { data, state, refresh, refreshing } = useLiveData<InboxData>(`${PATHS.inbox}?folder=${folder}`, fetcher);
 
   const messages = useMemo(() => data?.messages ?? [], [data]);
   // Show every account (design), ordered; append any unknown roles that show up.
@@ -104,17 +106,39 @@ export default function InboxPage() {
   const open = openId ? messages.find((m) => m.id === openId) ?? null : null;
 
   useEffect(() => {
-    if (!open) { setBody(''); return; }
+    if (!open) { setBody({}); return; }
     let alive = true;
-    setBody('');
+    setBody({});
     setBodyLoading(true);
     fetchMessageBody(open.account, open.id).then((r) => {
       if (!alive) return;
-      setBody(r?.body || open.snippet);
+      setBody({ html: r?.html, text: r?.text || r?.body || open.snippet });
       setBodyLoading(false);
     });
     return () => { alive = false; };
   }, [open]);
+
+  // AI-drafted reply: ask the runtime, then open the composer pre-filled (still gated by Approvals).
+  const aiDraftReply = async (m: Msg) => {
+    const f = parseFrom(m.from);
+    setDrafting(true);
+    const text = body.text || m.snippet || '';
+    const draft = await draftReply({ account: m.account, from: m.from, subject: m.subject ?? '', body: text });
+    setDrafting(false);
+    setCompose({
+      mode: 'reply',
+      to: f.email,
+      subject: m.subject?.startsWith('Re:') ? m.subject : `Re: ${m.subject ?? ''}`,
+      body: draft ?? '',
+      account: m.account,
+    });
+    if (draft === null) window.setTimeout(() => alert('MARVIN couldn’t draft a reply — is the runtime running with an API key?'), 0);
+  };
+
+  const replyTo = (m: Msg) => {
+    const f = parseFrom(m.from);
+    setCompose({ mode: 'reply', to: f.email, subject: m.subject?.startsWith('Re:') ? m.subject : `Re: ${m.subject ?? ''}`, account: m.account });
+  };
 
   const switchFolder = (id: string) => { setFolder(id); setAcct('all'); setSplit('all'); setOpenId(null); };
 
@@ -196,7 +220,16 @@ export default function InboxPage() {
         <div className="flex flex-none flex-col border-r border-border-2" style={{ width: open ? 'clamp(300px, 38%, 360px)' : '100%' }}>
           <div className="flex h-[46px] flex-none items-center gap-[18px] border-b border-border-2 px-4 text-muted">
             <span className="h-[17px] w-[17px] rounded-[3px] border-2 border-border" />
-            <span className="cursor-default text-[15px]">⟳</span>
+            <button
+              type="button"
+              onClick={() => refresh()}
+              disabled={refreshing}
+              title="Refresh"
+              aria-label="Refresh"
+              className={`inline-block text-[15px] text-muted transition hover:text-text disabled:opacity-50 ${refreshing ? 'animate-spin' : ''}`}
+            >
+              ⟳
+            </button>
             <div className="flex-1" />
             <span className="text-[12px] text-muted">1–{rows.length} of {rows.length}</span>
           </div>
@@ -273,8 +306,9 @@ export default function InboxPage() {
           const mt = meta(open.account);
           return (
             <div className="flex min-w-0 flex-1 flex-col bg-surface">
-              <div className="flex-1 overflow-y-auto px-[26px] py-[22px]">
-                <div className="mb-[18px] flex items-start gap-3.5">
+              {/* Sticky header — subject, sender, and the action bar are always visible (no scrolling to reply). */}
+              <div className="flex-none border-b border-border-2 px-[26px] pb-3 pt-[18px]">
+                <div className="mb-[14px] flex items-start gap-3.5">
                   <h1 className="flex-1 text-[21px] font-semibold leading-[1.25] text-text" style={{ fontFamily: "var(--font-playfair), Georgia, serif" }}>{open.subject || '(no subject)'}</h1>
                   <span className="flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border px-[9px] py-[3px] text-[12px] text-text-2">
                     <span className="h-[7px] w-[7px] rounded-full" style={{ background: mt.color }} />
@@ -282,7 +316,7 @@ export default function InboxPage() {
                   </span>
                   <button type="button" onClick={() => setOpenId(null)} className="rounded-md px-1.5 text-muted hover:text-text">✕</button>
                 </div>
-                <div className="mb-5 flex items-center gap-3.5">
+                <div className="mb-3 flex items-center gap-3.5">
                   <span className="grid h-10 w-10 place-items-center rounded-full text-base font-semibold text-on-accent" style={{ background: mt.color }}>{f.initial}</span>
                   <div className="min-w-0 flex-1">
                     <div className="text-sm text-text"><span className="font-semibold">{f.name}</span> <span className="text-[12px] text-muted">&lt;{f.email}&gt;</span></div>
@@ -290,21 +324,27 @@ export default function InboxPage() {
                   </div>
                   <span className="text-[12px] text-muted">{fullTime(open.receivedAt)}</span>
                 </div>
-                <div className="whitespace-pre-line text-[14px] leading-[1.65] text-text">{bodyLoading ? <span className="text-muted">Loading…</span> : (body || open.snippet)}</div>
-                <a href={`https://mail.google.com/mail/u/0/#all/${open.id}`} target="_blank" rel="noreferrer" className="mt-2 inline-block text-[12.5px] font-medium text-accent hover:underline">Open the full email in Gmail →</a>
-
-                <div className="mt-6 flex flex-wrap items-center gap-2.5 rounded-xl border px-3.5 py-[11px]" style={{ borderColor: 'var(--accent-soft-border)', background: 'var(--accent-soft)' }}>
-                  <span className="grid h-5 w-5 flex-none place-items-center rounded-full text-[11px] font-bold text-on-accent" style={{ background: '#C0613A' }}>✦</span>
-                  <span className="text-[12px] font-bold text-text-2">MARVIN</span>
-                  <button type="button" onClick={() => setCompose({ mode: 'reply', to: f.email, subject: open.subject?.startsWith('Re:') ? open.subject : `Re: ${open.subject ?? ''}`, account: open.account })} className="rounded-lg border bg-surface px-3 py-1.5 text-[12px] font-semibold text-text-2 hover:bg-hover" style={{ borderColor: 'var(--accent-soft-border)' }}>Draft reply</button>
-                  <button type="button" onClick={() => addToTrello(open)} className="rounded-lg border bg-surface px-3 py-1.5 text-[12px] font-semibold text-text-2 hover:bg-hover" style={{ borderColor: 'var(--accent-soft-border)' }}>Add to Trello</button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button type="button" onClick={() => replyTo(open)} className="rounded-[18px] border border-border bg-surface px-4 py-1.5 text-[13px] font-medium text-text hover:bg-bg">↩ Reply</button>
+                  <button type="button" onClick={() => replyTo(open)} className="rounded-[18px] border border-border bg-surface px-4 py-1.5 text-[13px] font-medium text-text hover:bg-bg">Reply all</button>
+                  <button type="button" onClick={() => setCompose({ mode: 'new', subject: `Fwd: ${open.subject ?? ''}`, account: open.account })} className="rounded-[18px] border border-border bg-surface px-4 py-1.5 text-[13px] font-medium text-text hover:bg-bg">Forward</button>
+                  <button
+                    type="button"
+                    onClick={() => aiDraftReply(open)}
+                    disabled={drafting}
+                    className="flex items-center gap-1.5 rounded-[18px] px-4 py-1.5 text-[13px] font-semibold text-on-accent disabled:opacity-60"
+                    style={{ background: '#C0613A' }}
+                  >
+                    <span className="text-[12px]">✦</span> {drafting ? 'Drafting…' : 'AI draft reply'}
+                  </button>
+                  <button type="button" onClick={() => addToTrello(open)} className="ml-auto rounded-[18px] border border-border bg-surface px-4 py-1.5 text-[13px] font-medium text-text-2 hover:bg-bg">Add to Trello</button>
                 </div>
+              </div>
 
-                <div className="mt-5 flex flex-wrap gap-2.5">
-                  <button type="button" onClick={() => setCompose({ mode: 'reply', to: f.email, subject: open.subject?.startsWith('Re:') ? open.subject : `Re: ${open.subject ?? ''}`, account: open.account })} className="rounded-[20px] border border-border bg-surface px-5 py-2 text-[13.5px] font-medium text-text hover:bg-bg">Reply</button>
-                  <button type="button" onClick={() => setCompose({ mode: 'reply', to: f.email, subject: open.subject?.startsWith('Re:') ? open.subject : `Re: ${open.subject ?? ''}`, account: open.account })} className="rounded-[20px] border border-border bg-surface px-5 py-2 text-[13.5px] font-medium text-text hover:bg-bg">Reply all</button>
-                  <button type="button" onClick={() => setCompose({ mode: 'new', subject: `Fwd: ${open.subject ?? ''}`, account: open.account })} className="rounded-[20px] border border-border bg-surface px-5 py-2 text-[13.5px] font-medium text-text hover:bg-bg">Forward</button>
-                </div>
+              {/* Scrollable body — real HTML, rendered sandboxed and calm. */}
+              <div className="flex-1 overflow-y-auto px-[26px] py-[22px]">
+                <EmailBody html={body.html} text={body.text || open.snippet} loading={bodyLoading} />
+                <a href={`https://mail.google.com/mail/u/0/#all/${open.id}`} target="_blank" rel="noreferrer" className="mt-4 inline-block text-[12.5px] font-medium text-accent hover:underline">Open the full email in Gmail →</a>
               </div>
             </div>
           );
@@ -326,7 +366,7 @@ export default function InboxPage() {
       )}
 
       {compose && (
-        <ComposeModal open mode={compose.mode} initialTo={compose.to} initialSubject={compose.subject} account={compose.account} onClose={() => setCompose(null)} onQueued={() => { setQueued(true); window.setTimeout(() => setQueued(false), 3500); }} />
+        <ComposeModal open mode={compose.mode} initialTo={compose.to} initialSubject={compose.subject} initialBody={compose.body} account={compose.account} onClose={() => setCompose(null)} onQueued={() => { setQueued(true); window.setTimeout(() => setQueued(false), 3500); }} />
       )}
 
       {queued && (

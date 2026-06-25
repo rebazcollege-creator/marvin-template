@@ -40,6 +40,13 @@ export function dataAge(path: string): number {
   return e ? Date.now() - e.ts : Infinity;
 }
 
+/** Drop the cached + in-flight entry for one exact path, so the next fetch hits the
+ *  network. Used by the manual refresh button on each screen. */
+export function invalidate(path: string): void {
+  cache.delete(path);
+  inflight.delete(path);
+}
+
 /** Drop cached entries whose path starts with `prefix` (or all). Used on disconnect
  *  so a removed account's mail can't linger in the UI. */
 export function clearDataCache(prefix?: string): void {
@@ -87,9 +94,26 @@ export const fetchBriefingData = () => get<BriefingData>(PATHS.briefing);
 export const fetchInbox = () => get<InboxData>(PATHS.inbox);
 /** Per-folder inbox fetch (Inbox/Starred/Sent/Drafts/Spam/Trash). */
 export const fetchInboxFolder = (folder: string) => get<InboxData>(`${PATHS.inbox}?folder=${encodeURIComponent(folder)}`);
-/** Full body of one message, for the reading pane. */
+/** Full body of one message, for the reading pane (real HTML + plain-text fallback). */
 export const fetchMessageBody = (account: string, id: string) =>
-  get<{ ok: boolean; body?: string; error?: string }>(`/data/message?account=${encodeURIComponent(account)}&id=${encodeURIComponent(id)}`);
+  get<{ ok: boolean; html?: string; text?: string; body?: string; error?: string }>(
+    `/data/message?account=${encodeURIComponent(account)}&id=${encodeURIComponent(id)}`,
+  );
+/** Ask the runtime to draft a reply (Haiku). Returns the draft body text. POST, uncached. */
+export async function draftReply(p: { account: string; from: string; subject: string; body: string }): Promise<string | null> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/draft-reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    });
+    if (!resp.ok) return null;
+    const j = (await resp.json()) as { ok: boolean; draft?: string };
+    return j.ok ? j.draft ?? '' : null;
+  } catch {
+    return null;
+  }
+}
 export const fetchTrello = () => get<TrelloData>(PATHS.trello);
 export const fetchCalendar = () => get<CalendarData>(PATHS.calendar);
 export const fetchDrive = () => get<DriveData>(PATHS.drive);

@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { peekData } from '@/lib/marvin-data';
+import { useCallback, useEffect, useState } from 'react';
+import { invalidate, peekData } from '@/lib/marvin-data';
 
 /**
  * Stale-while-revalidate hook for sidecar data. Seeds from the in-memory cache so a
@@ -17,6 +17,7 @@ export type LiveDataState = 'loading' | 'loaded' | 'offline';
 export function useLiveData<T>(path: string, fetcher: () => Promise<T | null>) {
   const [data, setData] = useState<T | null>(() => peekData<T>(path));
   const [state, setState] = useState<LiveDataState>(() => (peekData<T>(path) ? 'loaded' : 'loading'));
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -35,5 +36,19 @@ export function useLiveData<T>(path: string, fetcher: () => Promise<T | null>) {
     };
   }, [path, fetcher]);
 
-  return { data, state, setData };
+  /** Manual refresh: bust the cache for this path and re-fetch, keeping current data on screen. */
+  const refresh = useCallback(async () => {
+    setRefreshing(true);
+    invalidate(path);
+    const d = await fetcher();
+    if (d) {
+      setData(d);
+      setState('loaded');
+    } else {
+      setState((s) => (s === 'loaded' ? 'loaded' : 'offline'));
+    }
+    setRefreshing(false);
+  }, [path, fetcher]);
+
+  return { data, state, setData, refresh, refreshing };
 }

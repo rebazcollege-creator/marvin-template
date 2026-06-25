@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { fetchBuffer, PATHS } from '@/lib/marvin-data';
 import { useLiveData } from '@/lib/use-live-data';
+import { RefreshButton } from '@/components/ui/RefreshButton';
 import type { BufferData } from '@/lib/marvin-protocol';
 import { Modal } from '@/components/ui/Modal';
 import { enqueueApproval } from '@/lib/approvals';
@@ -10,7 +11,7 @@ import { enqueueApproval } from '@/lib/approvals';
 const PLATFORMS = ['Instagram', 'TikTok', 'LinkedIn', 'X', 'Threads', 'Facebook'];
 
 export default function BufferPage() {
-  const { data, state } = useLiveData<BufferData>(PATHS.buffer, fetchBuffer);
+  const { data, state, refresh, refreshing } = useLiveData<BufferData>(PATHS.buffer, fetchBuffer);
   const [creating, setCreating] = useState(false);
   const [queued, setQueued] = useState(false);
   const [platform, setPlatform] = useState(PLATFORMS[0]);
@@ -42,6 +43,7 @@ export default function BufferPage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[11.5px] text-muted">{badge}</span>
+          <RefreshButton onClick={refresh} refreshing={refreshing} />
           <button type="button" onClick={() => setCreating(true)} className="rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">New post</button>
         </div>
       </div>

@@ -3,12 +3,13 @@
 import { useMemo, useState } from 'react';
 import { fetchSlack, PATHS } from '@/lib/marvin-data';
 import { useLiveData } from '@/lib/use-live-data';
+import { RefreshButton } from '@/components/ui/RefreshButton';
 import type { SlackData } from '@/lib/marvin-protocol';
 import { Modal } from '@/components/ui/Modal';
 import { enqueueApproval } from '@/lib/approvals';
 
 export default function SlackPage() {
-  const { data, state } = useLiveData<SlackData>(PATHS.slack, fetchSlack);
+  const { data, state, refresh, refreshing } = useLiveData<SlackData>(PATHS.slack, fetchSlack);
   const [active, setActive] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [queued, setQueued] = useState(false);
@@ -46,6 +47,7 @@ export default function SlackPage() {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[11.5px] text-muted">{badge}</span>
+          <RefreshButton onClick={refresh} refreshing={refreshing} />
           <button type="button" onClick={() => { setComposing(true); setChannel(current ? `#${current}` : ''); }} className="rounded-[10px] bg-accent px-3.5 py-2 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">New message</button>
         </div>
       </div>

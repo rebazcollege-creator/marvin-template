@@ -91,7 +91,21 @@ export interface CalendarData {
 }
 export interface SlackData {
   connected: boolean;
-  messages: { workspace: string; channel: string; user: string; text: string; ts: string; emergency: boolean }[];
+  error?: string;
+  /** Workspaces the runtime can see (a bot token is present), in display order. */
+  workspaces: { role: string; name: string; avBg: string }[];
+  /** Channels the bot is a member of, across all connected workspaces. */
+  channels: { workspace: string; id: string; name: string; topic?: string }[];
+  messages: {
+    workspace: string;
+    channel: string;
+    user: string;
+    text: string;
+    ts: string;
+    emergency: boolean;
+    reactions?: { emoji: string; count: number }[];
+    replies?: number;
+  }[];
 }
 export interface BufferData {
   connected: boolean;
@@ -116,7 +130,7 @@ export interface GithubData {
 export type ActPayload =
   | { kind: 'email'; to: string; subject: string; body: string; account?: string }
   | { kind: 'calendar'; title: string; start?: string; end?: string }
-  | { kind: 'slack'; channel: string; text: string }
+  | { kind: 'slack'; channel: string; text: string; workspace?: string }
   | { kind: 'social'; platform: string; caption: string }
   | { kind: 'task'; name: string; list?: string; due?: string };
 

@@ -96,9 +96,18 @@ export function ConnectFlow({
     } else {
       await new Promise((r) => window.setTimeout(r, 500));
     }
-    const accounts = method.multiAccount
-      ? Array.from(new Set([...(state?.accounts ?? []), account].filter(Boolean)))
-      : undefined;
+    let accounts: string[] | undefined;
+    if (method.multiAccount) {
+      if (method.kind === 'form') {
+        // Record each workspace/account whose token was just provided (label before " — ").
+        const filled = (method.fields ?? [])
+          .filter((f) => (values[f.key] ?? '').trim().length > 0)
+          .map((f) => (f.label.split(' — ')[0] ?? f.label).trim());
+        accounts = Array.from(new Set([...(state?.accounts ?? []), ...filled]));
+      } else {
+        accounts = Array.from(new Set([...(state?.accounts ?? []), account].filter(Boolean)));
+      }
+    }
     onComplete({
       connected: true,
       method: method.id,
@@ -145,10 +154,15 @@ export function ConnectFlow({
     }
   };
 
+  const formFields = method?.fields ?? [];
+  const formOk =
+    method?.requireAllFields === false
+      ? formFields.some((f) => (values[f.key] ?? '').trim().length > 0)
+      : formFields.every((f) => (values[f.key] ?? '').trim().length > 0);
   const canFinish =
     (method?.kind === 'oauth'
       ? (!method.multiAccount || account.trim().length > 0) && scopes.length > 0
-      : (method?.fields ?? []).every((f) => (values[f.key] ?? '').trim().length > 0)) &&
+      : formOk) &&
     !gmailNeedsAccount;
 
   const title =

@@ -22,7 +22,7 @@ const REQUIRED: Record<string, string[]> = {
   gmail: ['GMAIL_CLIENT_ID_1', 'GMAIL_CLIENT_SECRET_1', 'GMAIL_REFRESH_TOKEN_1'],
   gcal: ['GOOGLE_CALENDAR_CLIENT_ID', 'GOOGLE_CALENDAR_CLIENT_SECRET', 'GOOGLE_CALENDAR_REFRESH_TOKEN'],
   drive: ['GOOGLE_DRIVE_CLIENT_ID', 'GOOGLE_DRIVE_CLIENT_SECRET', 'GOOGLE_DRIVE_REFRESH_TOKEN'],
-  slack: ['SLACK_AMARGI_BOT_TOKEN'],
+  slack: ['SLACK_AMARGI_BOT_TOKEN', 'SLACK_LEADSTORIES_BOT_TOKEN'],
   trello: ['TRELLO_API_KEY', 'TRELLO_TOKEN', 'TRELLO_BOARD_ID'],
   buffer: ['BUFFER_ACCESS_TOKEN'],
   github: ['GITHUB_TOKEN'],
@@ -85,7 +85,9 @@ export default function ConnectionsPage() {
     void refreshCreds();
   }, []);
 
-  const credsReadyFor = (id: string) => (REQUIRED[id]?.every((k) => creds[k]) ?? false);
+  // Slack is multi-workspace: either token counts as connected. Others need all keys.
+  const credsReadyFor = (id: string) =>
+    id === 'slack' ? (REQUIRED.slack?.some((k) => creds[k]) ?? false) : (REQUIRED[id]?.every((k) => creds[k]) ?? false);
 
   const active = activeId ? CONNECTIONS.find((c) => c.id === activeId) ?? null : null;
 

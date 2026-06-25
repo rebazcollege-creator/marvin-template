@@ -170,7 +170,7 @@ export async function fetchMessageBody(account: string, id: string): Promise<Mes
   return req;
 }
 /** Ask the runtime to draft a reply (Haiku). Returns the draft body text. POST, uncached. */
-export async function draftReply(p: { account: string; from: string; subject: string; body: string }): Promise<string | null> {
+export async function draftReply(p: { account: string; from: string; subject: string; body: string; medium?: 'email' | 'slack' }): Promise<string | null> {
   try {
     const resp = await fetch(`${SIDECAR_URL}/draft-reply`, {
       method: 'POST',
@@ -180,6 +180,22 @@ export async function draftReply(p: { account: string; from: string; subject: st
     if (!resp.ok) return null;
     const j = (await resp.json()) as { ok: boolean; draft?: string };
     return j.ok ? j.draft ?? '' : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ask the runtime to summarise a Slack channel/thread (Haiku). POST, uncached. */
+export async function summarizeThread(p: { title: string; text: string }): Promise<string | null> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/summarize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    });
+    if (!resp.ok) return null;
+    const j = (await resp.json()) as { ok: boolean; summary?: string };
+    return j.ok ? j.summary ?? '' : null;
   } catch {
     return null;
   }

@@ -31,6 +31,9 @@ export type ConnectMethod = {
   kind: 'oauth' | 'form';
   recommended?: boolean;
   multiAccount?: boolean;
+  /** Form-only: when false, the user may fill just some fields (e.g. connect one of
+   *  several optional workspace tokens). Defaults to true (all fields required). */
+  requireAllFields?: boolean;
   scopes?: ConnectScope[];
   fields?: ConnectField[];
   /** Where the runtime reads the real credentials. */
@@ -100,15 +103,20 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
   slack: [
     {
       id: 'token',
-      label: 'Bot token (full scopes)',
+      label: 'Bot tokens (per workspace)',
       blurb:
-        'Create a Slack app, add the broadest bot scopes (channels/groups/im/mpim: read+history, chat:write, users:read, files:read, reactions, search), install it, and paste the Bot User OAuth Token. (Slack requires HTTPS redirects, so a local one-click sign-in isn’t possible — the token is the way.)',
+        'Slack needs an HTTPS redirect, so a local one-click sign-in isn’t possible — connect each workspace with its Bot User OAuth Token. For each: create a Slack app, add the broadest bot scopes (channels/groups: read+history, chat:write, users:read, reactions:read), install it, then paste the xoxb- token. Connect either workspace or both — channels are discovered automatically.',
       kind: 'form',
       recommended: true,
-      envHint: 'SLACK_AMARGI_BOT_TOKEN',
+      requireAllFields: false,
+      multiAccount: true,
+      envHint: 'SLACK_AMARGI_BOT_TOKEN / SLACK_LEADSTORIES_BOT_TOKEN',
       docsLabel: 'Slack API · Your apps',
       docsUrl: 'https://api.slack.com/apps',
-      fields: [{ key: 'botToken', label: 'Bot User OAuth Token', type: 'password', placeholder: 'xoxb-…', envKey: 'SLACK_AMARGI_BOT_TOKEN' }],
+      fields: [
+        { key: 'amargi', label: 'The Amargi — Bot User OAuth Token', type: 'password', placeholder: 'xoxb-…', envKey: 'SLACK_AMARGI_BOT_TOKEN' },
+        { key: 'leadstories', label: 'LeadStories — Bot User OAuth Token', type: 'password', placeholder: 'xoxb-…', envKey: 'SLACK_LEADSTORIES_BOT_TOKEN' },
+      ],
     },
   ],
   trello: [
@@ -185,7 +193,7 @@ export function credKeysFor(id: string): string[] {
     case 'drive':
       return ['GOOGLE_DRIVE_CLIENT_ID', 'GOOGLE_DRIVE_CLIENT_SECRET', 'GOOGLE_DRIVE_REFRESH_TOKEN'];
     case 'slack':
-      return ['SLACK_AMARGI_BOT_TOKEN'];
+      return ['SLACK_AMARGI_BOT_TOKEN', 'SLACK_LEADSTORIES_BOT_TOKEN'];
     case 'trello':
       return ['TRELLO_API_KEY', 'TRELLO_TOKEN', 'TRELLO_BOARD_ID'];
     case 'buffer':

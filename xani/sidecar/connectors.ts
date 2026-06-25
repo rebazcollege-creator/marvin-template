@@ -34,11 +34,6 @@ const GMAIL_ACCOUNTS = [
   { role: 'amargi', n: 5 },
 ] as const;
 
-const AMARGI_CHANNELS = [
-  { id: 'C0HRYE891', name: 'general' },
-  { id: 'C052Z75EY73', name: 'tt-arabic' },
-];
-
 async function googleAccessToken(clientId: string, clientSecret: string, refreshToken: string): Promise<string | null> {
   return (await googleToken(clientId, clientSecret, refreshToken)).token ?? null;
 }
@@ -439,31 +434,89 @@ export async function getDrive(): Promise<DriveData> {
   }
 }
 
-// ── Slack (read-only) ─────────────────────────────────────────────
+// ── Slack ─────────────────────────────────────────────────────────
+// Multi-workspace, each with its own bot token. Channels are auto-discovered
+// (no hardcoded IDs): we list the channels the bot is a member of and pull recent
+// history. Display names + reactions come straight from Slack — never mocked.
+
+const SLACK_WORKSPACES = [
+  { role: 'amargi', name: 'The Amargi', env: 'SLACK_AMARGI_BOT_TOKEN', avBg: '#C0613A' },
+  { role: 'leadstories', name: 'LeadStories', env: 'SLACK_LEADSTORIES_BOT_TOKEN', avBg: '#6E8B6A' },
+];
+
+const slackWorkspaceToken = (role: string) => {
+  const ws = SLACK_WORKSPACES.find((w) => w.role === role);
+  return ws ? process.env[ws.env] : undefined;
+};
+
+const EMERGENCY_RE = /\b(emergency|urgent|asap|breaking|trend drop)\b/i;
+const MAX_SLACK_CHANNELS = 12;
+const SLACK_HISTORY_LIMIT = 15;
 
 export async function getSlack(): Promise<SlackData> {
-  const token = process.env.SLACK_AMARGI_BOT_TOKEN;
-  if (!token) return { connected: false, messages: [] };
-  const client = new WebClient(token);
-  // Channels in parallel instead of one at a time.
-  const per = await Promise.all(
-    AMARGI_CHANNELS.map(async (ch) => {
+  const active = SLACK_WORKSPACES.filter((w) => process.env[w.env]);
+  const workspaces = active.map((w) => ({ role: w.role, name: w.name, avBg: w.avBg }));
+  if (active.length === 0) return { connected: false, workspaces: [], channels: [], messages: [] };
+
+  const channels: SlackData['channels'] = [];
+  const messages: SlackData['messages'] = [];
+  const errs: string[] = [];
+
+  await Promise.all(
+    active.map(async (w) => {
+      const client = new WebClient(process.env[w.env]);
       try {
-        const res = await client.conversations.history({ channel: ch.id, limit: 8 });
-        return (res.messages ?? []).map((m) => ({
-          workspace: 'amargi',
-          channel: ch.name,
-          user: m.user ?? '',
-          text: m.text ?? '',
-          ts: m.ts ?? '',
-          emergency: false,
-        }));
-      } catch {
-        return [] as SlackData['messages'];
+        // Display-name map (one call) so messages show people, not Uxxxx ids.
+        const names = new Map<string, string>();
+        try {
+          const ul = await client.users.list({ limit: 200 });
+          for (const u of ul.members ?? []) {
+            if (u.id) names.set(u.id, u.profile?.display_name || u.real_name || u.name || u.id);
+          }
+        } catch {
+          /* users:read may be absent — fall back to ids */
+        }
+
+        const list = await client.conversations.list({
+          types: 'public_channel,private_channel',
+          exclude_archived: true,
+          limit: 200,
+        });
+        const member = (list.channels ?? []).filter((c) => c.is_member).slice(0, MAX_SLACK_CHANNELS);
+        await Promise.all(
+          member.map(async (ch) => {
+            if (!ch.id || !ch.name) return;
+            channels.push({ workspace: w.role, id: ch.id, name: ch.name, topic: ch.topic?.value || undefined });
+            try {
+              const hist = await client.conversations.history({ channel: ch.id, limit: SLACK_HISTORY_LIMIT });
+              for (const m of (hist.messages ?? []).slice().reverse()) {
+                if (m.subtype) continue; // skip joins/bot system messages
+                const text = m.text ?? '';
+                messages.push({
+                  workspace: w.role,
+                  channel: ch.name!,
+                  user: (m.user && names.get(m.user)) || m.user || m.username || 'unknown',
+                  text,
+                  ts: m.ts ?? '',
+                  emergency: EMERGENCY_RE.test(text),
+                  reactions: (m.reactions ?? []).map((r) => ({ emoji: r.name ?? '', count: r.count ?? 0 })),
+                  replies: m.reply_count || undefined,
+                });
+              }
+            } catch {
+              /* not_in_channel / missing scope — skip this channel */
+            }
+          }),
+        );
+      } catch (e) {
+        errs.push(`${w.name}: ${(e as Error).message}`);
       }
     }),
   );
-  return { connected: true, messages: per.flat() };
+
+  channels.sort((a, b) => a.name.localeCompare(b.name));
+  const error = messages.length === 0 && errs.length ? errs[0] : undefined;
+  return { connected: true, workspaces, channels, messages, error };
 }
 
 // ── Trello (REST: API key + token + board) ────────────────────────
@@ -593,13 +646,23 @@ async function createCalendarEvent(p: { title: string; start?: string; end?: str
   }
 }
 
-async function postSlack(p: { channel: string; text: string }): Promise<ActResult> {
-  const token = process.env.SLACK_AMARGI_BOT_TOKEN;
-  if (!token) return { ok: false, note: 'Slack not connected — add SLACK_AMARGI_BOT_TOKEN.' };
+async function postSlack(p: { channel: string; text: string; workspace?: string }): Promise<ActResult> {
+  // Default to the first connected workspace if none specified.
+  const role = p.workspace ?? SLACK_WORKSPACES.find((w) => process.env[w.env])?.role;
+  const token = role ? slackWorkspaceToken(role) : undefined;
+  if (!token) return { ok: false, note: 'Slack not connected — add a workspace bot token on Connections.' };
   try {
     const client = new WebClient(token);
     const name = p.channel.replace(/^#/, '');
-    const ch = AMARGI_CHANNELS.find((c) => c.name === name)?.id ?? name;
+    // Resolve the channel name to an ID within this workspace (postMessage prefers IDs).
+    let ch = name;
+    try {
+      const list = await client.conversations.list({ types: 'public_channel,private_channel', exclude_archived: true, limit: 200 });
+      const found = (list.channels ?? []).find((c) => c.name === name);
+      if (found?.id) ch = found.id;
+    } catch {
+      /* fall back to the raw name */
+    }
     const res = await client.chat.postMessage({ channel: ch, text: p.text });
     return res.ok ? { ok: true, id: res.ts } : { ok: false, error: 'Slack post failed.' };
   } catch (e) {

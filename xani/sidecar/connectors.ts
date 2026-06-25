@@ -70,26 +70,25 @@ function gmailCreds(n: number): { id: string; secret: string; refresh: string } 
 // ── Gmail ─────────────────────────────────────────────────────────
 
 async function gmailUnreadCounts(): Promise<{ connected: boolean; accounts: { account: string; unread: number }[] }> {
-  const accounts: { account: string; unread: number }[] = [];
-  let any = false;
-  for (const a of GMAIL_ACCOUNTS) {
-    const c = gmailCreds(a.n);
-    if (!c) continue;
-    any = true;
-    const token = await googleAccessToken(c.id, c.secret, c.refresh);
-    if (!token) continue;
-    try {
-      const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!r.ok) continue;
-      const j = (await r.json()) as { messagesUnread?: number };
-      accounts.push({ account: a.role, unread: j.messagesUnread ?? 0 });
-    } catch {
-      /* skip */
-    }
-  }
-  return { connected: any, accounts };
+  const connected = GMAIL_ACCOUNTS.map((a) => ({ a, c: gmailCreds(a.n) })).filter((x) => x.c);
+  // All accounts in parallel — previously sequential (token + fetch per account).
+  const results = await Promise.all(
+    connected.map(async ({ a, c }) => {
+      const token = await googleAccessToken(c!.id, c!.secret, c!.refresh);
+      if (!token) return null;
+      try {
+        const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!r.ok) return null;
+        const j = (await r.json()) as { messagesUnread?: number };
+        return { account: a.role, unread: j.messagesUnread ?? 0 };
+      } catch {
+        return null;
+      }
+    }),
+  );
+  return { connected: connected.length > 0, accounts: results.filter((x): x is { account: string; unread: number } => x != null) };
 }
 
 /** Gmail search query per Gmail-clone folder. */
@@ -361,25 +360,25 @@ export async function getSlack(): Promise<SlackData> {
   const token = process.env.SLACK_AMARGI_BOT_TOKEN;
   if (!token) return { connected: false, messages: [] };
   const client = new WebClient(token);
-  const out: SlackData['messages'] = [];
-  for (const ch of AMARGI_CHANNELS) {
-    try {
-      const res = await client.conversations.history({ channel: ch.id, limit: 8 });
-      for (const m of res.messages ?? []) {
-        out.push({
+  // Channels in parallel instead of one at a time.
+  const per = await Promise.all(
+    AMARGI_CHANNELS.map(async (ch) => {
+      try {
+        const res = await client.conversations.history({ channel: ch.id, limit: 8 });
+        return (res.messages ?? []).map((m) => ({
           workspace: 'amargi',
           channel: ch.name,
           user: m.user ?? '',
           text: m.text ?? '',
           ts: m.ts ?? '',
           emergency: false,
-        });
+        }));
+      } catch {
+        return [] as SlackData['messages'];
       }
-    } catch {
-      /* skip channel */
-    }
-  }
-  return { connected: true, messages: out };
+    }),
+  );
+  return { connected: true, messages: per.flat() };
 }
 
 // ── Trello (REST: API key + token + board) ────────────────────────

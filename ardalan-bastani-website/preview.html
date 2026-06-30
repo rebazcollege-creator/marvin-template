@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ardalan Bastani — Kurdish Writer &amp; Theatre-Maker</title>
+  <meta name="description" content="Official site of Ardalan Bastani — Kurdish writer, playwright and theatre-maker from Bukan, Iranian Kurdistan, based in Berlin. Author, journalist and stage artist." />
+  <meta name="author" content="Ardalan Bastani" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="profile" />
+  <meta property="og:title" content="Ardalan Bastani — Kurdish Writer &amp; Theatre-Maker" />
+  <meta property="og:description" content="Kurdish writer, playwright and theatre-maker from Bukan, based in Berlin." />
+  <meta property="og:image" content="assets/img/portrait.jpg" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+/* ============================================================
+   Ardalan Bastani — personal site
+   Theatre-inspired dark palette, warm amber accent
+   ============================================================ */
+
+:root {
+  --bg:        #0e0d10;
+  --bg-2:      #151318;
+  --bg-3:      #1c1920;
+  --ink:       #f4efe7;
+  --ink-soft:  #b8b0a6;
+  --ink-dim:   #837b72;
+  --line:      #2c2730;
+  --gold:      #d8a657;
+  --gold-soft: #e9c587;
+  --rust:      #c2603e;
+  --maxw:      1140px;
+  --serif: "Cormorant Garamond", Georgia, serif;
+  --sans:  "Inter", system-ui, sans-serif;
+  --arab:  "Noto Naskh Arabic", "Cormorant Garamond", serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-weight: 300;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* RTL mode for Kurdish */
+html[dir="rtl"] body { font-family: var(--arab); }
+html[dir="rtl"] .hero__name,
+html[dir="rtl"] .section__title,
+html[dir="rtl"] .book__title,
+html[dir="rtl"] .timeline__title { font-family: var(--arab); }
+html[dir="rtl"] .nav__links { flex-direction: row-reverse; }
+
+a { color: inherit; text-decoration: none; }
+img { max-width: 100%; display: block; }
+
+/* ---------- Navigation ---------- */
+.nav {
+  position: sticky; top: 0; z-index: 50;
+  background: rgba(14,13,16,.82);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+}
+.nav__inner {
+  max-width: var(--maxw); margin: 0 auto; padding: 0 24px;
+  height: 70px; display: flex; align-items: center; gap: 28px;
+}
+.nav__brand {
+  font-family: var(--serif); font-size: 1.45rem; font-weight: 600;
+  letter-spacing: .3px; color: var(--ink);
+}
+.nav__links { display: flex; gap: 26px; margin-inline-start: auto; }
+.nav__links a {
+  font-size: .82rem; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-soft); transition: color .25s;
+}
+.nav__links a:hover { color: var(--gold); }
+
+.lang { display: flex; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.lang__btn {
+  background: none; border: 0; cursor: pointer; color: var(--ink-dim);
+  font-family: inherit; font-size: .76rem; letter-spacing: .08em;
+  padding: 5px 11px; border-radius: 999px; transition: all .2s;
+}
+.lang__btn:hover { color: var(--ink); }
+.lang__btn.is-active { background: var(--gold); color: #1a1206; font-weight: 500; }
+
+.nav__toggle { display: none; flex-direction: column; gap: 5px; background: none; border: 0; cursor: pointer; padding: 6px; }
+.nav__toggle span { width: 24px; height: 2px; background: var(--ink); transition: .3s; }
+
+/* ---------- Hero ---------- */
+.hero {
+  max-width: var(--maxw); margin: 0 auto; padding: 72px 24px 90px;
+  display: grid; grid-template-columns: 0.85fr 1.15fr; gap: 60px; align-items: center;
+}
+.hero__photo-frame {
+  aspect-ratio: 4 / 5; border-radius: 6px;
+  background-size: cover; background-position: center top;
+  background-color: var(--bg-3);
+  background-image:
+    linear-gradient(150deg, rgba(216,166,87,.12), rgba(194,96,62,.10)),
+    radial-gradient(circle at 30% 25%, rgba(216,166,87,.18), transparent 55%);
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 70px -30px rgba(0,0,0,.8);
+  position: relative;
+}
+.hero__photo-frame::after {
+  content: "";
+  position: absolute; inset: 0; border-radius: 6px;
+  box-shadow: inset 0 0 0 1px rgba(244,239,231,.04);
+  pointer-events: none;
+}
+.hero__eyebrow {
+  color: var(--gold); font-size: .8rem; letter-spacing: .28em;
+  text-transform: uppercase; margin-bottom: 18px;
+}
+.hero__name {
+  font-family: var(--serif); font-weight: 600; line-height: 1;
+  font-size: clamp(3rem, 7vw, 5.4rem); letter-spacing: -.5px;
+}
+.hero__name-alt {
+  font-family: var(--arab); color: var(--ink-soft);
+  font-size: clamp(1.4rem, 3vw, 2.1rem); margin-top: 6px;
+}
+.hero__lead {
+  margin-top: 26px; max-width: 50ch; color: var(--ink-soft);
+  font-size: 1.12rem; line-height: 1.75;
+}
+.hero__cta { margin-top: 34px; display: flex; gap: 14px; flex-wrap: wrap; }
+
+.btn {
+  font-size: .82rem; letter-spacing: .12em; text-transform: uppercase;
+  padding: 14px 26px; border-radius: 2px; transition: all .25s; border: 1px solid transparent;
+}
+.btn--solid { background: var(--gold); color: #1a1206; font-weight: 500; }
+.btn--solid:hover { background: var(--gold-soft); transform: translateY(-2px); }
+.btn--ghost { border-color: var(--line); color: var(--ink-soft); }
+.btn--ghost:hover { border-color: var(--gold); color: var(--gold); }
+
+/* ---------- Sections ---------- */
+.section {
+  max-width: var(--maxw); margin: 0 auto; padding: 90px 24px;
+  border-top: 1px solid var(--line);
+}
+.section--alt { background: var(--bg-2); max-width: none; }
+.section--alt > * { max-width: var(--maxw); margin-inline: auto; }
+.section__head { max-width: 760px; margin-bottom: 52px; }
+.section__kicker {
+  display: inline-block; color: var(--gold); font-size: .78rem;
+  letter-spacing: .26em; text-transform: uppercase; margin-bottom: 16px;
+}
+.section__title {
+  font-family: var(--serif); font-weight: 600;
+  font-size: clamp(2rem, 4.4vw, 3.1rem); line-height: 1.08; letter-spacing: -.3px;
+}
+.section__intro { margin-top: 20px; color: var(--ink-soft); font-size: 1.08rem; max-width: 62ch; }
+
+/* ---------- About ---------- */
+.about { display: grid; grid-template-columns: 1.6fr 1fr; gap: 56px; align-items: start; }
+.about__body p { margin-bottom: 20px; color: var(--ink-soft); font-size: 1.1rem; }
+.about__body strong { color: var(--ink); font-weight: 500; }
+.about__facts {
+  background: var(--bg-3); border: 1px solid var(--line);
+  border-radius: 6px; padding: 28px 30px;
+}
+.about__facts dl div { padding: 14px 0; border-bottom: 1px solid var(--line); }
+.about__facts dl div:last-child { border-bottom: 0; }
+.about__facts dt {
+  color: var(--gold); font-size: .72rem; letter-spacing: .2em;
+  text-transform: uppercase; margin-bottom: 6px;
+}
+.about__facts dd { color: var(--ink); font-size: 1rem; }
+
+/* ---------- Books ---------- */
+.books { display: grid; grid-template-columns: repeat(2, 1fr); gap: 40px; }
+.book {
+  display: grid; grid-template-columns: 150px 1fr; gap: 28px; align-items: start;
+}
+.book__cover {
+  aspect-ratio: 2 / 3; border-radius: 4px; background-size: cover; background-position: center;
+  background-color: var(--bg-3);
+  background-image: linear-gradient(160deg, #3a2f23, #221b16);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 40px -22px rgba(0,0,0,.9);
+  display: flex; align-items: flex-end; justify-content: center; padding-bottom: 16px;
+}
+.book__cover-fallback {
+  color: var(--ink-dim); font-size: .68rem; letter-spacing: .2em; text-transform: uppercase;
+}
+.book__title { font-family: var(--serif); font-size: 1.9rem; font-weight: 600; line-height: 1.1; }
+.book__title-alt { font-family: var(--arab); color: var(--ink-soft); font-size: 1.4rem; margin-top: 2px; }
+.book__pub { color: var(--gold); font-size: .8rem; letter-spacing: .1em; text-transform: uppercase; margin: 10px 0 14px; }
+.book__desc { color: var(--ink-soft); font-size: 1rem; }
+
+/* ---------- Timeline ---------- */
+.timeline { list-style: none; display: grid; gap: 34px; max-width: 820px; }
+.timeline__item {
+  position: relative; padding-inline-start: 30px;
+  border-inline-start: 1px solid var(--line);
+}
+.timeline__item::before {
+  content: ""; position: absolute; inset-inline-start: -6px; top: 6px;
+  width: 11px; height: 11px; border-radius: 50%;
+  background: var(--gold); box-shadow: 0 0 0 4px var(--bg);
+}
+.timeline__title { font-family: var(--serif); font-size: 1.6rem; font-weight: 600; }
+.timeline__role { color: var(--gold); font-size: .82rem; letter-spacing: .08em; margin: 4px 0 10px; }
+.timeline__desc { color: var(--ink-soft); }
+
+/* ---------- Cards ---------- */
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 26px; }
+.card {
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 6px;
+  padding: 30px 28px; transition: border-color .3s, transform .3s;
+}
+.card:hover { border-color: var(--gold); transform: translateY(-4px); }
+.card__title { font-family: var(--serif); font-size: 1.45rem; font-weight: 600; margin-bottom: 12px; }
+.card__desc { color: var(--ink-soft); font-size: 1rem; }
+.card em { color: var(--gold-soft); font-style: italic; }
+
+/* ---------- Connect ---------- */
+.section--connect { text-align: center; }
+.section--connect .section__head { margin-inline: auto; }
+.connect { display: flex; justify-content: center; gap: 22px; flex-wrap: wrap; }
+.connect__link {
+  background: var(--bg-3); border: 1px solid var(--line); border-radius: 8px;
+  padding: 30px 36px; min-width: 220px; transition: all .3s;
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+}
+.connect__link:hover { border-color: var(--gold); transform: translateY(-4px); }
+.connect__icon { font-size: 1.8rem; color: var(--gold); }
+.connect__label { font-size: .76rem; letter-spacing: .2em; text-transform: uppercase; color: var(--ink-dim); }
+.connect__handle { font-family: var(--serif); font-size: 1.3rem; color: var(--ink); }
+
+/* ---------- Footer ---------- */
+.footer { text-align: center; padding: 56px 24px; border-top: 1px solid var(--line); background: var(--bg-2); }
+.footer__name { font-family: var(--serif); font-size: 1.5rem; }
+.footer__line { color: var(--ink-soft); margin: 8px 0; font-size: .95rem; }
+.footer__copy { color: var(--ink-dim); font-size: .82rem; margin-top: 12px; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 880px) {
+  .hero { grid-template-columns: 1fr; padding-top: 48px; gap: 36px; }
+  .hero__photo { max-width: 320px; }
+  .about, .books, .cards { grid-template-columns: 1fr; }
+  .books { gap: 34px; }
+  .nav__links {
+    position: fixed; inset: 70px 0 auto 0; flex-direction: column; gap: 0;
+    background: var(--bg-2); border-bottom: 1px solid var(--line);
+    padding: 8px 24px; transform: translateY(-130%); transition: transform .3s; margin: 0;
+  }
+  .nav__links.is-open { transform: translateY(0); }
+  .nav__links a { padding: 14px 0; border-bottom: 1px solid var(--line); }
+  .nav__toggle { display: flex; margin-inline-start: auto; }
+  .lang { order: 3; }
+}
+@media (max-width: 520px) {
+  .book { grid-template-columns: 110px 1fr; gap: 18px; }
+  .connect__link { min-width: 100%; }
+}
+
+</style>
+</head>
+<body>
+
+  <!-- ===== Navigation ===== -->
+  <header class="nav" id="top">
+    <div class="nav__inner">
+      <a class="nav__brand" href="#top" data-i18n="brand">Ardalan Bastani</a>
+
+      <nav class="nav__links" aria-label="Primary">
+        <a href="#about" data-i18n="nav_about">About</a>
+        <a href="#books" data-i18n="nav_books">Books</a>
+        <a href="#theatre" data-i18n="nav_theatre">Theatre</a>
+        <a href="#writing" data-i18n="nav_writing">Writing</a>
+        <a href="#connect" data-i18n="nav_connect">Connect</a>
+      </nav>
+
+      <div class="lang" role="group" aria-label="Language">
+        <button class="lang__btn is-active" data-lang="en">EN</button>
+        <button class="lang__btn" data-lang="de">DE</button>
+        <button class="lang__btn" data-lang="ku">کوردی</button>
+      </div>
+
+      <button class="nav__toggle" aria-label="Menu" id="navToggle">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ===== Hero ===== -->
+  <section class="hero">
+    <div class="hero__photo" aria-hidden="true">
+      <div class="hero__photo-frame" style="background-image:url('assets/img/portrait.jpg')"></div>
+    </div>
+    <div class="hero__content">
+      <p class="hero__eyebrow" data-i18n="hero_eyebrow">Writer · Playwright · Theatre-Maker</p>
+      <h1 class="hero__name">Ardalan Bastani</h1>
+      <p class="hero__name-alt" lang="ckb" dir="rtl">ئەردەلان باستانی</p>
+      <p class="hero__lead" data-i18n="hero_lead">
+        A Kurdish writer and stage artist from Bukan in Iranian Kurdistan, living and working in Berlin —
+        moving between the page and the stage, between Kurdish, Persian and German.
+      </p>
+      <div class="hero__cta">
+        <a class="btn btn--solid" href="#books" data-i18n="hero_cta_books">Explore the books</a>
+        <a class="btn btn--ghost" href="#connect" data-i18n="hero_cta_connect">Get in touch</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== About ===== -->
+  <section class="section" id="about">
+    <div class="section__head">
+      <span class="section__kicker" data-i18n="about_kicker">Biography</span>
+      <h2 class="section__title" data-i18n="about_title">Between the page and the stage</h2>
+    </div>
+    <div class="about">
+      <div class="about__body">
+        <p data-i18n="about_p1">
+          Ardalan Bastani is a Kurdish writer, playwright and theatre-maker from <strong>Bukan</strong>,
+          a city in the Kurdistan region of Iran (Rojhelat). His work grows out of the experience of
+          exile and resistance — a body of writing and performance that carries the Kurdish voice across
+          borders and languages.
+        </p>
+        <p data-i18n="about_p2">
+          Active in the student movement in Iran, he left the country in 2014 and arrived in Germany in
+          2015. Since 2017 he has lived in Berlin, where he is part of the city's independent cultural and
+          political life. He writes in Kurdish and Persian, performs in German, and works as a translator
+          between them.
+        </p>
+        <p data-i18n="about_p3">
+          His path runs through theatre stages, the pages of published books, and the columns of Kurdish
+          magazines — always returning to the same questions: home and displacement, freedom, memory, and
+          the worlds we carry with us when we leave one place for another.
+        </p>
+      </div>
+      <aside class="about__facts">
+        <dl>
+          <div><dt data-i18n="fact_origin_l">Origin</dt><dd data-i18n="fact_origin_v">Bukan, Iranian Kurdistan (Rojhelat)</dd></div>
+          <div><dt data-i18n="fact_based_l">Based in</dt><dd data-i18n="fact_based_v">Berlin, Germany</dd></div>
+          <div><dt data-i18n="fact_work_l">Practice</dt><dd data-i18n="fact_work_v">Literature · Theatre · Journalism</dd></div>
+          <div><dt data-i18n="fact_lang_l">Languages</dt><dd data-i18n="fact_lang_v">Kurdish · Persian · German</dd></div>
+        </dl>
+      </aside>
+    </div>
+  </section>
+
+  <!-- ===== Books ===== -->
+  <section class="section section--alt" id="books">
+    <div class="section__head">
+      <span class="section__kicker" data-i18n="books_kicker">Published Works</span>
+      <h2 class="section__title" data-i18n="books_title">Books</h2>
+      <p class="section__intro" data-i18n="books_intro">
+        Two published books, released through the Kurdish publisher 49Books. Covers and details below —
+        replace the cover images with the final artwork.
+      </p>
+    </div>
+
+    <div class="books">
+      <article class="book">
+        <div class="book__cover" style="background-image:url('assets/img/book-1.jpg')">
+          <span class="book__cover-fallback" data-i18n="book_cover_hint">Book cover</span>
+        </div>
+        <div class="book__meta">
+          <h3 class="book__title">Tendûr</h3>
+          <p class="book__title-alt" lang="ckb" dir="rtl">تەندوور</p>
+          <p class="book__pub" data-i18n="book1_pub">Published by 49Books</p>
+          <p class="book__desc" data-i18n="book1_desc">
+            A literary work in Kurdish. Add the back-cover blurb here — a few lines describing the book's
+            theme, form and the story it tells.
+          </p>
+        </div>
+      </article>
+
+      <article class="book">
+        <div class="book__cover" style="background-image:url('assets/img/book-2.jpg')">
+          <span class="book__cover-fallback" data-i18n="book_cover_hint">Book cover</span>
+        </div>
+        <div class="book__meta">
+          <h3 class="book__title" data-i18n="book2_title">Second title</h3>
+          <p class="book__pub" data-i18n="book2_pub">Published by 49Books</p>
+          <p class="book__desc" data-i18n="book2_desc">
+            Add the title and description of the second book here. Drop the cover image into
+            assets/img/book-2.jpg.
+          </p>
+        </div>
+      </article>
+    </div>
+  </section>
+
+  <!-- ===== Theatre ===== -->
+  <section class="section" id="theatre">
+    <div class="section__head">
+      <span class="section__kicker" data-i18n="theatre_kicker">On Stage</span>
+      <h2 class="section__title" data-i18n="theatre_title">Theatre &amp; Performance</h2>
+      <p class="section__intro" data-i18n="theatre_intro">
+        Arriving in Germany as a refugee, Ardalan turned to the stage as a place to speak. He helped build
+        theatre out of shelters and collectives — as actor, translator and maker.
+      </p>
+    </div>
+
+    <ol class="timeline">
+      <li class="timeline__item">
+        <h3 class="timeline__title" data-i18n="t1_title">Letter TO THE WORLD</h3>
+        <p class="timeline__role" data-i18n="t1_role">Initiator · Actor · Translator · Organiser</p>
+        <p class="timeline__desc" data-i18n="t1_desc">
+          A theatre project he initiated together with other refugees from his emergency shelter — turning
+          a shared experience of displacement into performance.
+        </p>
+      </li>
+      <li class="timeline__item">
+        <h3 class="timeline__title">Deine Heimat. Meine Heimat</h3>
+        <p class="timeline__role" data-i18n="t2_role">Translator · Assistant Director</p>
+        <p class="timeline__desc" data-i18n="t2_desc">
+          A follow-up production exploring belonging and homeland, on which he worked behind the scenes as
+          translator and assistant director.
+        </p>
+      </li>
+      <li class="timeline__item">
+        <h3 class="timeline__title">Freiheit · Alles | was wir haben · Offen lag die Welt</h3>
+        <p class="timeline__role" data-i18n="t3_role">Actor</p>
+        <p class="timeline__desc" data-i18n="t3_desc">
+          Stage productions in Berlin's independent theatre scene in which he appeared as a performer.
+        </p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ===== Writing / Journalism ===== -->
+  <section class="section section--alt" id="writing">
+    <div class="section__head">
+      <span class="section__kicker" data-i18n="writing_kicker">Words &amp; Voice</span>
+      <h2 class="section__title" data-i18n="writing_title">Writing &amp; Journalism</h2>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <h3 class="card__title" data-i18n="w1_title">Editor — Tîjhang magazine</h3>
+        <p class="card__desc" data-i18n="w1_desc">
+          From 2016 to 2019 he served as editor of the Kurdish magazine <em>Tîjhang</em>, published by the
+          Manjanîgh collective — a platform for Kurdish writing in the diaspora.
+        </p>
+      </div>
+      <div class="card">
+        <h3 class="card__title" data-i18n="w2_title">Essays &amp; commentary</h3>
+        <p class="card__desc" data-i18n="w2_desc">
+          He writes and speaks on Kurdistan, exile and the politics of the region — including on the
+          women-led uprising in Iran and the Kurdish question.
+        </p>
+      </div>
+      <div class="card">
+        <h3 class="card__title" data-i18n="w3_title">Across three languages</h3>
+        <p class="card__desc" data-i18n="w3_desc">
+          Writing in Kurdish and Persian and working in German, his practice is shaped by translation —
+          carrying ideas and stories between cultures.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== Connect ===== -->
+  <section class="section section--connect" id="connect">
+    <div class="section__head">
+      <span class="section__kicker" data-i18n="connect_kicker">Stay in Touch</span>
+      <h2 class="section__title" data-i18n="connect_title">Connect</h2>
+      <p class="section__intro" data-i18n="connect_intro">
+        For readings, performances, translation, collaborations and press.
+      </p>
+    </div>
+    <div class="connect">
+      <a class="connect__link" href="https://www.instagram.com/ardalan.bastani/" target="_blank" rel="noopener">
+        <span class="connect__icon">◎</span>
+        <span class="connect__label">Instagram</span>
+        <span class="connect__handle">@ardalan.bastani</span>
+      </a>
+      <a class="connect__link" href="#" data-edit="email">
+        <span class="connect__icon">✉</span>
+        <span class="connect__label" data-i18n="connect_email">Email</span>
+        <span class="connect__handle" data-i18n="connect_email_hint">add your address</span>
+      </a>
+      <a class="connect__link" href="https://book.krd/publisher/49books/" target="_blank" rel="noopener">
+        <span class="connect__icon">❧</span>
+        <span class="connect__label" data-i18n="connect_pub">Publisher</span>
+        <span class="connect__handle">49Books</span>
+      </a>
+    </div>
+  </section>
+
+  <!-- ===== Footer ===== -->
+  <footer class="footer">
+    <p class="footer__name">Ardalan Bastani · ئەردەلان باستانی</p>
+    <p class="footer__line" data-i18n="footer_tag">Kurdish writer &amp; theatre-maker — Bukan / Berlin</p>
+    <p class="footer__copy">© <span id="year"></span> Ardalan Bastani</p>
+  </footer>
+
+<script>
+/* ============================================================
+   Translations: English (en), German (de), Sorani Kurdish (ku)
+   ============================================================ */
+window.I18N = {
+  en: {
+    brand: "Ardalan Bastani",
+    nav_about: "About", nav_books: "Books", nav_theatre: "Theatre",
+    nav_writing: "Writing", nav_connect: "Connect",
+
+    hero_eyebrow: "Writer · Playwright · Theatre-Maker",
+    hero_lead: "A Kurdish writer and stage artist from Bukan in Iranian Kurdistan, living and working in Berlin — moving between the page and the stage, between Kurdish, Persian and German.",
+    hero_cta_books: "Explore the books",
+    hero_cta_connect: "Get in touch",
+
+    about_kicker: "Biography",
+    about_title: "Between the page and the stage",
+    about_p1: "Ardalan Bastani is a Kurdish writer, playwright and theatre-maker from <strong>Bukan</strong>, a city in the Kurdistan region of Iran (Rojhelat). His work grows out of the experience of exile and resistance — a body of writing and performance that carries the Kurdish voice across borders and languages.",
+    about_p2: "Active in the student movement in Iran, he left the country in 2014 and arrived in Germany in 2015. Since 2017 he has lived in Berlin, where he is part of the city's independent cultural and political life. He writes in Kurdish and Persian, performs in German, and works as a translator between them.",
+    about_p3: "His path runs through theatre stages, the pages of published books, and the columns of Kurdish magazines — always returning to the same questions: home and displacement, freedom, memory, and the worlds we carry with us when we leave one place for another.",
+    fact_origin_l: "Origin", fact_origin_v: "Bukan, Iranian Kurdistan (Rojhelat)",
+    fact_based_l: "Based in", fact_based_v: "Berlin, Germany",
+    fact_work_l: "Practice", fact_work_v: "Literature · Theatre · Journalism",
+    fact_lang_l: "Languages", fact_lang_v: "Kurdish · Persian · German",
+
+    books_kicker: "Published Works",
+    books_title: "Books",
+    books_intro: "Two published books, released through the Kurdish publisher 49Books. Covers and details below — replace the cover images with the final artwork.",
+    book_cover_hint: "Book cover",
+    book1_pub: "Published by 49Books",
+    book1_desc: "A literary work in Kurdish. Add the back-cover blurb here — a few lines describing the book's theme, form and the story it tells.",
+    book2_title: "Second title",
+    book2_pub: "Published by 49Books",
+    book2_desc: "Add the title and description of the second book here. Drop the cover image into assets/img/book-2.jpg.",
+
+    theatre_kicker: "On Stage",
+    theatre_title: "Theatre & Performance",
+    theatre_intro: "Arriving in Germany as a refugee, Ardalan turned to the stage as a place to speak. He helped build theatre out of shelters and collectives — as actor, translator and maker.",
+    t1_title: "Letter TO THE WORLD",
+    t1_role: "Initiator · Actor · Translator · Organiser",
+    t1_desc: "A theatre project he initiated together with other refugees from his emergency shelter — turning a shared experience of displacement into performance.",
+    t2_role: "Translator · Assistant Director",
+    t2_desc: "A follow-up production exploring belonging and homeland, on which he worked behind the scenes as translator and assistant director.",
+    t3_role: "Actor",
+    t3_desc: "Stage productions in Berlin's independent theatre scene in which he appeared as a performer.",
+
+    writing_kicker: "Words & Voice",
+    writing_title: "Writing & Journalism",
+    w1_title: "Editor — Tîjhang magazine",
+    w1_desc: "From 2016 to 2019 he served as editor of the Kurdish magazine <em>Tîjhang</em>, published by the Manjanîgh collective — a platform for Kurdish writing in the diaspora.",
+    w2_title: "Essays & commentary",
+    w2_desc: "He writes and speaks on Kurdistan, exile and the politics of the region — including on the women-led uprising in Iran and the Kurdish question.",
+    w3_title: "Across three languages",
+    w3_desc: "Writing in Kurdish and Persian and working in German, his practice is shaped by translation — carrying ideas and stories between cultures.",
+
+    connect_kicker: "Stay in Touch",
+    connect_title: "Connect",
+    connect_intro: "For readings, performances, translation, collaborations and press.",
+    connect_email: "Email", connect_email_hint: "add your address",
+    connect_pub: "Publisher",
+    footer_tag: "Kurdish writer & theatre-maker — Bukan / Berlin"
+  },
+
+  de: {
+    brand: "Ardalan Bastani",
+    nav_about: "Über", nav_books: "Bücher", nav_theatre: "Theater",
+    nav_writing: "Schreiben", nav_connect: "Kontakt",
+
+    hero_eyebrow: "Autor · Dramatiker · Theatermacher",
+    hero_lead: "Ein kurdischer Schriftsteller und Bühnenkünstler aus Bukan in Iranisch-Kurdistan, der in Berlin lebt und arbeitet — unterwegs zwischen Buchseite und Bühne, zwischen Kurdisch, Persisch und Deutsch.",
+    hero_cta_books: "Bücher entdecken",
+    hero_cta_connect: "Kontakt aufnehmen",
+
+    about_kicker: "Biografie",
+    about_title: "Zwischen Buchseite und Bühne",
+    about_p1: "Ardalan Bastani ist ein kurdischer Schriftsteller, Dramatiker und Theatermacher aus <strong>Bukan</strong>, einer Stadt in der Kurdistan-Region des Iran (Rojhelat). Seine Arbeit entspringt der Erfahrung von Exil und Widerstand — ein Werk aus Literatur und Performance, das die kurdische Stimme über Grenzen und Sprachen hinweg trägt.",
+    about_p2: "Er war in der iranischen Studierendenbewegung aktiv, verließ das Land 2014 und kam 2015 nach Deutschland. Seit 2017 lebt er in Berlin und ist Teil des unabhängigen kulturellen und politischen Lebens der Stadt. Er schreibt auf Kurdisch und Persisch, spielt auf Deutsch und arbeitet als Übersetzer zwischen den Sprachen.",
+    about_p3: "Sein Weg führt über Theaterbühnen, durch die Seiten veröffentlichter Bücher und die Spalten kurdischer Zeitschriften — und kehrt stets zu denselben Fragen zurück: Heimat und Entwurzelung, Freiheit, Erinnerung und die Welten, die wir mit uns tragen, wenn wir einen Ort für einen anderen verlassen.",
+    fact_origin_l: "Herkunft", fact_origin_v: "Bukan, Iranisch-Kurdistan (Rojhelat)",
+    fact_based_l: "Wohnort", fact_based_v: "Berlin, Deutschland",
+    fact_work_l: "Praxis", fact_work_v: "Literatur · Theater · Journalismus",
+    fact_lang_l: "Sprachen", fact_lang_v: "Kurdisch · Persisch · Deutsch",
+
+    books_kicker: "Veröffentlichungen",
+    books_title: "Bücher",
+    books_intro: "Zwei veröffentlichte Bücher, erschienen beim kurdischen Verlag 49Books. Cover und Details unten — bitte die Cover-Bilder durch die finalen Motive ersetzen.",
+    book_cover_hint: "Buchcover",
+    book1_pub: "Erschienen bei 49Books",
+    book1_desc: "Ein literarisches Werk auf Kurdisch. Fügen Sie hier den Klappentext ein — einige Zeilen zu Thema, Form und Geschichte des Buches.",
+    book2_title: "Zweiter Titel",
+    book2_pub: "Erschienen bei 49Books",
+    book2_desc: "Fügen Sie hier Titel und Beschreibung des zweiten Buches ein. Legen Sie das Cover unter assets/img/book-2.jpg ab.",
+
+    theatre_kicker: "Auf der Bühne",
+    theatre_title: "Theater & Performance",
+    theatre_intro: "Als Geflüchteter nach Deutschland gekommen, wandte sich Ardalan der Bühne zu, um sich Gehör zu verschaffen. Aus Unterkünften und Kollektiven baute er Theater mit auf — als Schauspieler, Übersetzer und Macher.",
+    t1_title: "Letter TO THE WORLD",
+    t1_role: "Initiator · Schauspieler · Übersetzer · Organisation",
+    t1_desc: "Ein Theaterprojekt, das er gemeinsam mit anderen Geflüchteten aus seiner Notunterkunft initiierte — die geteilte Erfahrung der Entwurzelung wird zur Performance.",
+    t2_role: "Übersetzer · Regieassistenz",
+    t2_desc: "Eine Folgeproduktion über Zugehörigkeit und Heimat, an der er hinter den Kulissen als Übersetzer und Regieassistent mitwirkte.",
+    t3_role: "Schauspieler",
+    t3_desc: "Bühnenproduktionen der freien Berliner Theaterszene, in denen er als Darsteller auftrat.",
+
+    writing_kicker: "Wort & Stimme",
+    writing_title: "Schreiben & Journalismus",
+    w1_title: "Redakteur — Zeitschrift Tîjhang",
+    w1_desc: "Von 2016 bis 2019 war er Redakteur der kurdischen Zeitschrift <em>Tîjhang</em>, herausgegeben vom Manjanîgh-Kollektiv — eine Plattform für kurdisches Schreiben in der Diaspora.",
+    w2_title: "Essays & Kommentar",
+    w2_desc: "Er schreibt und spricht über Kurdistan, Exil und die Politik der Region — auch über den frauengeführten Aufstand im Iran und die kurdische Frage.",
+    w3_title: "In drei Sprachen",
+    w3_desc: "Schreiben auf Kurdisch und Persisch, Arbeiten auf Deutsch: Seine Praxis ist vom Übersetzen geprägt — Ideen und Geschichten zwischen den Kulturen tragend.",
+
+    connect_kicker: "In Verbindung bleiben",
+    connect_title: "Kontakt",
+    connect_intro: "Für Lesungen, Aufführungen, Übersetzung, Kooperationen und Presse.",
+    connect_email: "E-Mail", connect_email_hint: "Adresse einfügen",
+    connect_pub: "Verlag",
+    footer_tag: "Kurdischer Schriftsteller & Theatermacher — Bukan / Berlin"
+  },
+
+  ku: {
+    brand: "ئەردەلان باستانی",
+    nav_about: "دەربارە", nav_books: "کتێبەکان", nav_theatre: "شانۆ",
+    nav_writing: "نووسین", nav_connect: "پەیوەندی",
+
+    hero_eyebrow: "نووسەر · شانۆنامەنووس · شانۆکار",
+    hero_lead: "نووسەر و هونەرمەندێکی شانۆیی کوردە لە بۆکانی ڕۆژهەڵاتی کوردستان، لە بەرلین دەژیێت و کار دەکات — لە نێوان پەڕەی کتێب و سەکۆی شانۆ، لە نێوان کوردی و فارسی و ئەڵمانی.",
+    hero_cta_books: "کتێبەکان ببینە",
+    hero_cta_connect: "پەیوەندی بکە",
+
+    about_kicker: "ژیاننامە",
+    about_title: "لە نێوان پەڕە و سەکۆدا",
+    about_p1: "ئەردەلان باستانی نووسەر و شانۆنامەنووس و شانۆکارێکی کوردە، خەڵکی <strong>بۆکان</strong>، شارێک لە هەرێمی کوردستانی ئێران (ڕۆژهەڵات). کارەکانی لە ئەزموونی دووربەخۆبوون و بەرخۆدانەوە سەرچاوە دەگرن — کۆمەڵە نووسین و نمایشێک کە دەنگی کورد بەسەر سنوور و زمانەکاندا دەگەیەنێت.",
+    about_p2: "بەشدار بوو لە بزووتنەوەی خوێندکاری لە ئێران، لە ساڵی ٢٠١٤ وڵاتی بەجێهێشت و لە ٢٠١٥ گەیشتە ئەڵمانیا. لە ٢٠١٧ەوە لە بەرلین دەژیێت و بەشێکە لە ژیانی کلتووری و سیاسیی سەربەخۆی شار. بە کوردی و فارسی دەنووسێت، بە ئەڵمانی نمایش دەکات، و وەک وەرگێڕ لە نێوانیاندا کار دەکات.",
+    about_p3: "ڕێگای ئەو بەناو سەکۆی شانۆ و پەڕەی کتێبە بڵاوکراوەکان و ستوونی گۆڤارە کوردییەکاندا تێدەپەڕێت — هەمیشە دەگەڕێتەوە بۆ هەمان پرسیار: نیشتمان و کۆچ، ئازادی، یادەوەری، و ئەو جیهانانەی لەگەڵ خۆماندا دەیانبەین کاتێک شوێنێک بەجێدەهێڵین بۆ شوێنێکی تر.",
+    fact_origin_l: "ڕەچەڵەک", fact_origin_v: "بۆکان، کوردستانی ئێران (ڕۆژهەڵات)",
+    fact_based_l: "نیشتەجێ لە", fact_based_v: "بەرلین، ئەڵمانیا",
+    fact_work_l: "بوار", fact_work_v: "ئەدەب · شانۆ · ڕۆژنامەوانی",
+    fact_lang_l: "زمانەکان", fact_lang_v: "کوردی · فارسی · ئەڵمانی",
+
+    books_kicker: "بەرهەمە بڵاوکراوەکان",
+    books_title: "کتێبەکان",
+    books_intro: "دوو کتێبی بڵاوکراوە، لە ڕێگەی بڵاوکراوەی کوردیی 49Books چاپکراون. بەرگ و وردەکارییەکان لە خوارەوە — تکایە وێنەی بەرگەکان بە بەرگی کۆتایی بگۆڕە.",
+    book_cover_hint: "بەرگی کتێب",
+    book1_pub: "بڵاوکراوەی 49Books",
+    book1_desc: "بەرهەمێکی ئەدەبی بە زمانی کوردی. لێرە کورتەی پشتی بەرگ زیاد بکە — چەند دێڕێک دەربارەی بابەت و شێوە و چیرۆکی کتێبەکە.",
+    book2_title: "ناونیشانی دووەم",
+    book2_pub: "بڵاوکراوەی 49Books",
+    book2_desc: "لێرە ناونیشان و پێناسەی کتێبی دووەم زیاد بکە. بەرگەکەی بخە ناو assets/img/book-2.jpg.",
+
+    theatre_kicker: "لەسەر سەکۆ",
+    theatre_title: "شانۆ و نمایش",
+    theatre_intro: "کاتێک وەک پەنابەر گەیشتە ئەڵمانیا، ئەردەلان ڕووی لە سەکۆی شانۆ کرد وەک شوێنێک بۆ قسەکردن. لە کەمپ و کۆمەڵە هونەرییەکانەوە شانۆی دروستکرد — وەک ئەکتەر، وەرگێڕ و دروستکار.",
+    t1_title: "Letter TO THE WORLD",
+    t1_role: "دەستپێشخەر · ئەکتەر · وەرگێڕ · ڕێکخەر",
+    t1_desc: "پڕۆژەیەکی شانۆیی کە لەگەڵ پەنابەرانی تری کەمپەکەی دەستی پێکرد — ئەزموونی هاوبەشی کۆچ دەکاتە نمایش.",
+    t2_role: "وەرگێڕ · یاریدەدەری دەرهێنەر",
+    t2_desc: "بەرهەمێکی دواتر دەربارەی سەربەخۆیی و نیشتمان، کە لە پشتی سەکۆوە وەک وەرگێڕ و یاریدەدەری دەرهێنەر کاری تێدا کرد.",
+    t3_role: "ئەکتەر",
+    t3_desc: "بەرهەمە شانۆییەکانی شانۆی سەربەخۆی بەرلین کە وەک ئەکتەر تێیاندا دەرکەوت.",
+
+    writing_kicker: "وشە و دەنگ",
+    writing_title: "نووسین و ڕۆژنامەوانی",
+    w1_title: "سەرنووسەر — گۆڤاری تیژهەنگ",
+    w1_desc: "لە ٢٠١٦ تا ٢٠١٩ سەرنووسەری گۆڤاری کوردیی <em>تیژهەنگ</em> بوو، بڵاوکراوەی کۆمەڵەی مەنجەنیغ — سەکۆیەک بۆ نووسینی کوردی لە دەرەوەی وڵات.",
+    w2_title: "وتار و لێکدانەوە",
+    w2_desc: "دەربارەی کوردستان و کۆچ و سیاسەتی ناوچەکە دەنووسێت و قسە دەکات — لەوانە دەربارەی ڕاپەڕینی ژنانی ئێران و پرسی کورد.",
+    w3_title: "بە سێ زمان",
+    w3_desc: "نووسین بە کوردی و فارسی و کارکردن بە ئەڵمانی، کارەکەی بە وەرگێڕان شێوەی پێدراوە — بیر و چیرۆک لە نێوان کلتوورەکاندا دەگوازێتەوە.",
+
+    connect_kicker: "لە پەیوەندیدا بمێنەرەوە",
+    connect_title: "پەیوەندی",
+    connect_intro: "بۆ خوێندنەوە، نمایش، وەرگێڕان، هاوکاری و ڕاگەیاندن.",
+    connect_email: "ئیمەیل", connect_email_hint: "ناونیشانەکەت زیاد بکە",
+    connect_pub: "بڵاوکراوە",
+    footer_tag: "نووسەر و شانۆکاری کورد — بۆکان / بەرلین"
+  }
+};
+
+/* ============================================================
+   Language switching, mobile nav, year stamp
+   ============================================================ */
+(function () {
+  "use strict";
+
+  var dict = window.I18N || {};
+  var htmlEl = document.documentElement;
+
+  function applyLang(lang) {
+    var strings = dict[lang];
+    if (!strings) return;
+
+    // Document direction / lang
+    var rtl = (lang === "ku");
+    htmlEl.setAttribute("lang", rtl ? "ckb" : lang);
+    htmlEl.setAttribute("dir", rtl ? "rtl" : "ltr");
+
+    // Swap every translatable node
+    document.querySelectorAll("[data-i18n]").forEach(function (el) {
+      var key = el.getAttribute("data-i18n");
+      if (strings[key] != null) el.innerHTML = strings[key];
+    });
+
+    // Active state on buttons
+    document.querySelectorAll(".lang__btn").forEach(function (b) {
+      b.classList.toggle("is-active", b.getAttribute("data-lang") === lang);
+    });
+
+    try { localStorage.setItem("ab_lang", lang); } catch (e) {}
+  }
+
+  // Wire up language buttons
+  document.querySelectorAll(".lang__btn").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      applyLang(btn.getAttribute("data-lang"));
+      closeNav();
+    });
+  });
+
+  // Restore saved language (default English)
+  var saved = "en";
+  try { saved = localStorage.getItem("ab_lang") || "en"; } catch (e) {}
+  applyLang(saved);
+
+  // Mobile nav
+  var toggle = document.getElementById("navToggle");
+  var links = document.querySelector(".nav__links");
+  function closeNav() { if (links) links.classList.remove("is-open"); }
+  if (toggle && links) {
+    toggle.addEventListener("click", function () { links.classList.toggle("is-open"); });
+    links.querySelectorAll("a").forEach(function (a) {
+      a.addEventListener("click", closeNav);
+    });
+  }
+
+  // Year stamp
+  var y = document.getElementById("year");
+  if (y) y.textContent = new Date().getFullYear();
+})();
+
+</script>
+</body>
+</html>

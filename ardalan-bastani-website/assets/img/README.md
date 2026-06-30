@@ -1,22 +1,29 @@
-# Images — drop your photos here
+# Images
 
-The site looks complete without photos (it falls back to elegant gradients), but
-to finish it, add these files. Keep the **exact filenames** so the HTML/CSS pick
-them up automatically.
+The five real photos live in **`originals/`** (untouched). Everything else here is generated
+from them by `scripts/process-images.py`:
 
-| Filename | Where it shows | Suggested size | Source |
-|----------|----------------|----------------|--------|
-| `portrait.jpg` | Hero portrait (top of page) | ~1000 × 1250 px (4:5 portrait) | The autumn/forest photo or stage photo from Instagram |
-| `book-1.jpg` | First book cover | ~800 × 1200 px (2:3) | The *Tendûr* cover from his Instagram pinned post |
-| `book-2.jpg` | Second book cover | ~800 × 1200 px (2:3) | The second published book's cover |
+| Output | Used for |
+|--------|----------|
+| `*-color.webp` | cleaned full-colour versions (gallery hover) |
+| `*-duo.webp` | ink→gold **duotone** graphics (gallery default state) |
+| `hero-color.webp` | texture for the WebGL portrait relief |
+| `hero-duo.webp` | static fallback if WebGL is unavailable |
+| `gaze-halftone.webp` | **halftone** screen-print poster (About section) |
 
-### How to get the Instagram images
-Open <https://www.instagram.com/ardalan.bastani/>, open the photo, then
-right-click → **Save Image As…** (or screenshot and crop). Rename to the
-filenames above and place them in this folder.
+Slugs: `march` (protest), `room` (standing), `evening` (café), `gaze` (selfie — hero/poster),
+`red` (red sweater — WebGL relief).
 
-### Optional
-- `og-image.jpg` (1200 × 630) for nicer link previews on social media — then
-  update the `og:image` tag in `index.html`.
+## Swapping photos
 
-No code changes are needed — just add the files.
+Drop new files into `originals/` (keep the slug names, or edit `JOBS` in the script), then:
+
+```bash
+pip install Pillow numpy
+python3 scripts/process-images.py
+```
+
+## Still needed — book covers
+
+Add the two book covers as **`book-1.jpg`** and **`book-2.jpg`** (≈ 800 × 1200, 2:3).
+Until then the Books section shows a gradient placeholder.

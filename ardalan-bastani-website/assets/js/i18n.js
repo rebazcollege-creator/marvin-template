@@ -5,12 +5,20 @@ window.I18N = {
   en: {
     brand: "Ardalan Bastani",
     nav_about: "About", nav_books: "Books", nav_theatre: "Theatre",
-    nav_writing: "Writing", nav_connect: "Connect",
+    nav_frames: "Frames", nav_writing: "Writing", nav_connect: "Connect",
+    scroll: "scroll",
 
-    hero_eyebrow: "Writer · Playwright · Theatre-Maker",
-    hero_lead: "A Kurdish writer and stage artist from Bukan in Iranian Kurdistan, living and working in Berlin — moving between the page and the stage, between Kurdish, Persian and German.",
-    hero_cta_books: "Explore the books",
+    hero_eyebrow: "Writer · Poet · Theatre-Maker",
+    hero_lead: "A Kurdish writer and theatre-maker from Bukan in Iranian Kurdistan, living in Berlin — working between the page and the stage, between Kurdish, Persian and German.",
+    hero_cta_read: "Enter",
+    hero_cta_books: "The books",
     hero_cta_connect: "Get in touch",
+
+    about_caption: "Halftone — from a self-portrait",
+    frames_kicker: "Portrait, in frames", frames_title: "Frames",
+    frames_intro: "Photographs treated as graphics — hover to bring them back to life.",
+    w1_roleb: "Journalism",
+    connect_title: "Let's talk",
 
     about_kicker: "Biography",
     about_title: "Between the page and the stage",
@@ -63,12 +71,20 @@ window.I18N = {
   de: {
     brand: "Ardalan Bastani",
     nav_about: "Über", nav_books: "Bücher", nav_theatre: "Theater",
-    nav_writing: "Schreiben", nav_connect: "Kontakt",
+    nav_frames: "Bilder", nav_writing: "Schreiben", nav_connect: "Kontakt",
+    scroll: "scrollen",
 
-    hero_eyebrow: "Autor · Dramatiker · Theatermacher",
-    hero_lead: "Ein kurdischer Schriftsteller und Bühnenkünstler aus Bukan in Iranisch-Kurdistan, der in Berlin lebt und arbeitet — unterwegs zwischen Buchseite und Bühne, zwischen Kurdisch, Persisch und Deutsch.",
-    hero_cta_books: "Bücher entdecken",
+    hero_eyebrow: "Autor · Dichter · Theatermacher",
+    hero_lead: "Ein kurdischer Schriftsteller und Theatermacher aus Bukan in Iranisch-Kurdistan, lebt in Berlin — zwischen Buchseite und Bühne, zwischen Kurdisch, Persisch und Deutsch.",
+    hero_cta_read: "Eintreten",
+    hero_cta_books: "Die Bücher",
     hero_cta_connect: "Kontakt aufnehmen",
+
+    about_caption: "Halbton — nach einem Selbstporträt",
+    frames_kicker: "Porträt, in Bildern", frames_title: "Bilder",
+    frames_intro: "Fotografien als Grafik behandelt — bewegen Sie den Cursor darüber, um sie zum Leben zu erwecken.",
+    w1_roleb: "Journalismus",
+    connect_title: "Sprechen wir",
 
     about_kicker: "Biografie",
     about_title: "Zwischen Buchseite und Bühne",
@@ -121,12 +137,20 @@ window.I18N = {
   ku: {
     brand: "ئەردەلان باستانی",
     nav_about: "دەربارە", nav_books: "کتێبەکان", nav_theatre: "شانۆ",
-    nav_writing: "نووسین", nav_connect: "پەیوەندی",
+    nav_frames: "وێنەکان", nav_writing: "نووسین", nav_connect: "پەیوەندی",
+    scroll: "خوارەوە",
 
-    hero_eyebrow: "نووسەر · شانۆنامەنووس · شانۆکار",
-    hero_lead: "نووسەر و هونەرمەندێکی شانۆیی کوردە لە بۆکانی ڕۆژهەڵاتی کوردستان، لە بەرلین دەژیێت و کار دەکات — لە نێوان پەڕەی کتێب و سەکۆی شانۆ، لە نێوان کوردی و فارسی و ئەڵمانی.",
-    hero_cta_books: "کتێبەکان ببینە",
+    hero_eyebrow: "نووسەر · شاعیر · شانۆکار",
+    hero_lead: "نووسەر و شانۆکارێکی کوردە، خەڵکی بۆکانی ڕۆژهەڵاتی کوردستان، لە بەرلین دەژیێت — لە نێوان پەڕەی کتێب و سەکۆی شانۆ، لە نێوان کوردی و فارسی و ئەڵمانی.",
+    hero_cta_read: "بڕۆ ژوورەوە",
+    hero_cta_books: "کتێبەکان",
     hero_cta_connect: "پەیوەندی بکە",
+
+    about_caption: "هاڵفتۆن — لە وێنەیەکی خۆکێشراو",
+    frames_kicker: "پۆرترەیت، بە وێنە", frames_title: "وێنەکان",
+    frames_intro: "وێنەکان وەک گرافیک — موشەکە بهێنە سەریان تا بگەڕێنەوە بۆ ژیان.",
+    w1_roleb: "ڕۆژنامەوانی",
+    connect_title: "با قسە بکەین",
 
     about_kicker: "ژیاننامە",
     about_title: "لە نێوان پەڕە و سەکۆدا",

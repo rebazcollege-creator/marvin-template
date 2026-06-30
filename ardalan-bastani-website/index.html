@@ -3,253 +3,275 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Ardalan Bastani — Kurdish Writer &amp; Theatre-Maker</title>
-  <meta name="description" content="Official site of Ardalan Bastani — Kurdish writer, playwright and theatre-maker from Bukan, Iranian Kurdistan, based in Berlin. Author, journalist and stage artist." />
-  <meta name="author" content="Ardalan Bastani" />
-
-  <!-- Open Graph -->
+  <title>Ardalan Bastani — Kurdish Writer, Poet &amp; Theatre-Maker</title>
+  <meta name="description" content="Ardalan Bastani — Kurdish writer, poet and theatre-maker from Bukan, Iranian Kurdistan, based in Berlin. An interactive portrait in three languages." />
   <meta property="og:type" content="profile" />
-  <meta property="og:title" content="Ardalan Bastani — Kurdish Writer &amp; Theatre-Maker" />
-  <meta property="og:description" content="Kurdish writer, playwright and theatre-maker from Bukan, based in Berlin." />
-  <meta property="og:image" content="assets/img/portrait.jpg" />
+  <meta property="og:title" content="Ardalan Bastani — Writer · Poet · Theatre-Maker" />
+  <meta property="og:description" content="Kurdish writer and theatre-maker from Bukan, based in Berlin." />
+  <meta property="og:image" content="assets/img/gaze-color.webp" />
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Inter:wght@300;400;500;600&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..500&family=Inter:wght@300;400;500&family=Space+Mono:wght@400;700&family=Vazirmatn:wght@300;400;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="assets/css/styles.css" />
+
+  <script type="importmap">
+  { "imports": { "three": "./assets/js/vendor/three.module.min.js" } }
+  </script>
 </head>
 <body>
 
-  <!-- ===== Navigation ===== -->
-  <header class="nav" id="top">
-    <div class="nav__inner">
-      <a class="nav__brand" href="#top" data-i18n="brand">Ardalan Bastani</a>
+  <!-- grain + cursor + preloader -->
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor" id="cursor" aria-hidden="true"><span class="cursor__dot"></span></div>
 
-      <nav class="nav__links" aria-label="Primary">
-        <a href="#about" data-i18n="nav_about">About</a>
-        <a href="#books" data-i18n="nav_books">Books</a>
-        <a href="#theatre" data-i18n="nav_theatre">Theatre</a>
-        <a href="#writing" data-i18n="nav_writing">Writing</a>
-        <a href="#connect" data-i18n="nav_connect">Connect</a>
-      </nav>
-
-      <div class="lang" role="group" aria-label="Language">
-        <button class="lang__btn is-active" data-lang="en">EN</button>
-        <button class="lang__btn" data-lang="de">DE</button>
-        <button class="lang__btn" data-lang="ku">کوردی</button>
-      </div>
-
-      <button class="nav__toggle" aria-label="Menu" id="navToggle">
-        <span></span><span></span><span></span>
-      </button>
+  <div class="preloader" id="preloader" aria-hidden="true">
+    <div class="preloader__inner">
+      <span class="preloader__name">Ardalan Bastani</span>
+      <span class="preloader__bar"><i></i></span>
+      <span class="preloader__count" id="plCount">00</span>
     </div>
+  </div>
+
+  <!-- ===== Header ===== -->
+  <header class="hd" id="top">
+    <a class="hd__brand" href="#top">
+      <span class="hd__mark">AB</span>
+      <span class="hd__brandtext" data-i18n="brand">Ardalan Bastani</span>
+    </a>
+    <nav class="hd__nav" aria-label="Primary">
+      <a href="#about"><i>01</i><span data-i18n="nav_about">About</span></a>
+      <a href="#books"><i>02</i><span data-i18n="nav_books">Books</span></a>
+      <a href="#theatre"><i>03</i><span data-i18n="nav_theatre">Theatre</span></a>
+      <a href="#frames"><i>04</i><span data-i18n="nav_frames">Frames</span></a>
+      <a href="#connect"><i>05</i><span data-i18n="nav_connect">Connect</span></a>
+    </nav>
+    <div class="hd__lang" role="group" aria-label="Language">
+      <button data-lang="en" class="is-active">EN</button>
+      <button data-lang="de">DE</button>
+      <button data-lang="ku">کوردی</button>
+    </div>
+    <button class="hd__burger" id="burger" aria-label="Menu"><span></span><span></span></button>
   </header>
 
   <!-- ===== Hero ===== -->
   <section class="hero">
-    <div class="hero__photo" aria-hidden="true">
-      <div class="hero__photo-frame" style="background-image:url('assets/img/portrait.jpg')"></div>
-    </div>
-    <div class="hero__content">
-      <p class="hero__eyebrow" data-i18n="hero_eyebrow">Writer · Playwright · Theatre-Maker</p>
-      <h1 class="hero__name">Ardalan Bastani</h1>
-      <p class="hero__name-alt" lang="ckb" dir="rtl">ئەردەلان باستانی</p>
-      <p class="hero__lead" data-i18n="hero_lead">
-        A Kurdish writer and stage artist from Bukan in Iranian Kurdistan, living and working in Berlin —
-        moving between the page and the stage, between Kurdish, Persian and German.
-      </p>
-      <div class="hero__cta">
-        <a class="btn btn--solid" href="#books" data-i18n="hero_cta_books">Explore the books</a>
-        <a class="btn btn--ghost" href="#connect" data-i18n="hero_cta_connect">Get in touch</a>
+    <div class="hero__grid">
+      <div class="hero__text">
+        <p class="hero__eyebrow mono"><span class="dot"></span><span data-i18n="hero_eyebrow">Writer · Poet · Theatre-Maker</span></p>
+        <h1 class="hero__name" data-split>Ardalan<br/>Bastani</h1>
+        <p class="hero__alt" lang="ckb" dir="rtl">ئەردەلان باستانی</p>
+        <p class="hero__lead reveal" data-i18n="hero_lead">
+          A Kurdish writer and theatre-maker from Bukan in Iranian Kurdistan, living in Berlin —
+          working between the page and the stage, between Kurdish, Persian and German.
+        </p>
+        <div class="hero__cta reveal">
+          <a class="btn magnetic" href="#about"><span data-i18n="hero_cta_read">Enter</span><i>→</i></a>
+          <a class="btn btn--line magnetic" href="#books" data-i18n="hero_cta_books">The books</a>
+        </div>
+      </div>
+
+      <div class="hero__visual">
+        <canvas id="relief"></canvas>
+        <div class="hero__fallback" style="background-image:url('assets/img/hero-duo.webp')"></div>
+        <div class="hero__hud mono" aria-hidden="true">
+          <span class="hud-tl">N 36.52° / E 46.20°<br/>BÛKAN — ROJHELAT</span>
+          <span class="hud-br">BERLIN<br/>52.52° N</span>
+          <span class="hud-tag">[ PORTRAIT / 01 ]</span>
+        </div>
       </div>
     </div>
+    <div class="hero__scroll mono"><span data-i18n="scroll">scroll</span><i></i></div>
   </section>
 
-  <!-- ===== About ===== -->
-  <section class="section" id="about">
-    <div class="section__head">
-      <span class="section__kicker" data-i18n="about_kicker">Biography</span>
-      <h2 class="section__title" data-i18n="about_title">Between the page and the stage</h2>
+  <!-- ===== Marquee ===== -->
+  <div class="marquee" aria-hidden="true">
+    <div class="marquee__track" id="marquee">
+      <span>Exile</span><span>·</span><span>Freedom</span><span>·</span><span>Memory</span><span>·</span><span>Homeland</span><span>·</span><span>Resistance</span><span>·</span><span>Language</span><span>·</span><span>Stage</span><span>·</span>
     </div>
+  </div>
+
+  <!-- ===== About §01 ===== -->
+  <section class="sec" id="about">
+    <header class="sec__head">
+      <span class="sec__idx mono">§01</span>
+      <span class="sec__kick mono" data-i18n="about_kicker">Biography</span>
+      <h2 class="sec__title reveal-lines"><span data-i18n="about_title">Between the page and the stage</span></h2>
+    </header>
+
     <div class="about">
+      <figure class="about__art reveal">
+        <div class="about__poster" style="background-image:url('assets/img/gaze-halftone.webp')"></div>
+        <figcaption class="mono" data-i18n="about_caption">Halftone — from a self-portrait</figcaption>
+      </figure>
+
       <div class="about__body">
-        <p data-i18n="about_p1">
-          Ardalan Bastani is a Kurdish writer, playwright and theatre-maker from <strong>Bukan</strong>,
-          a city in the Kurdistan region of Iran (Rojhelat). His work grows out of the experience of
-          exile and resistance — a body of writing and performance that carries the Kurdish voice across
-          borders and languages.
+        <p class="reveal" data-i18n="about_p1">
+          Ardalan Bastani is a Kurdish writer, poet and theatre-maker from <strong>Bukan</strong>, a city in
+          the Kurdistan region of Iran (Rojhelat). His work grows out of exile and resistance — writing and
+          performance that carry the Kurdish voice across borders and languages.
         </p>
-        <p data-i18n="about_p2">
-          Active in the student movement in Iran, he left the country in 2014 and arrived in Germany in
-          2015. Since 2017 he has lived in Berlin, where he is part of the city's independent cultural and
-          political life. He writes in Kurdish and Persian, performs in German, and works as a translator
-          between them.
+        <p class="reveal" data-i18n="about_p2">
+          Active in the student movement in Iran, he left the country in 2014 and reached Germany in 2015.
+          Since 2017 he has lived in Berlin, part of the city's independent cultural and political life. He
+          writes in Kurdish and Persian, performs in German, and translates between them.
         </p>
-        <p data-i18n="about_p3">
-          His path runs through theatre stages, the pages of published books, and the columns of Kurdish
-          magazines — always returning to the same questions: home and displacement, freedom, memory, and
-          the worlds we carry with us when we leave one place for another.
+        <p class="reveal" data-i18n="about_p3">
+          His path runs through theatre stages, published books and the columns of Kurdish magazines —
+          always circling the same questions: home and displacement, freedom, memory, and the worlds we
+          carry when we leave one place for another.
         </p>
-      </div>
-      <aside class="about__facts">
-        <dl>
-          <div><dt data-i18n="fact_origin_l">Origin</dt><dd data-i18n="fact_origin_v">Bukan, Iranian Kurdistan (Rojhelat)</dd></div>
-          <div><dt data-i18n="fact_based_l">Based in</dt><dd data-i18n="fact_based_v">Berlin, Germany</dd></div>
-          <div><dt data-i18n="fact_work_l">Practice</dt><dd data-i18n="fact_work_v">Literature · Theatre · Journalism</dd></div>
-          <div><dt data-i18n="fact_lang_l">Languages</dt><dd data-i18n="fact_lang_v">Kurdish · Persian · German</dd></div>
+        <dl class="about__facts reveal">
+          <div><dt class="mono" data-i18n="fact_origin_l">Origin</dt><dd data-i18n="fact_origin_v">Bukan, Iranian Kurdistan</dd></div>
+          <div><dt class="mono" data-i18n="fact_based_l">Based</dt><dd data-i18n="fact_based_v">Berlin, Germany</dd></div>
+          <div><dt class="mono" data-i18n="fact_work_l">Practice</dt><dd data-i18n="fact_work_v">Literature · Theatre · Journalism</dd></div>
+          <div><dt class="mono" data-i18n="fact_lang_l">Languages</dt><dd data-i18n="fact_lang_v">Kurdish · Persian · German</dd></div>
         </dl>
-      </aside>
+      </div>
     </div>
   </section>
 
-  <!-- ===== Books ===== -->
-  <section class="section section--alt" id="books">
-    <div class="section__head">
-      <span class="section__kicker" data-i18n="books_kicker">Published Works</span>
-      <h2 class="section__title" data-i18n="books_title">Books</h2>
-      <p class="section__intro" data-i18n="books_intro">
-        Two published books, released through the Kurdish publisher 49Books. Covers and details below —
-        replace the cover images with the final artwork.
-      </p>
-    </div>
+  <!-- ===== Books §02 ===== -->
+  <section class="sec sec--alt" id="books">
+    <header class="sec__head">
+      <span class="sec__idx mono">§02</span>
+      <span class="sec__kick mono" data-i18n="books_kicker">Published Works</span>
+      <h2 class="sec__title reveal-lines"><span data-i18n="books_title">Books</span></h2>
+      <p class="sec__intro reveal" data-i18n="books_intro">Two books, published through the Kurdish house 49Books.</p>
+    </header>
 
     <div class="books">
-      <article class="book">
-        <div class="book__cover" style="background-image:url('assets/img/book-1.jpg')">
-          <span class="book__cover-fallback" data-i18n="book_cover_hint">Book cover</span>
-        </div>
+      <article class="book reveal tilt">
+        <div class="book__cover" style="background-image:url('assets/img/book-1.jpg')"><span class="mono" data-i18n="book_cover_hint">cover</span></div>
         <div class="book__meta">
-          <h3 class="book__title">Tendûr</h3>
-          <p class="book__title-alt" lang="ckb" dir="rtl">تەندوور</p>
-          <p class="book__pub" data-i18n="book1_pub">Published by 49Books</p>
-          <p class="book__desc" data-i18n="book1_desc">
-            A literary work in Kurdish. Add the back-cover blurb here — a few lines describing the book's
-            theme, form and the story it tells.
-          </p>
+          <h3 class="book__title">Tendûr <span lang="ckb" dir="rtl">تەندوور</span></h3>
+          <p class="book__pub mono" data-i18n="book1_pub">49Books</p>
+          <p class="book__desc" data-i18n="book1_desc">A literary work in Kurdish. Add the back-cover text here.</p>
         </div>
       </article>
-
-      <article class="book">
-        <div class="book__cover" style="background-image:url('assets/img/book-2.jpg')">
-          <span class="book__cover-fallback" data-i18n="book_cover_hint">Book cover</span>
-        </div>
+      <article class="book reveal tilt">
+        <div class="book__cover" style="background-image:url('assets/img/book-2.jpg')"><span class="mono" data-i18n="book_cover_hint">cover</span></div>
         <div class="book__meta">
           <h3 class="book__title" data-i18n="book2_title">Second title</h3>
-          <p class="book__pub" data-i18n="book2_pub">Published by 49Books</p>
-          <p class="book__desc" data-i18n="book2_desc">
-            Add the title and description of the second book here. Drop the cover image into
-            assets/img/book-2.jpg.
-          </p>
+          <p class="book__pub mono" data-i18n="book2_pub">49Books</p>
+          <p class="book__desc" data-i18n="book2_desc">Add the title and description of the second book here.</p>
         </div>
       </article>
     </div>
   </section>
 
-  <!-- ===== Theatre ===== -->
-  <section class="section" id="theatre">
-    <div class="section__head">
-      <span class="section__kicker" data-i18n="theatre_kicker">On Stage</span>
-      <h2 class="section__title" data-i18n="theatre_title">Theatre &amp; Performance</h2>
-      <p class="section__intro" data-i18n="theatre_intro">
-        Arriving in Germany as a refugee, Ardalan turned to the stage as a place to speak. He helped build
-        theatre out of shelters and collectives — as actor, translator and maker.
-      </p>
-    </div>
-
-    <ol class="timeline">
-      <li class="timeline__item">
-        <h3 class="timeline__title" data-i18n="t1_title">Letter TO THE WORLD</h3>
-        <p class="timeline__role" data-i18n="t1_role">Initiator · Actor · Translator · Organiser</p>
-        <p class="timeline__desc" data-i18n="t1_desc">
-          A theatre project he initiated together with other refugees from his emergency shelter — turning
-          a shared experience of displacement into performance.
-        </p>
+  <!-- ===== Theatre §03 ===== -->
+  <section class="sec" id="theatre">
+    <header class="sec__head">
+      <span class="sec__idx mono">§03</span>
+      <span class="sec__kick mono" data-i18n="theatre_kicker">On Stage</span>
+      <h2 class="sec__title reveal-lines"><span data-i18n="theatre_title">Theatre &amp; Performance</span></h2>
+      <p class="sec__intro reveal" data-i18n="theatre_intro">Arriving as a refugee, he turned to the stage as a place to speak — building theatre out of shelters and collectives.</p>
+    </header>
+    <ol class="stage">
+      <li class="stage__row reveal">
+        <span class="stage__yr mono">≈2015</span>
+        <div class="stage__c">
+          <h3 data-i18n="t1_title">Letter TO THE WORLD</h3>
+          <p class="stage__role mono" data-i18n="t1_role">Initiator · Actor · Translator</p>
+          <p data-i18n="t1_desc">A project he initiated with other refugees from his emergency shelter — shared displacement turned into performance.</p>
+        </div>
       </li>
-      <li class="timeline__item">
-        <h3 class="timeline__title">Deine Heimat. Meine Heimat</h3>
-        <p class="timeline__role" data-i18n="t2_role">Translator · Assistant Director</p>
-        <p class="timeline__desc" data-i18n="t2_desc">
-          A follow-up production exploring belonging and homeland, on which he worked behind the scenes as
-          translator and assistant director.
-        </p>
+      <li class="stage__row reveal">
+        <span class="stage__yr mono">—</span>
+        <div class="stage__c">
+          <h3>Deine Heimat. Meine Heimat</h3>
+          <p class="stage__role mono" data-i18n="t2_role">Translator · Assistant Director</p>
+          <p data-i18n="t2_desc">A follow-up on belonging and homeland, where he worked as translator and assistant director.</p>
+        </div>
       </li>
-      <li class="timeline__item">
-        <h3 class="timeline__title">Freiheit · Alles | was wir haben · Offen lag die Welt</h3>
-        <p class="timeline__role" data-i18n="t3_role">Actor</p>
-        <p class="timeline__desc" data-i18n="t3_desc">
-          Stage productions in Berlin's independent theatre scene in which he appeared as a performer.
-        </p>
+      <li class="stage__row reveal">
+        <span class="stage__yr mono">Berlin</span>
+        <div class="stage__c">
+          <h3>Freiheit · Alles | was wir haben · Offen lag die Welt</h3>
+          <p class="stage__role mono" data-i18n="t3_role">Actor</p>
+          <p data-i18n="t3_desc">Productions in Berlin's independent theatre scene in which he performed.</p>
+        </div>
+      </li>
+      <li class="stage__row reveal">
+        <span class="stage__yr mono">2016–19</span>
+        <div class="stage__c">
+          <h3 data-i18n="w1_title">Editor — Tîjhang magazine</h3>
+          <p class="stage__role mono" data-i18n="w1_roleb">Journalism</p>
+          <p data-i18n="w1_desc">Editor of the Kurdish magazine Tîjhang, published by the Manjanîgh collective — a platform for Kurdish writing in the diaspora.</p>
+        </div>
       </li>
     </ol>
   </section>
 
-  <!-- ===== Writing / Journalism ===== -->
-  <section class="section section--alt" id="writing">
-    <div class="section__head">
-      <span class="section__kicker" data-i18n="writing_kicker">Words &amp; Voice</span>
-      <h2 class="section__title" data-i18n="writing_title">Writing &amp; Journalism</h2>
-    </div>
-    <div class="cards">
-      <div class="card">
-        <h3 class="card__title" data-i18n="w1_title">Editor — Tîjhang magazine</h3>
-        <p class="card__desc" data-i18n="w1_desc">
-          From 2016 to 2019 he served as editor of the Kurdish magazine <em>Tîjhang</em>, published by the
-          Manjanîgh collective — a platform for Kurdish writing in the diaspora.
-        </p>
-      </div>
-      <div class="card">
-        <h3 class="card__title" data-i18n="w2_title">Essays &amp; commentary</h3>
-        <p class="card__desc" data-i18n="w2_desc">
-          He writes and speaks on Kurdistan, exile and the politics of the region — including on the
-          women-led uprising in Iran and the Kurdish question.
-        </p>
-      </div>
-      <div class="card">
-        <h3 class="card__title" data-i18n="w3_title">Across three languages</h3>
-        <p class="card__desc" data-i18n="w3_desc">
-          Writing in Kurdish and Persian and working in German, his practice is shaped by translation —
-          carrying ideas and stories between cultures.
-        </p>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== Connect ===== -->
-  <section class="section section--connect" id="connect">
-    <div class="section__head">
-      <span class="section__kicker" data-i18n="connect_kicker">Stay in Touch</span>
-      <h2 class="section__title" data-i18n="connect_title">Connect</h2>
-      <p class="section__intro" data-i18n="connect_intro">
-        For readings, performances, translation, collaborations and press.
-      </p>
-    </div>
-    <div class="connect">
-      <a class="connect__link" href="https://www.instagram.com/ardalan.bastani/" target="_blank" rel="noopener">
-        <span class="connect__icon">◎</span>
-        <span class="connect__label">Instagram</span>
-        <span class="connect__handle">@ardalan.bastani</span>
-      </a>
-      <a class="connect__link" href="#" data-edit="email">
-        <span class="connect__icon">✉</span>
-        <span class="connect__label" data-i18n="connect_email">Email</span>
-        <span class="connect__handle" data-i18n="connect_email_hint">add your address</span>
-      </a>
-      <a class="connect__link" href="https://book.krd/publisher/49books/" target="_blank" rel="noopener">
-        <span class="connect__icon">❧</span>
-        <span class="connect__label" data-i18n="connect_pub">Publisher</span>
-        <span class="connect__handle">49Books</span>
-      </a>
+  <!-- ===== Frames / Gallery §04 ===== -->
+  <section class="sec sec--alt" id="frames">
+    <header class="sec__head">
+      <span class="sec__idx mono">§04</span>
+      <span class="sec__kick mono" data-i18n="frames_kicker">Portrait, in frames</span>
+      <h2 class="sec__title reveal-lines"><span data-i18n="frames_title">Frames</span></h2>
+      <p class="sec__intro reveal" data-i18n="frames_intro">Photographs treated as graphics — hover to bring them back to life.</p>
+    </header>
+    <div class="gal">
+      <figure class="gal__i gal--tall reveal tilt" data-i18n-cap="cap_gaze">
+        <span class="gal__duo" style="background-image:url('assets/img/gaze-duo.webp')"></span>
+        <span class="gal__col" style="background-image:url('assets/img/gaze-color.webp')"></span>
+        <figcaption class="mono">01 — Gaze</figcaption>
+      </figure>
+      <figure class="gal__i reveal tilt">
+        <span class="gal__duo" style="background-image:url('assets/img/march-duo.webp')"></span>
+        <span class="gal__col" style="background-image:url('assets/img/march-color.webp')"></span>
+        <figcaption class="mono">02 — March</figcaption>
+      </figure>
+      <figure class="gal__i reveal tilt">
+        <span class="gal__duo" style="background-image:url('assets/img/red-duo.webp')"></span>
+        <span class="gal__col" style="background-image:url('assets/img/red-color.webp')"></span>
+        <figcaption class="mono">03 — Still</figcaption>
+      </figure>
+      <figure class="gal__i gal--wide reveal tilt">
+        <span class="gal__duo" style="background-image:url('assets/img/room-duo.webp')"></span>
+        <span class="gal__col" style="background-image:url('assets/img/room-color.webp')"></span>
+        <figcaption class="mono">04 — Room</figcaption>
+      </figure>
+      <figure class="gal__i reveal tilt">
+        <span class="gal__duo" style="background-image:url('assets/img/evening-duo.webp')"></span>
+        <span class="gal__col" style="background-image:url('assets/img/evening-color.webp')"></span>
+        <figcaption class="mono">05 — Evening</figcaption>
+      </figure>
     </div>
   </section>
 
-  <!-- ===== Footer ===== -->
-  <footer class="footer">
-    <p class="footer__name">Ardalan Bastani · ئەردەلان باستانی</p>
-    <p class="footer__line" data-i18n="footer_tag">Kurdish writer &amp; theatre-maker — Bukan / Berlin</p>
-    <p class="footer__copy">© <span id="year"></span> Ardalan Bastani</p>
+  <!-- ===== Connect §05 ===== -->
+  <section class="sec sec--connect" id="connect">
+    <header class="sec__head sec__head--center">
+      <span class="sec__idx mono">§05</span>
+      <span class="sec__kick mono" data-i18n="connect_kicker">Stay in touch</span>
+      <h2 class="sec__title reveal-lines"><span data-i18n="connect_title">Let's talk</span></h2>
+      <p class="sec__intro reveal" data-i18n="connect_intro">For readings, performances, translation, collaboration and press.</p>
+    </header>
+    <div class="links">
+      <a class="links__i magnetic" href="https://www.instagram.com/ardalan.bastani/" target="_blank" rel="noopener">
+        <span class="mono">→ 01</span><span class="links__l">Instagram</span><span class="links__h">@ardalan.bastani</span>
+      </a>
+      <a class="links__i magnetic" href="#" data-edit="email">
+        <span class="mono">→ 02</span><span class="links__l" data-i18n="connect_email">Email</span><span class="links__h" data-i18n="connect_email_hint">add address</span>
+      </a>
+      <a class="links__i magnetic" href="https://book.krd/publisher/49books/" target="_blank" rel="noopener">
+        <span class="mono">→ 03</span><span class="links__l" data-i18n="connect_pub">Publisher</span><span class="links__h">49Books</span>
+      </a>
+    </div>
+  </section>
+
+  <footer class="ft">
+    <div class="ft__big" data-split>Ardalan Bastani</div>
+    <div class="ft__row mono">
+      <span data-i18n="footer_tag">Kurdish writer &amp; theatre-maker — Bukan / Berlin</span>
+      <span>© <span id="year"></span></span>
+    </div>
   </footer>
 
   <script src="assets/js/i18n.js"></script>
   <script src="assets/js/main.js"></script>
+  <script type="module" src="assets/js/hero.js"></script>
 </body>
 </html>

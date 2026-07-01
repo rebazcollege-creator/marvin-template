@@ -74,7 +74,7 @@ function LoopCard({ loop, now, onDone, onSnooze, onDraft }: { loop: OpenLoop; no
         </span>
       )}
       <div className="mt-4 flex flex-wrap gap-2.5">
-        {loop.email && onDraft && (
+        {(loop.email || loop.slack) && onDraft && (
           <button type="button" onClick={onDraft} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">✍️ Draft reply</button>
         )}
         <button type="button" onClick={onDone} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✓ Done</button>
@@ -169,19 +169,32 @@ export default function HomePage() {
   };
   const dismissEmail = (m: TriagedEmail) => setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
 
-  // the next step after tracking: MARVIN drafts the reply → Approvals (nothing sends without a tap)
-  const draftEmailReply = async (loop: OpenLoop) => {
-    if (!loop.email) return;
-    flashMsg('MARVIN is drafting a reply…');
-    const mb = await fetchMessageBody(loop.email.account, loop.email.id);
-    const bodyText = mb?.text || mb?.body || loop.email.subject;
-    const r = await requestDraft({ account: loop.email.account, from: loop.email.from, subject: loop.email.subject, body: bodyText, medium: 'email' });
-    if (!r.ok || !r.draft) {
-      flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
+  // the next step after tracking: MARVIN drafts the reply → Approvals (nothing sends without a tap).
+  // Works for both email and Slack loops; "Prepare, I approve" — nothing leaves without Rebaz's tap.
+  const draftLoopReply = async (loop: OpenLoop) => {
+    if (loop.email) {
+      flashMsg('MARVIN is drafting a reply…');
+      const mb = await fetchMessageBody(loop.email.account, loop.email.id);
+      const bodyText = mb?.text || mb?.body || loop.email.subject;
+      const r = await requestDraft({ account: loop.email.account, from: loop.email.from, subject: loop.email.subject, body: bodyText, medium: 'email' });
+      if (!r.ok || !r.draft) {
+        flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
+        return;
+      }
+      enqueueApproval({ kind: 'email', title: `Reply to ${loop.email.from}`, source: `Email · ${loop.email.account}`, preview: r.draft, actionLabel: 'Send' });
+      flashMsg('✍️ Draft ready in Approvals — review & send.');
       return;
     }
-    enqueueApproval({ kind: 'email', title: `Reply to ${loop.email.from}`, source: `Email · ${loop.email.account}`, preview: r.draft, actionLabel: 'Send' });
-    flashMsg('✍️ Draft ready in Approvals — review & send.');
+    if (loop.slack) {
+      flashMsg('MARVIN is drafting a reply…');
+      const r = await requestDraft({ account: loop.slack.workspace, from: loop.slack.from, subject: loop.slack.channel, body: loop.slack.text, medium: 'slack' });
+      if (!r.ok || !r.draft) {
+        flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
+        return;
+      }
+      enqueueApproval({ kind: 'slack', title: `Reply to ${loop.slack.from} (${loop.slack.channel})`, source: `Slack · ${loop.slack.workspace}`, preview: r.draft, actionLabel: 'Send' });
+      flashMsg('✍️ Draft ready in Approvals — review & send.');
+    }
   };
 
   return (
@@ -218,8 +231,8 @@ export default function HomePage() {
               </p>
               <div className="mt-4 flex flex-wrap gap-2.5">
                 <button type="button" onClick={() => setFocus({ task: oneThing.task, loopId: oneThing.id })} className="rounded-xl bg-accent px-5 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">▶ Focus with me</button>
-                {oneThing.email && (
-                  <button type="button" onClick={() => void draftEmailReply(oneThing)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✍️ Draft reply</button>
+                {(oneThing.email || oneThing.slack) && (
+                  <button type="button" onClick={() => void draftLoopReply(oneThing)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✍️ Draft reply</button>
                 )}
                 <button type="button" onClick={() => completeLoop(oneThing.id)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✓ Done</button>
                 <button type="button" onClick={() => snoozeLoop(oneThing.id, new Date(now.getTime() + 3 * 3600_000).toISOString())} className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-muted transition hover:text-text-2">Later</button>
@@ -297,7 +310,7 @@ export default function HomePage() {
                   now={now}
                   onDone={() => completeLoop(l.id)}
                   onSnooze={() => snoozeLoop(l.id, new Date(now.getTime() + 3 * 3600_000).toISOString())}
-                  onDraft={l.email ? () => void draftEmailReply(l) : undefined}
+                  onDraft={l.email || l.slack ? () => void draftLoopReply(l) : undefined}
                 />
               ))}
             </section>

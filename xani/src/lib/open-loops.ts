@@ -44,6 +44,8 @@ export type OpenLoop = {
   ref?: string;
   /** For email loops: enough context to draft a reply (the next step after tracking). */
   email?: { account: string; id: string; from: string; subject: string };
+  /** For Slack loops: enough context to draft a reply. */
+  slack?: { workspace: string; channelId: string; channel: string; from: string; text: string };
 };
 
 const KEY = 'xani.openloops.v1';
@@ -79,6 +81,7 @@ export function captureLoop(input: {
   ref?: string;
   saidOk?: boolean;
   email?: { account: string; id: string; from: string; subject: string };
+  slack?: { workspace: string; channelId: string; channel: string; from: string; text: string };
 }): OpenLoop {
   const loop: OpenLoop = {
     id: newId(),
@@ -92,6 +95,7 @@ export function captureLoop(input: {
     dueAt: input.dueAt,
     ref: input.ref,
     email: input.email,
+    slack: input.slack,
   };
   save([loop, ...listLoops()]);
   logActivity({ kind: 'note', title: 'Open loop captured', detail: loop.task.slice(0, 80) });

@@ -7,6 +7,7 @@ import type { InboxData } from '@/lib/marvin-protocol';
 import { ComposeModal } from '@/components/inbox/ComposeModal';
 import { EmailBody } from '@/components/inbox/EmailBody';
 import { enqueueApproval } from '@/lib/approvals';
+import { voicePromptFor } from '@/lib/voice';
 
 type Msg = InboxData['messages'][number];
 
@@ -155,7 +156,7 @@ export default function InboxPage() {
     const f = parseFrom(m.from);
     setDrafting(true);
     const text = body.text || m.snippet || '';
-    const draft = await draftReply({ account: m.account, from: m.from, subject: m.subject ?? '', body: text });
+    const draft = await draftReply({ account: m.account, from: m.from, subject: m.subject ?? '', body: text, medium: 'email', voice: voicePromptFor('email', 'all') });
     setDrafting(false);
     setCompose({
       mode: 'reply',

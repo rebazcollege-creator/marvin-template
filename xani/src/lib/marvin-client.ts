@@ -243,12 +243,36 @@ export async function fetchSlackTriage(learned: string[] = []): Promise<SlackTri
  * marvin-data.draftReply which collapses failures to null). Used by Home so the
  * real reason (billing, rate limit, no key) is shown to Rebaz.
  */
+/**
+ * Read a sample of Rebaz's OWN writing (sent email / his Slack messages) to seed the
+ * voice profile. Read-only; needs a Slack USER token for the Slack side.
+ */
+export async function fetchWritingSamples(p: {
+  medium: 'email' | 'slack';
+  account?: string;
+  workspace?: string;
+}): Promise<{ ok: boolean; samples: string[]; error?: string }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/history/sent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    });
+    if (!resp.ok) return { ok: false, samples: [], error: `runtime responded ${resp.status}` };
+    return (await resp.json()) as { ok: boolean; samples: string[]; error?: string };
+  } catch {
+    return { ok: false, samples: [], error: 'runtime unreachable — is it running? (npm run dev:all)' };
+  }
+}
+
 export async function requestDraft(p: {
   account: string;
   from: string;
   subject: string;
   body: string;
   medium?: 'email' | 'slack';
+  /** Rebaz's learned voice (his real writing) — makes the draft sound like him. */
+  voice?: string;
 }): Promise<{ ok: boolean; draft?: string; error?: string }> {
   try {
     const resp = await fetch(`${SIDECAR_URL}/draft-reply`, {

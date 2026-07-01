@@ -356,6 +356,65 @@ export async function getMessageBody(
   }
 }
 
+// ── Writing voice (Rebaz's own sent mail + Slack messages) ────────
+// The raw material for "sound like me": his real writing, read straight from the
+// sources (Gmail sent, Slack history filtered to his own user). No model call —
+// these become style exemplars the drafter mimics. Read-only.
+
+/** Trim a raw message to a clean voice sample: drop quoted history + cap length. */
+function cleanSample(raw: string): string {
+  let t = (raw || '').replace(/\r/g, '');
+  const cut = t.search(/\n\s*>|\nOn .+wrote:|\n-{2,}\s*Original Message|\nFrom: .+@/);
+  if (cut > 0) t = t.slice(0, cut);
+  t = t.replace(/\n{3,}/g, '\n\n').trim();
+  return t.length > 500 ? `${t.slice(0, 500).trim()}…` : t;
+}
+
+export async function getWritingSamples(p: {
+  medium: 'email' | 'slack';
+  account?: string;
+  workspace?: string;
+}): Promise<{ ok: boolean; samples: string[]; error?: string }> {
+  try {
+    if (p.medium === 'email') {
+      const sent = await getInbox('sent', '');
+      if (!sent.connected) return { ok: false, samples: [], error: sent.error ?? 'Gmail not connected.' };
+      const rows = sent.messages.filter((m) => !p.account || m.account === p.account).slice(0, 8);
+      if (rows.length === 0) return { ok: true, samples: [] };
+      const bodies = await Promise.all(
+        rows.map(async (m) => {
+          const b = await getMessageBody(m.account, m.id);
+          return cleanSample(b.text || b.body || m.snippet || '');
+        }),
+      );
+      return { ok: true, samples: bodies.filter((s) => s.length >= 12).slice(0, 6) };
+    }
+
+    // Slack — needs a user token to see his own messages (a bot can't).
+    const slack = await getSlack();
+    if (!slack.connected) return { ok: false, samples: [], error: slack.error ?? 'Slack not connected.' };
+    const ws = slack.workspaces.find((w) => !p.workspace || w.role === p.workspace);
+    const selfId = ws?.selfId;
+    if (!selfId) return { ok: false, samples: [], error: 'Slack needs a USER token (xoxp-) to read your own messages.' };
+    const convos = slack.channels.filter((c) => !p.workspace || c.workspace === p.workspace).slice(0, 8);
+    const histories = await Promise.all(
+      convos.map((c) => getSlackHistory({ workspace: c.workspace, channel: c.id, limit: 30 }).catch(() => null)),
+    );
+    const mine: string[] = [];
+    for (const h of histories) {
+      if (!h || !h.ok) continue;
+      for (const m of h.messages) {
+        if (m.userId !== selfId) continue;
+        const t = cleanSample(m.text || '');
+        if (t.length >= 8) mine.push(t); // skip trivial "ok"/emoji-only
+      }
+    }
+    return { ok: true, samples: mine.slice(0, 14) };
+  } catch (e) {
+    return { ok: false, samples: [], error: (e as Error).message };
+  }
+}
+
 // ── Google Calendar ───────────────────────────────────────────────
 
 export async function getCalendar(): Promise<CalendarData> {

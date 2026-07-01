@@ -5,6 +5,7 @@ import { ensureStorageReady } from '@/lib/storage';
 import { AUTONOMY_DEFS, getAutonomy, setAutonomy, type Level } from '@/lib/autonomy';
 import { listApprovals, saveApprovals, decideApproval, type ApprovalItem, type ApprovalKind } from '@/lib/approvals';
 import { actMarvin } from '@/lib/marvin-client';
+import { addVoiceSampleByKey } from '@/lib/voice';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
 const LEVELS: { id: Level; label: string }[] = [
@@ -67,6 +68,13 @@ export default function ApprovalsPage() {
     }
   };
   const saveEdit = (id: string) => {
+    const item = items.find((i) => i.id === id);
+    // Draft-edit learning: a meaningful rewrite of an email/Slack draft is real Rebaz
+    // writing — store it as a fresh voice sample so future drafts sound more like him.
+    if (item?.voiceKey && draft.trim() && draft.trim() !== item.preview.trim()) {
+      addVoiceSampleByKey(item.voiceKey, draft.trim());
+      setResult('Learned your edit — future drafts will sound more like you.');
+    }
     persist(items.map((i) => (i.id === id ? { ...i, preview: draft } : i)));
     setEditing(null);
   };

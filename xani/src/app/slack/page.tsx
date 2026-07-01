@@ -6,6 +6,7 @@ import { useLiveData } from '@/lib/use-live-data';
 import { RefreshButton } from '@/components/ui/RefreshButton';
 import type { SlackData } from '@/lib/marvin-protocol';
 import { enqueueApproval } from '@/lib/approvals';
+import { voicePromptFor } from '@/lib/voice';
 import { SlackText, emojiFor } from '@/lib/slack-mrkdwn';
 
 type Msg = SlackData['messages'][number];
@@ -105,7 +106,7 @@ export default function SlackPage() {
 
   const aiDraft = async (m: Msg) => {
     setMarvin({ title: 'DRAFT REPLY', text: '', loading: true });
-    const draft = await draftReply({ account: m.workspace, from: m.user, subject: activeChan?.name ?? '', body: m.text, medium: 'slack' });
+    const draft = await draftReply({ account: m.workspace, from: m.user, subject: activeChan?.name ?? '', body: m.text, medium: 'slack', voice: voicePromptFor('slack', m.workspace) });
     setMarvin(null);
     if (draft) setComposeText(draft);
     else setMarvin({ title: 'DRAFT REPLY', text: 'Couldn’t draft a reply — is the runtime running with an API key?' });

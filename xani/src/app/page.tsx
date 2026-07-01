@@ -11,6 +11,7 @@ import type { BriefingData, TriagedEmail, TriagedSlack } from '@/lib/marvin-prot
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
 import { recordTriageCorrection, triageLearnings, learnedCount } from '@/lib/triage-learning';
+import { voicePromptFor, voiceKeyFor } from '@/lib/voice';
 import { FocusSession } from '@/components/home/FocusSession';
 
 /**
@@ -221,23 +222,23 @@ export default function HomePage() {
       flashMsg('MARVIN is drafting a reply…');
       const mb = await fetchMessageBody(loop.email.account, loop.email.id);
       const bodyText = mb?.text || mb?.body || loop.email.subject;
-      const r = await requestDraft({ account: loop.email.account, from: loop.email.from, subject: loop.email.subject, body: bodyText, medium: 'email' });
+      const r = await requestDraft({ account: loop.email.account, from: loop.email.from, subject: loop.email.subject, body: bodyText, medium: 'email', voice: voicePromptFor('email', 'all') });
       if (!r.ok || !r.draft) {
         flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
         return;
       }
-      enqueueApproval({ kind: 'email', title: `Reply to ${loop.email.from}`, source: `Email · ${loop.email.account}`, preview: r.draft, actionLabel: 'Send' });
+      enqueueApproval({ kind: 'email', title: `Reply to ${loop.email.from}`, source: `Email · ${loop.email.account}`, preview: r.draft, actionLabel: 'Send', voiceKey: voiceKeyFor('email', 'all') });
       flashMsg('✍️ Draft ready in Approvals — review & send.');
       return;
     }
     if (loop.slack) {
       flashMsg('MARVIN is drafting a reply…');
-      const r = await requestDraft({ account: loop.slack.workspace, from: loop.slack.from, subject: loop.slack.channel, body: loop.slack.text, medium: 'slack' });
+      const r = await requestDraft({ account: loop.slack.workspace, from: loop.slack.from, subject: loop.slack.channel, body: loop.slack.text, medium: 'slack', voice: voicePromptFor('slack', loop.slack.workspace) });
       if (!r.ok || !r.draft) {
         flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
         return;
       }
-      enqueueApproval({ kind: 'slack', title: `Reply to ${loop.slack.from} (${loop.slack.channel})`, source: `Slack · ${loop.slack.workspace}`, preview: r.draft, actionLabel: 'Send' });
+      enqueueApproval({ kind: 'slack', title: `Reply to ${loop.slack.from} (${loop.slack.channel})`, source: `Slack · ${loop.slack.workspace}`, preview: r.draft, actionLabel: 'Send', voiceKey: voiceKeyFor('slack', loop.slack.workspace) });
       flashMsg('✍️ Draft ready in Approvals — review & send.');
     }
   };

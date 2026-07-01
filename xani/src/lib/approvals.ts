@@ -32,6 +32,8 @@ export type ApprovalItem = {
   decidedAt?: string;
   /** Structured data so /act can perform the real action on approve. */
   payload?: ActPayload;
+  /** Voice scope (e.g. "email:all", "slack:amargi") — an edit here teaches that voice. */
+  voiceKey?: string;
 };
 
 const KEY = 'xani.approvals.v1';
@@ -50,6 +52,7 @@ export function enqueueApproval(input: {
   preview: string;
   actionLabel?: string;
   payload?: ActPayload;
+  voiceKey?: string;
 }): ApprovalItem {
   const item: ApprovalItem = {
     id: newId(),
@@ -61,6 +64,7 @@ export function enqueueApproval(input: {
     createdAt: new Date().toISOString(),
     status: 'pending',
     payload: input.payload,
+    voiceKey: input.voiceKey,
   };
   saveApprovals([item, ...listApprovals()]);
   logActivity({ kind: 'approval', title: `Prepared: ${item.title}`, detail: item.source, tag: 'Needs you' });

@@ -171,7 +171,7 @@ export async function fetchMessageBody(account: string, id: string): Promise<Mes
   return req;
 }
 /** Ask the runtime to draft a reply (Haiku). Returns the draft body text. POST, uncached. */
-export async function draftReply(p: { account: string; from: string; subject: string; body: string; medium?: 'email' | 'slack' }): Promise<string | null> {
+export async function draftReply(p: { account: string; from: string; subject: string; body: string; medium?: 'email' | 'slack'; voice?: string }): Promise<string | null> {
   try {
     const resp = await fetch(`${SIDECAR_URL}/draft-reply`, {
       method: 'POST',

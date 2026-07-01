@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Xanî — Open Loops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   XANÎ — Open Loops home (ADHD, light-default).
+   Solves "I say ok and forget": every task directed at Rebaz
+   (Slack DMs/mentions, Trello card-comment mentions) captured in
+   ONE place, tracked through 'ok → done', nudged. Plus the Kurdish
+   /ambiguous "give me options → teach me" flow, and a self-
+   development learning card. Prototype (illustrative content).
+   ============================================================ */
+:root{
+  --bg:#f3f1ea; --surf:#fffdf8; --surf2:#f7f4ec; --bd:#e6e1d4; --bd2:#ded8c8;
+  --tx:#221f18; --tx2:#5f5a4e; --mut:#9a9484;
+  --accent:#c0613a; --accent2:#d0764f; --accent-soft:#f3e7df;
+  --slack:#3f9d6b; --slack-soft:#e5f1ea; --trello:#3f77c4; --trello-soft:#e4edf8;
+  --amargi:#c0613a; --lead:#c98a12; --lead-soft:#f7edd8; --violet:#7a5fc0; --violet-soft:#ece6f6;
+  --green:#4a8a5f;
+  --r:16px; --shadow:0 18px 42px -30px rgba(60,40,20,.4);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{font-family:'Inter',system-ui,sans-serif;background:
+  radial-gradient(1000px 640px at 84% -12%,rgba(192,97,58,.07),transparent 60%),
+  radial-gradient(760px 520px at -5% 108%,rgba(122,95,192,.07),transparent 60%),var(--bg);
+  color:var(--tx);-webkit-font-smoothing:antialiased;}
+h1,h2,h3,.disp{font-family:'Fraunces',Georgia,serif;} .label{font-family:'Space Grotesk';}
+::-webkit-scrollbar{width:9px;}::-webkit-scrollbar-thumb{background:var(--bd2);border-radius:6px;}
+
+.wrap{max-width:760px;margin:0 auto;padding:34px 22px 90px;}
+.top{display:flex;align-items:center;gap:11px;margin-bottom:6px;}
+.top .o{width:34px;height:34px;border-radius:50%;background:conic-gradient(from 200deg,#7ce0cf,#5aa9ff,#b088ff,#ff7a52,#7ce0cf);box-shadow:0 0 16px rgba(120,160,255,.4);}
+.top .wm{font-family:'Fraunces';font-weight:700;font-size:22px;}
+.top .day{margin-left:auto;font-size:12.5px;color:var(--tx2);}
+h1.greet{font-size:clamp(26px,4vw,34px);font-weight:600;letter-spacing:-.01em;margin-top:14px;}
+.lede{color:var(--tx2);font-size:15px;margin-top:6px;line-height:1.5;}
+.lede b{color:var(--accent);font-weight:600;}
+
+.sec{margin-top:28px;}
+.sech{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.sech h2{font-family:'Space Grotesk';font-size:12.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--mut);font-weight:700;}
+.sech .ct{font-size:11.5px;font-weight:700;background:var(--surf);border:1px solid var(--bd);color:var(--tx2);border-radius:20px;padding:2px 9px;}
+.sech .sp{flex:1;}
+
+/* loop card */
+.loop{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:15px 16px;box-shadow:var(--shadow);margin-bottom:12px;position:relative;overflow:hidden;transition:.25s;}
+.loop::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c);}
+.loop.done{opacity:.5;}
+.loop .meta{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--tx2);margin-bottom:7px;flex-wrap:wrap;}
+.src{display:inline-flex;align-items:center;gap:5px;font-weight:700;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;padding:3px 8px;border-radius:7px;background:var(--csoft);color:var(--c);}
+.who{font-weight:600;color:var(--tx);}
+.loop .task{font-size:14.5px;line-height:1.4;color:var(--tx);}
+.loop.done .task{text-decoration:line-through;color:var(--mut);}
+.state{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600;margin-top:9px;padding:4px 9px;border-radius:8px;}
+.state.ok{background:var(--lead-soft);color:#9a6a12;} .state.prog{background:var(--trello-soft);color:var(--trello);} .state.new{background:var(--slack-soft);color:var(--slack);}
+.state .dot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.acts{display:flex;gap:7px;margin-top:12px;flex-wrap:wrap;}
+.act{border:1px solid var(--bd);background:var(--surf2);color:var(--tx2);border-radius:9px;padding:7px 11px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;}
+.act:hover{color:var(--tx);border-color:var(--c);}
+.act.p{background:var(--c);color:#fff;border-color:transparent;} .act.p:hover{filter:brightness(1.06);color:#fff;}
+
+/* incoming */
+.inc{display:flex;align-items:center;gap:12px;background:var(--surf);border:1px dashed var(--bd2);border-radius:13px;padding:12px 14px;margin-bottom:10px;}
+.inc .body{flex:1;min-width:0;} .inc .body .m{font-size:11px;color:var(--tx2);margin-bottom:3px;} .inc .body .t{font-size:13.5px;color:var(--tx);}
+.inc .yn{display:flex;gap:6px;}
+.mini{border:1px solid var(--bd);background:var(--surf2);border-radius:8px;padding:6px 10px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--tx2);}
+.mini.p{background:var(--accent);color:#fff;border-color:transparent;}
+
+/* ambiguous / kurdish */
+.amb{background:linear-gradient(160deg,var(--violet-soft),var(--surf) 60%);border:1px solid var(--violet);border-radius:var(--r);padding:18px;box-shadow:var(--shadow);}
+.amb .h{display:flex;align-items:center;gap:8px;font-family:'Space Grotesk';font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--violet);}
+.amb .orig{margin-top:10px;background:var(--surf);border:1px solid var(--bd);border-radius:11px;padding:11px 13px;font-size:14px;color:var(--tx);}
+.amb .orig .lang{font-size:10.5px;color:var(--mut);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;}
+.amb .read{margin-top:11px;font-size:13.5px;color:var(--tx2);line-height:1.5;} .amb .read b{color:var(--tx);}
+.opts{display:flex;gap:8px;flex-wrap:wrap;margin-top:13px;}
+.opt{border:1px solid var(--violet);background:var(--surf);color:var(--violet);border-radius:20px;padding:8px 14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;} .opt:hover{background:var(--violet);color:#fff;}
+.teach{margin-top:12px;display:none;gap:8px;} .teach.on{display:flex;} .teach input{flex:1;border:1px solid var(--bd2);border-radius:10px;padding:10px 13px;font-family:inherit;font-size:13px;color:var(--tx);outline:none;background:var(--surf);} .teach input:focus{border-color:var(--violet);} .teach button{background:var(--violet);color:#fff;border:none;border-radius:10px;padding:10px 15px;font-weight:600;font-size:12.5px;cursor:pointer;font-family:inherit;}
+
+/* learning card */
+.learn{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:16px 18px;box-shadow:var(--shadow);}
+.learn .h{display:flex;align-items:center;gap:9px;margin-bottom:4px;} .learn .h .s{font-family:'Fraunces';font-size:17px;font-weight:600;flex:1;} .learn .h .stat{font-size:11.5px;font-weight:700;color:var(--green);background:#e6f0e8;border-radius:20px;padding:3px 10px;}
+.learn p{font-size:13.5px;color:var(--tx2);line-height:1.5;margin-top:8px;} .learn p b{color:var(--tx);}
+.learn .row{display:flex;gap:8px;margin-top:14px;}
+.learn .row .p{background:var(--green);color:#fff;border:none;border-radius:10px;padding:9px 16px;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit;}
+.learn .row .g{background:var(--surf2);border:1px solid var(--bd);color:var(--tx2);border-radius:10px;padding:9px 14px;font-size:12.5px;cursor:pointer;font-family:inherit;}
+
+.empty{color:var(--mut);font-size:13px;padding:8px 2px;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(24px);background:#26221b;color:#f6f1e8;padding:12px 18px;border-radius:12px;font-size:13.5px;font-weight:600;box-shadow:0 16px 34px -18px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.3s;z-index:80;} .toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+.spark{position:fixed;width:9px;height:9px;border-radius:2px;pointer-events:none;z-index:90;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top"><span class="o"></span><span class="wm">Xanî</span><span class="day">Wed 1 Jul · 08:42</span></div>
+  <h1 class="greet">Good morning, Rebaz.</h1>
+  <p class="lede">You said yes to <b>4 things</b> — <b id="openCount">2</b> still open. I’m holding them so you don’t have to. Nothing said "ok" gets lost.</p>
+
+  <!-- OPEN LOOPS -->
+  <section class="sec">
+    <div class="sech"><h2>Open loops — you said yes, not done</h2><span class="sp"></span><span class="ct" id="loopCt">2 open</span></div>
+    <div id="loops">
+
+      <div class="loop" style="--c:var(--amargi);--csoft:var(--accent-soft)" data-loop>
+        <div class="meta"><span class="src" style="--c:var(--amargi);--csoft:var(--accent-soft)">💬 Slack DM · Amargi</span><span class="who">Aland (designer)</span><span>· 2 days ago</span></div>
+        <div class="task">“Can you review the Newroz carousel before I schedule it?”</div>
+        <span class="state ok"><span class="dot"></span>You said “ok” · still open</span>
+        <div class="acts"><button class="act p" data-done>✓ Mark done</button><button class="act" data-toast="✍️ Draft update opened">Draft update</button><button class="act" data-toast="😴 Snoozed to this afternoon">Snooze</button><button class="act" data-toast="⏰ I’ll remind you at 14:00">Remind me</button></div>
+      </div>
+
+      <div class="loop" style="--c:var(--trello);--csoft:var(--trello-soft)" data-loop>
+        <div class="meta"><span class="src" style="--c:var(--trello);--csoft:var(--trello-soft)">📋 Trello · Review</span><span class="who">@mention in a comment</span><span>· yesterday</span></div>
+        <div class="task">Card “Kurdistan water crisis explainer” — “@Rebaz can you approve the final cut?”</div>
+        <span class="state ok"><span class="dot"></span>Seen, no reply yet</span>
+        <div class="acts"><button class="act p" data-done>✓ Mark done</button><button class="act" data-toast="📋 Opening the card">Open card</button><button class="act" data-toast="✍️ Draft a reply comment">Draft reply</button><button class="act" data-toast="⏰ Reminder set">Remind me</button></div>
+      </div>
+
+    </div>
+    <div class="empty" id="loopsEmpty" style="display:none">🎉 All caught up. Every "yes" is handled.</div>
+  </section>
+
+  <!-- INCOMING -->
+  <section class="sec">
+    <div class="sech"><h2>New requests — is this a task?</h2><span class="sp"></span></div>
+    <div id="incoming">
+      <div class="inc" data-inc>
+        <div class="body"><div class="m">💬 Slack DM · Amargi · Sana (editor)</div><div class="t">“Hey Rebaz, could you pull the engagement stats for the Rojava piece when you get a sec?”</div></div>
+        <div class="yn"><button class="mini p" data-add>+ Open loop</button><button class="mini" data-dismiss data-toast="Filed — not a task">Not a task</button></div>
+      </div>
+      <div class="inc" data-inc>
+        <div class="body"><div class="m">💬 Slack · LeadStories DM · Layla</div><div class="t">“Rebaz — urgent TikTok to fact-check before 3pm, sending now.”</div></div>
+        <div class="yn"><button class="mini p" data-add>+ Open loop</button><button class="mini" data-dismiss data-toast="Filed">Not a task</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- AMBIGUOUS / KURDISH -->
+  <section class="sec">
+    <div class="sech"><h2>I need your call</h2><span class="sp"></span></div>
+    <div class="amb" id="ambCard">
+      <div class="h">🌐 Kurdish · I’m not fully sure what this needs</div>
+      <div class="orig"><div class="lang">Kurmancî — from Aland (Amargi)</div>“Rebaz, ji kerema xwe vê nivîsê ji bo sibê plan bike û wêneyê biguherîne.”</div>
+      <div class="read">My best read: <b>“Please schedule this post for tomorrow and change the image.”</b> — but I’m only ~70% sure about the second part. What do you want me to do?</div>
+      <div class="opts">
+        <button class="opt" data-opt="Schedule for tomorrow + flag image swap to Aland">Schedule + swap image</button>
+        <button class="opt" data-opt="Just schedule for tomorrow">Just schedule it</button>
+        <button class="opt" data-opt="Hold — you'll handle it">I’ll handle it</button>
+        <button class="opt" id="explainBtn">Let me explain →</button>
+      </div>
+      <div class="teach" id="teach">
+        <input id="teachInput" placeholder="Tell me what it means / what to do — I’ll remember for next time" />
+        <button id="teachSend">Teach</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- SELF-DEVELOPMENT -->
+  <section class="sec">
+    <div class="sech"><h2>Xanî is learning</h2><span class="sp"></span></div>
+    <div class="learn" id="learnCard">
+      <div class="h"><span class="s">A rule I’d like to adopt</span><span class="stat" id="learned">4 learned this week</span></div>
+      <p>You’ve dismissed <b>“LinkedIn — you appeared in N searches”</b> emails 3 times this week. Want me to <b>auto-file them</b> from now on so they never reach you?</p>
+      <div class="row"><button class="p" id="approveRule">Approve — auto-file these</button><button class="g" id="dismissRule" data-toast="Okay, I’ll keep asking">Not yet</button></div>
+    </div>
+  </section>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+let tT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),2000);}
+function confetti(x,y){const cs=['#c0613a','#7a5fc0','#3f9d6b','#3f77c4','#c98a12','#7ce0cf'];for(let i=0;i<20;i++){const s=document.createElement('i');s.className='spark';s.style.left=x+'px';s.style.top=y+'px';s.style.background=cs[i%cs.length];document.body.appendChild(s);const a=Math.random()*6.28,d=55+Math.random()*80;s.animate([{transform:'translate(0,0)',opacity:1},{transform:`translate(${Math.cos(a)*d}px,${Math.sin(a)*d+55}px) rotate(${Math.random()*360}deg)`,opacity:0}],{duration:750,easing:'cubic-bezier(.2,.7,.3,1)'}).onfinish=()=>s.remove();}}
+
+let open=2;
+function refreshCount(){document.getElementById('openCount').textContent=open;document.getElementById('loopCt').textContent=open+' open';document.getElementById('loopsEmpty').style.display=open===0?'block':'none';}
+
+// generic toast buttons
+document.addEventListener('click',e=>{const b=e.target.closest('[data-toast]');if(b&&!b.hasAttribute('data-done')&&!b.hasAttribute('data-dismiss')&&!b.hasAttribute('data-add'))toast(b.dataset.toast);});
+
+// mark done
+document.querySelectorAll('[data-done]').forEach(btn=>btn.addEventListener('click',()=>{const card=btn.closest('[data-loop]');if(card.classList.contains('done'))return;card.classList.add('done');const r=btn.getBoundingClientRect();confetti(r.left+20,r.top);open=Math.max(0,open-1);refreshCount();toast('✅ Done — one loop closed');setTimeout(()=>{card.style.height=card.offsetHeight+'px';requestAnimationFrame(()=>{card.style.height='0';card.style.opacity='0';card.style.margin='0';card.style.padding='0';card.style.transition='.4s';setTimeout(()=>card.remove(),400);});},650);}));
+
+// incoming → add / dismiss
+document.querySelectorAll('[data-add]').forEach(b=>b.addEventListener('click',()=>{const card=b.closest('[data-inc]');card.style.transition='.3s';card.style.opacity='0';setTimeout(()=>card.remove(),300);open++;refreshCount();toast('➕ Added to open loops — I’ll track it');}));
+document.querySelectorAll('[data-dismiss]').forEach(b=>b.addEventListener('click',()=>{const card=b.closest('[data-inc]');card.style.transition='.3s';card.style.opacity='0';setTimeout(()=>card.remove(),300);toast(b.dataset.toast||'Filed');}));
+
+// ambiguous options
+document.querySelectorAll('#ambCard .opt').forEach(o=>{if(o.id==='explainBtn')return;o.addEventListener('click',()=>{document.getElementById('ambCard').style.transition='.35s';document.getElementById('ambCard').style.opacity='.4';toast('Got it — '+o.dataset.opt+'. Learned this pattern.');document.getElementById('learned').textContent='5 learned this week';});});
+document.getElementById('explainBtn').addEventListener('click',()=>{document.getElementById('teach').classList.add('on');document.getElementById('teachInput').focus();});
+function teach(){const v=document.getElementById('teachInput').value.trim()||'schedule requests from Aland in Kurdish';document.getElementById('ambCard').style.opacity='.4';toast('🧠 Learned: “'+v+'”. I’ll handle it myself next time.');document.getElementById('learned').textContent='5 learned this week';}
+document.getElementById('teachSend').addEventListener('click',teach);
+document.getElementById('teachInput').addEventListener('keydown',e=>{if(e.key==='Enter')teach();});
+
+// approve rule
+document.getElementById('approveRule').addEventListener('click',()=>{const c=document.getElementById('learnCard');c.style.transition='.35s';c.style.opacity='.45';const n=6;document.getElementById('learned').textContent=n+' learned this week';toast('🧠 Learned — LinkedIn notifications will be auto-filed from now on');});
+
+refreshCount();
+</script>
+</body>
+</html>

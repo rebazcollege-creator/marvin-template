@@ -83,12 +83,16 @@ function LoopCard({ loop, now, onDone, onSnooze }: { loop: OpenLoop; now: Date; 
 export default function HomePage() {
   const [settings, setSettings] = useState<XaniSettings | null>(null);
   const [loops, setLoops] = useState<OpenLoop[]>([]);
-  const [data, setData] = useState<BriefingData | null>(() => peekData<BriefingData>(PATHS.briefing));
+  // Start null on BOTH server and client (no localStorage read during render) to avoid
+  // a hydration mismatch; the cached value is hydrated in the effect below.
+  const [data, setData] = useState<BriefingData | null>(null);
   const [capture, setCapture] = useState('');
   const [focus, setFocus] = useState<{ task: string; loopId?: string } | null>(null);
   const [inboxActs, setInboxActs] = useState<TriagedEmail[] | null>(null);
   const [inboxKnow, setInboxKnow] = useState(0);
   const [inboxFiled, setInboxFiled] = useState(0);
+  const [inboxErr, setInboxErr] = useState<string | null>(null);
+  const [inboxLoading, setInboxLoading] = useState(true);
   const now = useMemo(() => new Date(), []);
 
   const reloadLoops = useCallback(() => setLoops(activeLoops()), []);
@@ -97,11 +101,18 @@ export default function HomePage() {
     ensureStorageReady().then(() => {
       setSettings(getSettings());
       reloadLoops();
+      const cached = peekData<BriefingData>(PATHS.briefing);
+      if (cached) setData(cached);
       void syncOpenLoops().then(reloadLoops); // pull live Trello commitments into Open Loops
     });
     fetchBriefingData().then((d) => d && setData(d));
     fetchInboxTriage().then((t) => {
-      if (!t) return;
+      setInboxLoading(false);
+      if (!t) {
+        setInboxErr('runtime unreachable — is it running? (npm run dev:all)');
+        return;
+      }
+      if (t.error) setInboxErr(t.error);
       setInboxActs(t.triaged.filter((m) => m.verdict === 'act'));
       setInboxKnow(t.triaged.filter((m) => m.verdict === 'know').length);
       setInboxFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
@@ -199,37 +210,43 @@ export default function HomePage() {
             <button type="button" onClick={onCapture} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">Hold it</button>
           </div>
 
-          {/* from your inbox — MARVIN triage: only what needs you */}
-          {inboxActs && inboxActs.length > 0 && (
-            <section className="mt-10">
-              <div className="mb-4 flex items-baseline gap-3 px-1">
-                <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted">From your inbox — needs you</h2>
+          {/* from your inbox — MARVIN triage (always shows its state) */}
+          <section className="mt-10">
+            <div className="mb-4 flex items-baseline gap-3 px-1">
+              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted">From your inbox — needs you</h2>
+              {inboxActs && (
                 <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-2">{inboxActs.length}</span>
-              </div>
-              {inboxActs.map((m) => (
-                <div key={m.id} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-amber">Email · {m.account}</span>
-                    <span className="text-[13px] text-text-2">{m.from}</span>
-                  </div>
-                  <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.subject}</p>
-                  {m.reason && <p className="mt-1 text-[12.5px] text-muted">{m.reason}</p>}
-                  <div className="mt-4 flex flex-wrap gap-2.5">
-                    <button type="button" onClick={() => trackEmail(m)} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">+ Track it</button>
-                    <button type="button" onClick={() => dismissEmail(m)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Not for me</button>
-                  </div>
-                </div>
-              ))}
-              {(inboxKnow > 0 || inboxFiled > 0) && (
-                <p className="mt-4 px-1 text-[12.5px] text-muted">
-                  {inboxKnow > 0 && `${inboxKnow} good to know`}
-                  {inboxKnow > 0 && inboxFiled > 0 && ' · '}
-                  {inboxFiled > 0 && `${inboxFiled} filed away as noise`}
-                  .
-                </p>
               )}
-            </section>
-          )}
+            </div>
+
+            {inboxLoading && <p className="px-1 text-[13.5px] text-muted">Reading your inbox…</p>}
+            {!inboxLoading && inboxErr && <p className="px-1 text-[13.5px] text-muted">Couldn’t read your inbox: {inboxErr}</p>}
+            {!inboxLoading && !inboxErr && inboxActs && inboxActs.length === 0 && (
+              <p className="px-1 text-[13.5px] text-text-2">
+                Nothing in your inbox needs you right now.
+                {(inboxKnow > 0 || inboxFiled > 0) && ` ${inboxKnow} good to know · ${inboxFiled} filed as noise.`}
+              </p>
+            )}
+
+            {inboxActs?.map((m) => (
+              <div key={m.id} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-amber">Email · {m.account}</span>
+                  <span className="text-[13px] text-text-2">{m.from}</span>
+                </div>
+                <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.subject}</p>
+                {m.reason && <p className="mt-1 text-[12.5px] text-muted">{m.reason}</p>}
+                <div className="mt-4 flex flex-wrap gap-2.5">
+                  <button type="button" onClick={() => trackEmail(m)} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">+ Track it</button>
+                  <button type="button" onClick={() => dismissEmail(m)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Not for me</button>
+                </div>
+              </div>
+            ))}
+
+            {!inboxLoading && !inboxErr && inboxActs && inboxActs.length > 0 && (inboxKnow > 0 || inboxFiled > 0) && (
+              <p className="mt-4 px-1 text-[12.5px] text-muted">{inboxKnow} good to know · {inboxFiled} filed away as noise.</p>
+            )}
+          </section>
 
           {/* the rest of the open loops */}
           {rest.length > 0 && (

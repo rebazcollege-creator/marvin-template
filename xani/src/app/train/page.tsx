@@ -3,7 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ensureStorageReady } from '@/lib/storage';
-import { fetchWritingSamples } from '@/lib/marvin-client';
+import {
+  fetchWritingSamples,
+  harvestVoice,
+  analyzeVoice,
+  getVoiceCorpus,
+  type VoiceCorpusInfo,
+} from '@/lib/marvin-client';
 import { fetchInboxFolder } from '@/lib/marvin-data';
 import { getVoice, setVoiceSamples, type VoiceMedium } from '@/lib/voice';
 import { recordSenderRule } from '@/lib/triage-learning';
@@ -93,6 +99,113 @@ function VoiceCard({ s }: { s: Scope }) {
             </button>
             <button type="button" onClick={() => setSamples([])} className="rounded-[9px] border border-border bg-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-text-2 transition hover:bg-hover">Discard</button>
           </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Deep harvest — go back as far as Slack/Gmail allow, gather Rebaz's own writing (Slack
+ *  bursts grouped into real messages, emails de-quoted), save it as his voice, and mine the
+ *  patterns in the tasks he's given and how he answers. Bounded per run; re-run to go deeper. */
+function DeepHarvest() {
+  const [info, setInfo] = useState<VoiceCorpusInfo | null>(null);
+  const [harvesting, setHarvesting] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    getVoiceCorpus().then((r) => { if (r.ok) setInfo(r); });
+  }, []);
+
+  const harvest = async () => {
+    setHarvesting(true);
+    setMsg('Gathering your Slack + email history… this can take a few minutes (Slack limits how fast it can be read). Leave it running — re-run later to reach further back.');
+    const r = await harvestVoice({});
+    setHarvesting(false);
+    if (!r.ok) { setMsg(r.error ?? 'Harvest failed.'); return; }
+    let saved = 0;
+    for (const [key, samples] of Object.entries(r.samples ?? {})) {
+      const idx = key.indexOf(':');
+      if (idx < 0) continue;
+      setVoiceSamples(key.slice(0, idx) as VoiceMedium, key.slice(idx + 1), samples);
+      saved += 1;
+    }
+    setMsg(`Gathered your writing and saved it as your voice across ${saved} channel${saved === 1 ? '' : 's'}. Now analyse the patterns.`);
+    const c = await getVoiceCorpus();
+    if (c.ok) setInfo(c);
+  };
+
+  const analyze = async () => {
+    setAnalyzing(true);
+    setMsg('Analysing your writing and the tasks you get, on your Claude login… this also takes a moment.');
+    const r = await analyzeVoice();
+    setAnalyzing(false);
+    if (!r.ok) { setMsg(r.error ?? 'Analysis failed.'); return; }
+    setMsg('Analysis done — see your patterns below.');
+    const c = await getVoiceCorpus();
+    if (c.ok) setInfo(c);
+  };
+
+  const stats = info?.stats ?? {};
+  const sum = (pfx: string) => Object.entries(stats).filter(([k]) => k.startsWith(pfx)).reduce((a, [, v]) => a + (v as number), 0);
+  const mine = sum('mine:');
+  const pairs = sum('pairs:');
+  const analysis = info?.analysis ?? null;
+
+  return (
+    <div className="mt-8">
+      <h2 className="mb-3 text-[12px] font-bold uppercase tracking-[0.1em] text-muted">Deep harvest — learn everything I&apos;ve written</h2>
+      <div className="rounded-[14px] border border-border bg-surface p-[18px]">
+        <p className="text-[13px] leading-relaxed text-text-2">
+          Go back as far as Slack and Gmail allow and gather all of your own messages and sent
+          emails. On Slack, several quick lines you type in a row are treated as one message (the way
+          chatting really works). It saves everything as your voice, then finds the patterns in the
+          tasks people send you and how you reply. Read-only; nothing is ever sent.
+        </p>
+
+        {(mine > 0 || info?.updatedAt) && (
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-[12px] text-muted">
+            <span><span className="font-semibold text-text-2">{mine}</span> of your messages/emails gathered</span>
+            <span><span className="font-semibold text-text-2">{pairs}</span> task→reply pairs</span>
+            {info?.updatedAt && <span>updated {new Date(info.updatedAt).toLocaleString()}</span>}
+          </div>
+        )}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => void harvest()} disabled={harvesting || analyzing} className="rounded-[9px] bg-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-on-accent transition hover:bg-accent-dim disabled:opacity-60">
+            {harvesting ? 'Gathering… (leave it running)' : mine > 0 ? 'Gather more (go further back)' : 'Gather all my writing'}
+          </button>
+          <button type="button" onClick={() => void analyze()} disabled={analyzing || harvesting || mine === 0} className="rounded-[9px] border border-border bg-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-text-2 transition hover:bg-hover disabled:opacity-50">
+            {analyzing ? 'Analysing…' : 'Analyse my patterns'}
+          </button>
+        </div>
+
+        {msg && <p className="mt-3 text-[12.5px] leading-relaxed text-muted">{msg}</p>}
+
+        {analysis && (
+          <div className="mt-4 space-y-3 border-t border-border pt-4">
+            {Object.keys(analysis.voiceNotes).length > 0 && (
+              <div>
+                <div className="mb-1.5 text-[11.5px] font-bold uppercase tracking-wide text-muted">How you write</div>
+                {Object.entries(analysis.voiceNotes).map(([k, notes]) => (
+                  <div key={k} className="mb-2">
+                    <div className="text-[12px] font-semibold text-text-2">{k}</div>
+                    <ul className="ml-4 list-disc text-[12px] leading-relaxed text-text-2">
+                      {notes.map((n, i) => <li key={i}>{n}</li>)}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            )}
+            {analysis.patterns && (
+              <div>
+                <div className="mb-1.5 text-[11.5px] font-bold uppercase tracking-wide text-muted">Patterns in your tasks &amp; replies</div>
+                <div className="whitespace-pre-wrap rounded-[10px] border border-border bg-bg px-3 py-2.5 text-[12px] leading-relaxed text-text-2">{analysis.patterns}</div>
+              </div>
+            )}
+            <div className="text-[11px] text-muted">Analysed {new Date(analysis.analyzedAt).toLocaleString()}</div>
+          </div>
         )}
       </div>
     </div>
@@ -211,6 +324,7 @@ export default function TrainPage() {
           <div className="space-y-2.5">
             {SCOPES.map((s) => <VoiceCard key={`${s.medium}:${s.scope}`} s={s} />)}
           </div>
+          <DeepHarvest />
           <SenderQueue />
         </>
       )}

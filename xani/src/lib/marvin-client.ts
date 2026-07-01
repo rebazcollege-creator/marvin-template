@@ -302,6 +302,66 @@ export async function fetchWritingSamples(p: {
   }
 }
 
+/** Voice corpus — deep harvest of Rebaz's own writing + patterns analysis (Train mode). */
+export interface VoiceAnalysis {
+  voiceNotes: Record<string, string[]>;
+  patterns: string;
+  analyzedAt: string;
+}
+export interface VoiceCorpusInfo {
+  ok: boolean;
+  stats?: Record<string, number>;
+  updatedAt?: string;
+  samples?: Record<string, string[]>;
+  analysis?: VoiceAnalysis | null;
+  summary?: Record<string, number>;
+  error?: string;
+}
+
+/** Run a deep harvest pass (Slack per workspace + Gmail sent). Bounded per call; re-run to
+ *  reach further back. Long-running (respects Slack rate limits) — no client timeout. */
+export async function harvestVoice(opts: {
+  media?: ('slack' | 'email')[];
+  workspace?: string;
+  maxConvos?: number;
+  pagesPerConvo?: number;
+  emailPages?: number;
+} = {}): Promise<VoiceCorpusInfo> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/voice/harvest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(opts),
+    });
+    if (!resp.ok) return { ok: false, error: `runtime responded ${resp.status}` };
+    return (await resp.json()) as VoiceCorpusInfo;
+  } catch {
+    return { ok: false, error: 'runtime unreachable — is it running? (npm run dev:all)' };
+  }
+}
+
+/** Analyse the harvested corpus into voice notes + a patterns report (uses the model). */
+export async function analyzeVoice(): Promise<VoiceCorpusInfo> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/voice/analyze`, { method: 'POST' });
+    if (!resp.ok) return { ok: false, error: `runtime responded ${resp.status}` };
+    return (await resp.json()) as VoiceCorpusInfo;
+  } catch {
+    return { ok: false, error: 'runtime unreachable — is it running? (npm run dev:all)' };
+  }
+}
+
+/** What's been gathered so far (stats + last analysis). */
+export async function getVoiceCorpus(): Promise<VoiceCorpusInfo> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/voice/corpus`, { cache: 'no-store' });
+    if (!resp.ok) return { ok: false, error: `runtime responded ${resp.status}` };
+    return (await resp.json()) as VoiceCorpusInfo;
+  } catch {
+    return { ok: false, error: 'runtime unreachable' };
+  }
+}
+
 export async function requestDraft(p: {
   account: string;
   from: string;

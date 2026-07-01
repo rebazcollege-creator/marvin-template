@@ -348,6 +348,49 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  // Deep-harvest Rebaz's own Slack/Gmail writing into a voice corpus. Bounded per call;
+  // re-running accumulates and reaches further back. Returns voice exemplars for the store.
+  if (req.method === 'POST' && req.url === '/voice/harvest') {
+    try {
+      const { runHarvest, voiceSamplesFromCorpus } = await import('./voice-harvest.ts');
+      const opts = JSON.parse((await readBody(req)) || '{}') as Record<string, unknown>;
+      const { corpus, summary } = await runHarvest(opts);
+      return json(res, 200, { ok: true, summary, samples: voiceSamplesFromCorpus(corpus) });
+    } catch (err) {
+      return json(res, 200, { ok: false, error: (err as Error).message });
+    }
+  }
+
+  // Analyse the harvested corpus: distil per-scope voice notes + a tasks/responses patterns
+  // report. Uses the model (Claude CLI / Gemini / Anthropic), so it needs a provider.
+  if (req.method === 'POST' && req.url === '/voice/analyze') {
+    if (!modelAvailable()) return json(res, 200, { ok: false, error: 'No model provider available.' });
+    try {
+      const { loadCorpus, analyzeCorpus } = await import('./voice-harvest.ts');
+      const analysis = await analyzeCorpus(loadCorpus(), (system, user, maxTokens) => oneShot(system, user, maxTokens));
+      return json(res, 200, { ok: true, analysis });
+    } catch (err) {
+      return json(res, 200, { ok: false, error: (err as Error).message });
+    }
+  }
+
+  // Current corpus stats + last analysis (for the Train page to show what's been gathered).
+  if (req.method === 'GET' && req.url === '/voice/corpus') {
+    try {
+      const { loadCorpus, voiceSamplesFromCorpus, loadAnalysis } = await import('./voice-harvest.ts');
+      const corpus = loadCorpus();
+      return json(res, 200, {
+        ok: true,
+        stats: corpus.stats,
+        updatedAt: corpus.updatedAt,
+        samples: voiceSamplesFromCorpus(corpus),
+        analysis: loadAnalysis(),
+      });
+    } catch (err) {
+      return json(res, 200, { ok: false, error: (err as Error).message });
+    }
+  }
+
   if (req.method === 'GET' && req.url?.startsWith('/data/')) {
     try {
       const u = new URL(req.url, 'http://localhost');

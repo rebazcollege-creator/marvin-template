@@ -209,12 +209,21 @@ export async function fetchInboxTriage(): Promise<InboxTriage | null> {
  * unreachable so the UI can show an honest "start the runtime" state.
  */
 export async function fetchSlackTriage(): Promise<SlackTriage | null> {
+  // Slack history is rate-limited and the triage then calls the API — cap the wait so the
+  // Home section never spins forever; surface an honest reason instead.
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 25_000);
   try {
-    const resp = await fetch(`${SIDECAR_URL}/triage/slack`, { cache: 'no-store' });
+    const resp = await fetch(`${SIDECAR_URL}/triage/slack`, { cache: 'no-store', signal: ctrl.signal });
     if (!resp.ok) return null;
     return (await resp.json()) as SlackTriage;
-  } catch {
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') {
+      return { connected: true, triaged: [], error: 'Slack took too long to read (rate limits or low API credits). Reload in a moment.' };
+    }
     return null;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

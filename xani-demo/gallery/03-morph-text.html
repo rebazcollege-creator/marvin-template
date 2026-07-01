@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Xanî — Assembly</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0b0d12;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+  body {
+    background:
+      radial-gradient(1200px 800px at 30% 20%, rgba(90,169,255,0.10), transparent 60%),
+      radial-gradient(1000px 700px at 75% 80%, rgba(176,136,255,0.10), transparent 60%),
+      radial-gradient(900px 600px at 50% 50%, rgba(141,247,230,0.05), transparent 70%),
+      var(--bg);
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  #gl {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    z-index: 0;
+  }
+  #overlay {
+    position: fixed;
+    top: 22px;
+    left: 24px;
+    z-index: 2;
+    pointer-events: none;
+    color: rgba(255,255,255,0.72);
+    user-select: none;
+  }
+  #overlay .title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.85);
+  }
+  #overlay .desc {
+    margin-top: 6px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 12.5px;
+    line-height: 1.5;
+    max-width: 320px;
+    color: rgba(255,255,255,0.45);
+  }
+  #fallback {
+    position: fixed;
+    inset: 0;
+    z-index: 5;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: rgba(255,255,255,0.7);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.03em;
+    padding: 24px;
+  }
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div id="overlay">
+    <div class="title">Xanî</div>
+    <div class="desc">Assembly — chaos into clarity. Click to scatter.</div>
+  </div>
+  <div id="fallback">WebGL unavailable</div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+
+  const PARTICLE_COUNT = 6000;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Aurora palette
+  const PALETTE = [
+    new THREE.Color('#8df7e6'), // teal
+    new THREE.Color('#5aa9ff'), // blue
+    new THREE.Color('#b088ff'), // violet
+    new THREE.Color('#ff7a52'), // terracotta
+  ];
+
+  function showFallback() {
+    document.getElementById('fallback').style.display = 'flex';
+    const c = document.getElementById('gl');
+    if (c) c.style.display = 'none';
+  }
+
+  try {
+    const canvas = document.getElementById('gl');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 90);
+
+    // ---------- Procedural radial-gradient sprite ----------
+    function makeSprite() {
+      const size = 128;
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = size;
+      const ctx = cv.getContext('2d');
+      const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+      g.addColorStop(0.0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.2, 'rgba(255,255,255,0.85)');
+      g.addColorStop(0.5, 'rgba(255,255,255,0.28)');
+      g.addColorStop(1.0, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+      const tex = new THREE.CanvasTexture(cv);
+      tex.needsUpdate = true;
+      return tex;
+    }
+    const spriteTex = makeSprite();
+
+    // ---------- Target builders (each exactly PARTICLE_COUNT) ----------
+
+    // (a) Scattered cloud
+    function buildCloud() {
+      const arr = new Float32Array(PARTICLE_COUNT * 3);
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const r = 40 + Math.random() * 32;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        arr[i * 3 + 0] = r * Math.sin(phi) * Math.cos(theta) * (0.6 + Math.random() * 0.8);
+        arr[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta) * (0.6 + Math.random() * 0.8);
+        arr[i * 3 + 2] = r * Math.cos(phi) * (0.6 + Math.random() * 0.8);
+      }
+      return arr;
+    }
+
+    // (b) Fibonacci sphere
+    function buildSphere() {
+      const arr = new Float32Array(PARTICLE_COUNT * 3);
+      const R = 34;
+      const golden = Math.PI * (3 - Math.sqrt(5));
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const y = 1 - (i / (PARTICLE_COUNT - 1)) * 2;
+        const radius = Math.sqrt(1 - y * y);
+        const theta = golden * i;
+        arr[i * 3 + 0] = Math.cos(theta) * radius * R;
+        arr[i * 3 + 1] = y * R;
+        arr[i * 3 + 2] = Math.sin(theta) * radius * R;
+      }
+      return arr;
+    }
+
+    // (c) Text targets by sampling filled pixels of an offscreen canvas
+    function buildText(word) {
+      const cw = 900, ch = 300;
+      const cv = document.createElement('canvas');
+      cv.width = cw; cv.height = ch;
+      const ctx = cv.getContext('2d');
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, cw, ch);
+      ctx.fillStyle = '#fff';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = 'bold 200px Arial, sans-serif';
+      ctx.fillText(word, cw / 2, ch / 2 + 6);
+
+      const data = ctx.getImageData(0, 0, cw, ch).data;
+      const filled = [];
+      const step = 2; // sampling stride
+      for (let y = 0; y < ch; y += step) {
+        for (let x = 0; x < cw; x += step) {
+          const idx = (y * cw + x) * 4;
+          if (data[idx] > 128) {
+            filled.push([x, y]);
+          }
+        }
+      }
+
+      const arr = new Float32Array(PARTICLE_COUNT * 3);
+      const scale = 0.11;         // px -> world units
+      const planeDepth = 4;       // slight z jitter for depth
+      if (filled.length === 0) {
+        // Extremely unlikely fallback: collapse to sphere
+        return buildSphere();
+      }
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const p = filled[i % filled.length];
+        // jitter within the sampling cell so repeated points don't stack
+        const jx = (Math.random() - 0.5) * step;
+        const jy = (Math.random() - 0.5) * step;
+        arr[i * 3 + 0] = (p[0] + jx - cw / 2) * scale;
+        arr[i * 3 + 1] = -(p[1] + jy - ch / 2) * scale;
+        arr[i * 3 + 2] = (Math.random() - 0.5) * planeDepth;
+      }
+      return arr;
+    }
+
+    const targets = [
+      buildCloud(),
+      buildSphere(),
+      buildText('XANÎ'),
+    ];
+
+    // ---------- Geometry / attributes ----------
+    const positions = new Float32Array(PARTICLE_COUNT * 3);
+    const colors = new Float32Array(PARTICLE_COUNT * 3);
+    const velocities = new Float32Array(PARTICLE_COUNT * 3); // explosion impulse
+
+    // Start from cloud
+    positions.set(targets[0]);
+
+    // Color by x-position across the aurora palette (with subtle radius mixing)
+    const tmp = new THREE.Color();
+    for (let i = 0; i < PARTICLE_COUNT; i++) {
+      const x = positions[i * 3 + 0];
+      const t = THREE.MathUtils.clamp((x + 55) / 110, 0, 1);
+      const seg = t * (PALETTE.length - 1);
+      const idx = Math.floor(seg);
+      const f = seg - idx;
+      const cA = PALETTE[idx];
+      const cB = PALETTE[Math.min(idx + 1, PALETTE.length - 1)];
+      tmp.copy(cA).lerp(cB, f);
+      colors[i * 3 + 0] = tmp.r;
+      colors[i * 3 + 1] = tmp.g;
+      colors[i * 3 + 2] = tmp.b;
+    }
+
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 1.5,
+      map: spriteTex,
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true,
+    });
+
+    const points = new THREE.Points(geometry, material);
+    scene.add(points);
+
+    // ---------- State: target cycling ----------
+    let activeTarget = 0;                 // index into targets
+    let targetOrder = [0, 1, 2, 0];       // cloud -> sphere -> text -> cloud (loop)
+    let orderPos = 0;
+    const CYCLE_MS = reducedMotion ? 5200 : 4200;
+    let lastCycle = performance.now();
+
+    function nextTarget() {
+      orderPos = (orderPos + 1) % targetOrder.length;
+      activeTarget = targetOrder[orderPos];
+    }
+
+    // ---------- Interaction ----------
+    let exploding = false;
+    let explodeDecay = 1;
+    const pointer = { x: 0, y: 0 };
+    const targetRot = { x: 0, y: 0 };
+    const curRot = { x: 0, y: 0 };
+
+    window.addEventListener('pointermove', (e) => {
+      pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+      pointer.y = (e.clientY / window.innerHeight) * 2 - 1;
+      targetRot.y = pointer.x * 0.5;
+      targetRot.x = pointer.y * 0.3;
+    });
+
+    function triggerExplosion() {
+      const strength = reducedMotion ? 0.35 : 2.4;
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const px = positions[i * 3 + 0];
+        const py = positions[i * 3 + 1];
+        const pz = positions[i * 3 + 2];
+        const len = Math.hypot(px, py, pz) || 1;
+        const boost = strength * (0.5 + Math.random());
+        velocities[i * 3 + 0] = (px / len) * boost + (Math.random() - 0.5) * strength * 0.4;
+        velocities[i * 3 + 1] = (py / len) * boost + (Math.random() - 0.5) * strength * 0.4;
+        velocities[i * 3 + 2] = (pz / len) * boost + (Math.random() - 0.5) * strength * 0.4;
+      }
+      exploding = true;
+      explodeDecay = 1;
+    }
+
+    window.addEventListener('click', triggerExplosion);
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); triggerExplosion(); }, { passive: false });
+
+    // ---------- Animation ----------
+    const posAttr = geometry.getAttribute('position');
+    const clock = new THREE.Clock();
+    const lerpBase = reducedMotion ? 0.035 : 0.06;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      const now = performance.now();
+
+      // Cycle targets on a timer
+      if (now - lastCycle > CYCLE_MS) {
+        nextTarget();
+        lastCycle = now;
+      }
+
+      const tgt = targets[activeTarget];
+
+      // Explosion impulse handling
+      if (exploding) {
+        explodeDecay *= 0.90;
+        if (explodeDecay < 0.04) exploding = false;
+      }
+
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        const ix = i * 3, iy = i * 3 + 1, iz = i * 3 + 2;
+
+        // Apply outward velocity (decaying) then ease toward target
+        if (exploding || velocities[ix] || velocities[iy] || velocities[iz]) {
+          positions[ix] += velocities[ix];
+          positions[iy] += velocities[iy];
+          positions[iz] += velocities[iz];
+          velocities[ix] *= 0.90;
+          velocities[iy] *= 0.90;
+          velocities[iz] *= 0.90;
+          if (Math.abs(velocities[ix]) < 0.001) velocities[ix] = 0;
+          if (Math.abs(velocities[iy]) < 0.001) velocities[iy] = 0;
+          if (Math.abs(velocities[iz]) < 0.001) velocities[iz] = 0;
+        }
+
+        // Ease each particle toward the active target (weaker while exploding)
+        const l = lerpBase * (exploding ? 0.35 : 1);
+        positions[ix] += (tgt[ix] - positions[ix]) * l;
+        positions[iy] += (tgt[iy] - positions[iy]) * l;
+        positions[iz] += (tgt[iz] - positions[iz]) * l;
+      }
+      posAttr.needsUpdate = true;
+
+      // Gentle rotation / parallax
+      curRot.x += (targetRot.x - curRot.x) * 0.05;
+      curRot.y += (targetRot.y - curRot.y) * 0.05;
+      const auto = reducedMotion ? 0.03 : 0.08;
+      points.rotation.y = curRot.y + clock.elapsedTime * auto * 0.5;
+      points.rotation.x = curRot.x;
+
+      camera.position.x += (pointer.x * 8 - camera.position.x) * 0.03;
+      camera.position.y += (-pointer.y * 8 - camera.position.y) * 0.03;
+      camera.lookAt(scene.position);
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // ---------- Resize ----------
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    });
+
+  } catch (err) {
+    console.error(err);
+    showFallback();
+  }
+  </script>
+</body>
+</html>

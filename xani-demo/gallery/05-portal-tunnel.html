@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Xanî — Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --teal: #8df7e6;
+    --blue: #5aa9ff;
+    --violet: #b088ff;
+    --terracotta: #ff7a52;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0d12; }
+  body {
+    background:
+      radial-gradient(ellipse 60% 60% at 50% 50%, rgba(90,169,255,0.10), rgba(11,13,18,0) 70%),
+      radial-gradient(circle at 50% 45%, #12151d 0%, #0b0d12 60%);
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  #gl {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  #overlay {
+    position: fixed;
+    top: 26px;
+    left: 30px;
+    pointer-events: none;
+    user-select: none;
+    z-index: 10;
+    color: rgba(255,255,255,0.62);
+  }
+  #overlay .title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 22px;
+    letter-spacing: 0.14em;
+    color: rgba(255,255,255,0.78);
+    text-shadow: 0 0 18px rgba(141,247,230,0.25);
+  }
+  #overlay .desc {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+    margin-top: 6px;
+    opacity: 0.55;
+  }
+  #fallback {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: rgba(255,255,255,0.7);
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 18px;
+    letter-spacing: 0.08em;
+    padding: 20px;
+  }
+</style>
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="overlay">
+  <div class="title">Xanî</div>
+  <div class="desc">Portal — step into your mind.</div>
+</div>
+<div id="fallback">WebGL unavailable</div>
+
+<script type="module">
+import * as THREE from 'three';
+
+const fallback = document.getElementById('fallback');
+
+try {
+  const canvas = document.getElementById('gl');
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x0b0d12, 0);
+
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x0b0d12, 0.018);
+
+  const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 400);
+  camera.position.set(0, 0, 0);
+
+  // --- Aurora palette ---
+  const palette = [
+    new THREE.Color(0x8df7e6), // teal
+    new THREE.Color(0x5aa9ff), // blue
+    new THREE.Color(0xb088ff), // violet
+    new THREE.Color(0xff7a52), // terracotta
+  ];
+
+  // --- Procedural radial glow texture ---
+  function makeGlowTexture() {
+    const size = 256;
+    const c = document.createElement('canvas');
+    c.width = c.height = size;
+    const ctx = c.getContext('2d');
+    const g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+    g.addColorStop(0.0, 'rgba(255,255,255,1.0)');
+    g.addColorStop(0.18, 'rgba(200,240,255,0.9)');
+    g.addColorStop(0.45, 'rgba(120,170,255,0.35)');
+    g.addColorStop(0.75, 'rgba(80,120,220,0.08)');
+    g.addColorStop(1.0, 'rgba(0,0,0,0.0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, size, size);
+    const tex = new THREE.CanvasTexture(c);
+    tex.needsUpdate = true;
+    return tex;
+  }
+  const glowTex = makeGlowTexture();
+
+  // --- Tunnel parameters ---
+  const RING_COUNT = 46;
+  const RING_SPACING = 5.2;         // distance between rings along Z
+  const TUNNEL_DEPTH = RING_COUNT * RING_SPACING;
+  const RING_RADIUS = 6.0;
+  const TUBE_THICK = 0.13;
+
+  const ringMeshes = [];
+  const ringData = [];
+
+  const ringGeo = new THREE.TorusGeometry(RING_RADIUS, TUBE_THICK, 10, 80);
+
+  for (let i = 0; i < RING_COUNT; i++) {
+    const col = palette[i % palette.length].clone();
+    const mat = new THREE.MeshBasicMaterial({
+      color: col,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(ringGeo, mat);
+    // Rings face down the tunnel (torus lies in XY plane by default -> good)
+    const z = -i * RING_SPACING - 2.0;
+    mesh.position.z = z;
+    mesh.userData.baseColor = col;
+    scene.add(mesh);
+    ringMeshes.push(mesh);
+    ringData.push({ twist: (i / RING_COUNT) * Math.PI * 2 });
+  }
+
+  // --- Bright aurora core at the vanishing point ---
+  const coreMat = new THREE.SpriteMaterial({
+    map: glowTex,
+    color: 0xbfeaff,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    opacity: 0.95,
+  });
+  const core = new THREE.Sprite(coreMat);
+  core.scale.set(14, 14, 1);
+  core.position.set(0, 0, -TUNNEL_DEPTH + 6);
+  scene.add(core);
+
+  // secondary softer halo
+  const haloMat = new THREE.SpriteMaterial({
+    map: glowTex,
+    color: 0xb088ff,
+    transparent: true,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+    opacity: 0.5,
+  });
+  const halo = new THREE.Sprite(haloMat);
+  halo.scale.set(30, 30, 1);
+  halo.position.copy(core.position);
+  scene.add(halo);
+
+  // --- Pointer steering ---
+  const pointer = { x: 0, y: 0 };       // normalized -1..1
+  const bend = { x: 0, y: 0 };          // eased tunnel center offset
+  window.addEventListener('pointermove', (e) => {
+    pointer.x = (e.clientX / window.innerWidth) * 2 - 1;
+    pointer.y = -((e.clientY / window.innerHeight) * 2 - 1);
+  });
+
+  // --- Speed / travel ---
+  const baseSpeed = reduced ? 0.9 : 7.0;
+  let travel = 0;
+
+  const clock = new THREE.Clock();
+
+  function onResize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  }
+  window.addEventListener('resize', onResize);
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    const t = clock.elapsedTime;
+
+    // gentle acceleration pulse
+    const speedPulse = 1.0 + (reduced ? 0.15 : 0.45) * Math.sin(t * 0.6);
+    const speed = baseSpeed * speedPulse;
+    travel += speed * dt;
+
+    // ease pointer -> bend (steer the tunnel)
+    bend.x += (pointer.x - bend.x) * 0.045;
+    bend.y += (pointer.y - bend.y) * 0.045;
+
+    const bendMag = reduced ? 3.5 : 7.5;
+    const globalTwist = t * (reduced ? 0.05 : 0.18);
+
+    for (let i = 0; i < RING_COUNT; i++) {
+      const mesh = ringMeshes[i];
+      // move ring toward camera; recycle when passing behind
+      let z = mesh.position.z + speed * dt;
+      // recycle: keep rings within tunnel depth window
+      if (z > 3.0) {
+        z -= TUNNEL_DEPTH;
+      }
+      mesh.position.z = z;
+
+      // depth factor: 0 near camera, 1 far
+      const depth = THREE.MathUtils.clamp((-z) / TUNNEL_DEPTH, 0, 1);
+
+      // steer: rings further away bend more toward pointer so we curve into it
+      const curve = 1.0 - depth; // near rings barely offset, far rings offset most... invert for "steering into"
+      const offX = bend.x * bendMag * depth;
+      const offY = bend.y * bendMag * depth;
+      mesh.position.x = offX;
+      mesh.position.y = offY;
+
+      // spiral twist along the tube
+      mesh.rotation.z = ringData[i].twist + globalTwist + depth * Math.PI * 1.4;
+
+      // color cycling through aurora palette based on depth + time
+      const phase = (i * 0.09 + t * 0.15) % 1;
+      const idx = phase * palette.length;
+      const a = palette[Math.floor(idx) % palette.length];
+      const b = palette[(Math.floor(idx) + 1) % palette.length];
+      const f = idx - Math.floor(idx);
+      mesh.material.color.copy(a).lerp(b, f);
+
+      // fade rings near camera (feels like passing through) and dim far ones slightly
+      const nearFade = THREE.MathUtils.smoothstep(-z, -2.0, 6.0); // fade as z>0
+      const farDim = 0.35 + 0.65 * (1 - depth * 0.55);
+      mesh.material.opacity = (1 - nearFade) * farDim;
+    }
+
+    // pulse the bright core
+    const pulse = 1.0 + 0.18 * Math.sin(t * 1.6) + 0.06 * Math.sin(t * 4.3);
+    core.scale.set(14 * pulse, 14 * pulse, 1);
+    core.material.opacity = 0.85 + 0.12 * Math.sin(t * 1.6);
+    halo.scale.set(30 * pulse, 30 * pulse, 1);
+    halo.material.color.copy(palette[2]).lerp(palette[1], 0.5 + 0.5 * Math.sin(t * 0.4));
+
+    // core follows the steer too so vanishing point tracks the pointer
+    core.position.x = bend.x * bendMag;
+    core.position.y = bend.y * bendMag;
+    halo.position.x = core.position.x;
+    halo.position.y = core.position.y;
+
+    // subtle camera roll for cinematic feel
+    camera.rotation.z = Math.sin(t * 0.12) * (reduced ? 0.01 : 0.04);
+    camera.lookAt(bend.x * bendMag * 0.4, bend.y * bendMag * 0.4, -TUNNEL_DEPTH);
+
+    renderer.render(scene, camera);
+  }
+
+  animate();
+} catch (err) {
+  console.error(err);
+  fallback.style.display = 'flex';
+  const c = document.getElementById('gl');
+  if (c) c.style.display = 'none';
+}
+</script>
+</body>
+</html>

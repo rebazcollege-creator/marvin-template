@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Xanî — Wavefield</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@300;400&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg: #0b0d12; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+  body {
+    background:
+      radial-gradient(ellipse 120% 80% at 50% 18%, rgba(90,169,255,0.10), transparent 60%),
+      radial-gradient(ellipse 90% 70% at 50% 100%, rgba(176,136,255,0.10), transparent 55%),
+      var(--bg);
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #fff;
+  }
+  #gl {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  #overlay {
+    position: fixed;
+    top: 28px;
+    left: 32px;
+    z-index: 10;
+    pointer-events: none;
+    user-select: none;
+  }
+  #overlay .brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 20px;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.82);
+  }
+  #overlay .desc {
+    margin-top: 6px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 12.5px;
+    letter-spacing: 0.01em;
+    color: rgba(255,255,255,0.38);
+    max-width: 340px;
+  }
+  #fallback {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.55);
+    padding: 24px;
+  }
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div id="overlay">
+    <div class="brand">Xanî</div>
+    <div class="desc">Wavefield — a calm sea of everything you hold.</div>
+  </div>
+  <div id="fallback">WebGL unavailable</div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+
+  try {
+    const canvas = document.getElementById('gl');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // Palette (aurora)
+    const COL_LOW  = new THREE.Color('#b088ff'); // deep violet
+    const COL_MID  = new THREE.Color('#5aa9ff'); // blue
+    const COL_HIGH = new THREE.Color('#8df7e6'); // teal
+    const COL_PEAK = new THREE.Color('#ffffff'); // white peaks
+    const FOG_COL  = new THREE.Color('#0b0d12');
+
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+
+    // Scene + camera (low angle, stretching to horizon)
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(FOG_COL, 24, 78);
+
+    const camera = new THREE.PerspectiveCamera(58, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 5.2, 18);
+    camera.lookAt(0, 1.2, -10);
+
+    // Procedural glow sprite for points
+    function makeGlowTexture() {
+      const s = 128;
+      const c = document.createElement('canvas');
+      c.width = c.height = s;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+      g.addColorStop(0.0, 'rgba(255,255,255,1)');
+      g.addColorStop(0.25, 'rgba(255,255,255,0.85)');
+      g.addColorStop(0.55, 'rgba(255,255,255,0.25)');
+      g.addColorStop(1.0, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, s, s);
+      const tex = new THREE.CanvasTexture(c);
+      tex.needsUpdate = true;
+      return tex;
+    }
+    const glowTex = makeGlowTexture();
+
+    // Grid plane geometry (shader-displaced -> can afford higher res)
+    const SIZE = 90;         // world extent
+    const SEG = 200;         // 201x201 vertices
+    const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
+    geo.rotateX(-Math.PI / 2); // lay flat on XZ
+
+    // Shader material for points, displacing in the vertex shader
+    const uniforms = {
+      uTime:      { value: 0 },
+      uAmp:       { value: 1.15 },
+      uReduce:    { value: reduceMotion ? 1.0 : 0.0 },
+      uPointer:   { value: new THREE.Vector2(0, -6) }, // world XZ of ripple center
+      uRipple:    { value: 0.0 },                       // ripple strength (lerped)
+      uColLow:    { value: COL_LOW },
+      uColMid:    { value: COL_MID },
+      uColHigh:   { value: COL_HIGH },
+      uColPeak:   { value: COL_PEAK },
+      uPixel:     { value: renderer.getPixelRatio() },
+      uSprite:    { value: glowTex },
+      uHeightScale: { value: 1.0 / 4.5 } // normalizes height -> 0..1 for color
+    };
+
+    const vertexShader = /* glsl */`
+      uniform float uTime;
+      uniform float uAmp;
+      uniform float uReduce;
+      uniform vec2  uPointer;
+      uniform float uRipple;
+      uniform float uPixel;
+      varying float vHeight;
+
+      // rolling wave height at world XZ
+      float waveHeight(vec2 p, float t) {
+        float h = 0.0;
+        h += sin(p.x * 0.16 + t * 0.9) * 1.35;
+        h += sin(p.y * 0.13 - t * 0.7) * 1.15;
+        h += sin((p.x + p.y) * 0.10 + t * 0.5) * 0.85;
+        h += sin((p.x * 0.9 - p.y * 1.1) * 0.07 - t * 0.35) * 0.6;
+        // fine ripples
+        h += sin(p.x * 0.42 + t * 1.3) * cos(p.y * 0.37 - t * 1.1) * 0.35;
+        return h;
+      }
+
+      void main() {
+        vec3 pos = position;
+        vec2 xz = vec2(pos.x, pos.z);
+
+        float h = waveHeight(xz, uTime) * uAmp;
+
+        // interactive gaussian bump following the pointer
+        float d = distance(xz, uPointer);
+        float bump = exp(-(d * d) / 22.0) * uRipple * 4.2;
+        // small animated crown on the bump
+        bump += exp(-(d * d) / 8.0) * uRipple * sin(d * 0.9 - uTime * 3.0) * 0.9;
+        h += bump;
+
+        pos.y += h;
+        vHeight = h;
+
+        vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+        gl_Position = projectionMatrix * mv;
+
+        // size attenuation with distance
+        float sz = 2.6 * uPixel;
+        gl_PointSize = sz * (300.0 / -mv.z);
+      }
+    `;
+
+    const fragmentShader = /* glsl */`
+      uniform sampler2D uSprite;
+      uniform vec3 uColLow;
+      uniform vec3 uColMid;
+      uniform vec3 uColHigh;
+      uniform vec3 uColPeak;
+      uniform float uHeightScale;
+      varying float vHeight;
+
+      void main() {
+        float a = texture2D(uSprite, gl_PointCoord).a;
+        if (a < 0.02) discard;
+
+        // map height -> 0..1 aurora ramp
+        float t = clamp(vHeight * uHeightScale + 0.5, 0.0, 1.0);
+        vec3 col;
+        if (t < 0.4) {
+          col = mix(uColLow, uColMid, smoothstep(0.0, 0.4, t));
+        } else if (t < 0.75) {
+          col = mix(uColMid, uColHigh, smoothstep(0.4, 0.75, t));
+        } else {
+          col = mix(uColHigh, uColPeak, smoothstep(0.75, 1.0, t));
+        }
+
+        // subtle glow boost on peaks
+        float glow = 0.55 + t * 0.9;
+        gl_FragColor = vec4(col * glow, a);
+      }
+    `;
+
+    const mat = new THREE.ShaderMaterial({
+      uniforms,
+      vertexShader,
+      fragmentShader,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    const field = new THREE.Points(geo, mat);
+    scene.add(field);
+
+    // Raycast plane (y=0) to convert pointer -> world XZ
+    const raycaster = new THREE.Raycaster();
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const ndc = new THREE.Vector2(0, 0);
+    const hit = new THREE.Vector3();
+    const targetPointer = new THREE.Vector2(0, -6);
+    let rippleTarget = 0.0;
+
+    function onPointerMove(e) {
+      const x = (e.clientX !== undefined) ? e.clientX : (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+      const y = (e.clientY !== undefined) ? e.clientY : (e.touches && e.touches[0] ? e.touches[0].clientY : 0);
+      ndc.x = (x / window.innerWidth) * 2 - 1;
+      ndc.y = -(y / window.innerHeight) * 2 + 1;
+      raycaster.setFromCamera(ndc, camera);
+      if (raycaster.ray.intersectPlane(groundPlane, hit)) {
+        targetPointer.set(hit.x, hit.z);
+        rippleTarget = 1.0;
+      }
+    }
+    function onPointerLeave() { rippleTarget = 0.0; }
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerdown', onPointerMove, { passive: true });
+    window.addEventListener('pointerleave', onPointerLeave, { passive: true });
+    window.addEventListener('touchmove', onPointerMove, { passive: true });
+
+    // Resize
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      uniforms.uPixel.value = renderer.getPixelRatio();
+    }
+    window.addEventListener('resize', onResize);
+
+    // Animate
+    const clock = new THREE.Clock();
+    const timeScale = reduceMotion ? 0.28 : 1.0;
+
+    function tick() {
+      requestAnimationFrame(tick);
+      const dt = Math.min(clock.getDelta(), 0.05);
+      uniforms.uTime.value += dt * timeScale;
+
+      // smooth pointer + ripple
+      uniforms.uPointer.value.lerp(targetPointer, 0.08);
+      uniforms.uRipple.value += (rippleTarget - uniforms.uRipple.value) * 0.06;
+
+      // gentle camera drift
+      const t = uniforms.uTime.value;
+      const driftScale = reduceMotion ? 0.35 : 1.0;
+      camera.position.x = Math.sin(t * 0.08) * 3.2 * driftScale;
+      camera.position.y = 5.2 + Math.sin(t * 0.11) * 0.55 * driftScale;
+      camera.lookAt(uniforms.uPointer.value.x * 0.15, 1.0, -10);
+
+      renderer.render(scene, camera);
+    }
+    tick();
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById('gl').style.display = 'none';
+    document.getElementById('overlay').style.display = 'none';
+    document.getElementById('fallback').style.display = 'flex';
+  }
+  </script>
+</body>
+</html>

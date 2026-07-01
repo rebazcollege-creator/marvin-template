@@ -14,7 +14,7 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { tmpdir, homedir } from 'node:os';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
 
@@ -115,8 +115,11 @@ function runClaude(args: string[], input: string): Promise<string> {
     const env: NodeJS.ProcessEnv = { ...process.env };
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
-    // Run in a neutral cwd so Claude Code doesn't load this project's CLAUDE.md into the task.
-    const child = spawn(CLAUDE_BIN(), args, { env, cwd: tmpdir() });
+    // Run in the user's HOME, not a temp dir: Claude Code shows a one-time "trust this
+    // folder" prompt for unknown dirs, and in headless (-p) mode it can't answer it and
+    // exits 1. Home is trusted on first interactive run, so -p works. (tmpdir is never
+    // trusted → every call failed.) Home has no project CLAUDE.md to pollute the task.
+    const child = spawn(CLAUDE_BIN(), args, { env, cwd: homedir() });
     let out = '';
     let err = '';
     const timer = setTimeout(() => {

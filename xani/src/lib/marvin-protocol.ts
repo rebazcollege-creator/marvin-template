@@ -83,7 +83,10 @@ export interface InboxData {
 }
 export interface TrelloData {
   connected: boolean;
-  cards: { name: string; url: string; labels: string[]; urgent: boolean; due: string | null }[];
+  /** `list` = the card's list name (Review/Planning/Video feed/Website feed …);
+   *  `status` = the card's Status custom-field value (Published / Ready to Publish).
+   *  Both drive the Open Loops flagging rules (docs/triage-rules.md §3). */
+  cards: { name: string; url: string; labels: string[]; urgent: boolean; due: string | null; list?: string; status?: string }[];
 }
 export interface CalendarData {
   connected: boolean;

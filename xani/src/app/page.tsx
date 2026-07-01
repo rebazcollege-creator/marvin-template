@@ -7,6 +7,7 @@ import { ensureStorageReady } from '@/lib/storage';
 import { fetchBriefingData, peekData, PATHS } from '@/lib/marvin-data';
 import type { BriefingData } from '@/lib/marvin-protocol';
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, type OpenLoop } from '@/lib/open-loops';
+import { syncOpenLoops } from '@/lib/loops-monitor';
 
 /**
  * Home — the ADHD command surface (foundations.md). Optimised for Rebaz's top
@@ -90,6 +91,7 @@ export default function HomePage() {
     ensureStorageReady().then(() => {
       setSettings(getSettings());
       reloadLoops();
+      void syncOpenLoops().then(reloadLoops); // pull live Trello commitments into Open Loops
     });
     fetchBriefingData().then((d) => d && setData(d));
     window.addEventListener('xani:loops-changed', reloadLoops);

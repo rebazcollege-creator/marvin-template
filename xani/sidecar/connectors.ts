@@ -638,16 +638,54 @@ export async function getTrello(): Promise<TrelloData> {
   if (!c) return { connected: false, cards: [] };
   try {
     const auth = `key=${c.key}&token=${c.token}`;
-    const r = await fetch(`https://api.trello.com/1/boards/${c.board}/cards?fields=name,url,due,labels&${auth}`);
+
+    // Best-effort: find the board's "Status" custom field and map its options → text
+    // (drives the Website-feed rule: flag only Published / Ready to Publish).
+    let statusFieldId: string | null = null;
+    const optText = new Map<string, string>();
+    try {
+      const cf = await fetch(`https://api.trello.com/1/boards/${c.board}/customFields?${auth}`);
+      if (cf.ok) {
+        const defs = (await cf.json()) as { id: string; name?: string; options?: { id: string; value?: { text?: string } }[] }[];
+        const status = defs.find((d) => /status/i.test(d.name ?? ''));
+        if (status) {
+          statusFieldId = status.id;
+          for (const o of status.options ?? []) if (o.value?.text) optText.set(o.id, o.value.text);
+        }
+      }
+    } catch {
+      /* custom fields power-up may be off — status stays undefined */
+    }
+
+    // `list=true` embeds the card's list; `customFieldItems=true` embeds the Status value.
+    const r = await fetch(
+      `https://api.trello.com/1/boards/${c.board}/cards?fields=name,url,due,labels&list=true&customFieldItems=true&${auth}`,
+    );
     if (!r.ok) return { connected: true, cards: [] };
-    const j = (await r.json()) as { name?: string; url?: string; due?: string | null; labels?: { name?: string }[] }[];
-    const cards = j.map((c2) => ({
-      name: c2.name ?? '(card)',
-      url: c2.url ?? '',
-      labels: (c2.labels ?? []).map((l) => l.name ?? '').filter(Boolean),
-      urgent: Boolean(c2.due && new Date(c2.due).getTime() < Date.now() + 36 * 3600 * 1000),
-      due: c2.due ?? null,
-    }));
+    const j = (await r.json()) as {
+      name?: string;
+      url?: string;
+      due?: string | null;
+      labels?: { name?: string }[];
+      list?: { name?: string };
+      customFieldItems?: { idCustomField: string; idValue?: string }[];
+    }[];
+    const cards = j.map((c2) => {
+      let status: string | undefined;
+      if (statusFieldId) {
+        const item = (c2.customFieldItems ?? []).find((i) => i.idCustomField === statusFieldId);
+        if (item?.idValue) status = optText.get(item.idValue);
+      }
+      return {
+        name: c2.name ?? '(card)',
+        url: c2.url ?? '',
+        labels: (c2.labels ?? []).map((l) => l.name ?? '').filter(Boolean),
+        urgent: Boolean(c2.due && new Date(c2.due).getTime() < Date.now() + 36 * 3600 * 1000),
+        due: c2.due ?? null,
+        list: c2.list?.name,
+        status,
+      };
+    });
     return { connected: true, cards };
   } catch {
     return { connected: true, cards: [] };

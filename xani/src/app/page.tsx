@@ -8,6 +8,7 @@ import { fetchBriefingData, peekData, PATHS } from '@/lib/marvin-data';
 import type { BriefingData } from '@/lib/marvin-protocol';
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
+import { FocusSession } from '@/components/home/FocusSession';
 
 /**
  * Home — the ADHD command surface (foundations.md). Optimised for Rebaz's top
@@ -83,6 +84,7 @@ export default function HomePage() {
   const [loops, setLoops] = useState<OpenLoop[]>([]);
   const [data, setData] = useState<BriefingData | null>(() => peekData<BriefingData>(PATHS.briefing));
   const [capture, setCapture] = useState('');
+  const [focus, setFocus] = useState<{ task: string; loopId?: string } | null>(null);
   const now = useMemo(() => new Date(), []);
 
   const reloadLoops = useCallback(() => setLoops(activeLoops()), []);
@@ -156,14 +158,16 @@ export default function HomePage() {
                 {oneThing.dueAt ? ` · due in ${humanMins(minsUntil(oneThing.dueAt, now))}` : ''}
               </p>
               <div className="mt-4 flex flex-wrap gap-2.5">
-                <button type="button" onClick={() => completeLoop(oneThing.id)} className="rounded-xl bg-accent px-5 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">✓ Done</button>
-                <button type="button" onClick={() => snoozeLoop(oneThing.id, new Date(now.getTime() + 3 * 3600_000).toISOString())} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Later</button>
+                <button type="button" onClick={() => setFocus({ task: oneThing.task, loopId: oneThing.id })} className="rounded-xl bg-accent px-5 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">▶ Focus with me</button>
+                <button type="button" onClick={() => completeLoop(oneThing.id)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✓ Done</button>
+                <button type="button" onClick={() => snoozeLoop(oneThing.id, new Date(now.getTime() + 3 * 3600_000).toISOString())} className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-muted transition hover:text-text-2">Later</button>
               </div>
             </section>
           ) : (
             <section className="mt-9 rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
               <p className="font-display text-2xl text-text">You’re clear.</p>
-              <p className="mt-2 text-[14px] text-text-2">Nothing you said yes to is open. Capture a thought below, or just breathe.</p>
+              <p className="mt-2 text-[14px] text-text-2">Nothing you said yes to is open. Start a focus block, capture a thought, or just breathe.</p>
+              <button type="button" onClick={() => setFocus({ task: 'Focus time' })} className="mt-5 rounded-xl bg-accent px-5 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">▶ Start a focus session</button>
             </section>
           )}
 
@@ -207,6 +211,13 @@ export default function HomePage() {
               )}
           </p>
         </>
+      )}
+      {focus && (
+        <FocusSession
+          task={focus.task}
+          onComplete={focus.loopId ? () => completeLoop(focus.loopId!) : undefined}
+          onClose={() => setFocus(null)}
+        />
       )}
     </div>
   );

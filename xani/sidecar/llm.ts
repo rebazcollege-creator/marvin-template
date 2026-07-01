@@ -72,8 +72,14 @@ function cliModel(model?: string): string {
 /** Spawn `claude -p`, feed the prompt on stdin, return the assistant text. */
 function runClaude(args: string[], input: string): Promise<string> {
   return new Promise((resolve, reject) => {
+    // Strip Anthropic API-key env so the CLI authenticates with the logged-in Claude
+    // subscription (OAuth) instead of a stale/dead ANTHROPIC_API_KEY — otherwise the CLI
+    // tries the key first and 401s ("Please run /login") even when you're signed in.
+    const env: NodeJS.ProcessEnv = { ...process.env };
+    delete env.ANTHROPIC_API_KEY;
+    delete env.ANTHROPIC_AUTH_TOKEN;
     // Run in a neutral cwd so Claude Code doesn't load this project's CLAUDE.md into the task.
-    const child = spawn(CLAUDE_BIN(), args, { env: process.env, cwd: tmpdir() });
+    const child = spawn(CLAUDE_BIN(), args, { env, cwd: tmpdir() });
     let out = '';
     let err = '';
     const timer = setTimeout(() => {

@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady } from '@/lib/storage';
-import { fetchBriefingData, fetchMessageBody, draftReply, peekData, PATHS } from '@/lib/marvin-data';
-import { fetchInboxTriage } from '@/lib/marvin-client';
+import { fetchBriefingData, fetchMessageBody, peekData, PATHS } from '@/lib/marvin-data';
+import { fetchInboxTriage, requestDraft } from '@/lib/marvin-client';
 import { enqueueApproval } from '@/lib/approvals';
 import type { BriefingData, TriagedEmail } from '@/lib/marvin-protocol';
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, type OpenLoop } from '@/lib/open-loops';
@@ -175,12 +175,12 @@ export default function HomePage() {
     flashMsg('MARVIN is drafting a reply…');
     const mb = await fetchMessageBody(loop.email.account, loop.email.id);
     const bodyText = mb?.text || mb?.body || loop.email.subject;
-    const draft = await draftReply({ account: loop.email.account, from: loop.email.from, subject: loop.email.subject, body: bodyText, medium: 'email' });
-    if (!draft) {
-      flashMsg('Couldn’t draft — is the runtime running?');
+    const r = await requestDraft({ account: loop.email.account, from: loop.email.from, subject: loop.email.subject, body: bodyText, medium: 'email' });
+    if (!r.ok || !r.draft) {
+      flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
       return;
     }
-    enqueueApproval({ kind: 'email', title: `Reply to ${loop.email.from}`, source: `Email · ${loop.email.account}`, preview: draft, actionLabel: 'Send' });
+    enqueueApproval({ kind: 'email', title: `Reply to ${loop.email.from}`, source: `Email · ${loop.email.account}`, preview: r.draft, actionLabel: 'Send' });
     flashMsg('✍️ Draft ready in Approvals — review & send.');
   };
 

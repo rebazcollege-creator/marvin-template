@@ -202,6 +202,32 @@ export async function fetchInboxTriage(): Promise<InboxTriage | null> {
   }
 }
 
+/**
+ * Draft an email/Slack reply and RETURN THE ERROR when it fails (unlike
+ * marvin-data.draftReply which collapses failures to null). Used by Home so the
+ * real reason (billing, rate limit, no key) is shown to Rebaz.
+ */
+export async function requestDraft(p: {
+  account: string;
+  from: string;
+  subject: string;
+  body: string;
+  medium?: 'email' | 'slack';
+}): Promise<{ ok: boolean; draft?: string; error?: string }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/draft-reply`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    });
+    const j = (await resp.json().catch(() => ({}))) as { ok?: boolean; draft?: string; error?: string };
+    if (!resp.ok) return { ok: false, error: j.error ?? `runtime responded ${resp.status}` };
+    return { ok: Boolean(j.ok), draft: j.draft, error: j.error };
+  } catch {
+    return { ok: false, error: 'runtime unreachable — is it running? (npm run dev:all)' };
+  }
+}
+
 /** True if the runtime (sidecar) is reachable. Used by the sidebar status dot. */
 export async function pingRuntime(): Promise<boolean> {
   try {

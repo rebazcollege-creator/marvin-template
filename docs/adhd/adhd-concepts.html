@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Xanî — ADHD-friendly concept board</title>
+<style>
+  :root{
+    --bg:#E8E4DB; --surface:#FBFAF6; --surface-2:#F3EFE7; --card:#FFFFFF;
+    --text:#2A2A25; --text-2:#4A473F; --muted:#8B857A; --border:#E0DACE; --border-2:#D3CCBD;
+    --green:#2E5A49; --green-dim:#274c3d; --green-soft:#E6EEE8; --green-ink:#2F5D4C;
+    --amber:#B4791F; --amber-soft:#F3E9D6; --blue:#3B6C8F;
+    --shadow:0 1px 2px rgba(40,36,28,.04), 0 8px 24px rgba(40,36,28,.05);
+    --serif:"Fraunces","Iowan Old Style","Georgia",serif;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);
+    -webkit-font-smoothing:antialiased;line-height:1.5}
+  .wrap{max-width:1120px;margin:0 auto;padding:40px 28px 80px}
+  h1.title{font-family:var(--serif);font-weight:600;font-size:40px;letter-spacing:-.01em;margin:0 0 6px}
+  .lede{color:var(--muted);font-size:15px;max-width:720px;margin:0 0 6px}
+  .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--green-ink);background:var(--green-soft);padding:5px 10px;border-radius:999px;margin-bottom:18px}
+  .sec-label{font-size:12px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);
+    margin:44px 0 4px;display:flex;align-items:center;gap:10px}
+  .sec-label .n{display:grid;place-items:center;width:22px;height:22px;border-radius:7px;background:var(--green);
+    color:#fff;font-size:12px;font-weight:800}
+  .sec-desc{color:var(--text-2);font-size:14px;max-width:760px;margin:6px 0 16px}
+  .frame{background:var(--surface);border:1px solid var(--border);border-radius:20px;box-shadow:var(--shadow);
+    overflow:hidden}
+  .browser{display:flex;align-items:center;gap:7px;padding:11px 15px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+  .dot{width:11px;height:11px;border-radius:50%}
+  .dot.r{background:#E0A19A}.dot.y{background:#E4C98A}.dot.g{background:#A9C6A0}
+  .browser .url{margin-left:10px;font-size:12px;color:var(--muted)}
+  .app{display:flex;min-height:460px}
+  .side{width:210px;flex:none;background:var(--surface);border-right:1px solid var(--border);padding:18px 14px}
+  .brand{font-family:var(--serif);font-size:22px;font-weight:600;padding:2px 8px 2px}
+  .brand small{display:block;font-family:var(--sans);font-size:10.5px;letter-spacing:.06em;color:var(--muted);font-weight:600;margin-top:2px}
+  .navitem{display:flex;align-items:center;gap:11px;padding:8px 11px;border-radius:10px;font-size:14px;color:var(--text-2);margin-top:2px}
+  .navitem .ic{width:17px;height:17px;opacity:.7}
+  .navitem.active{background:var(--green-soft);color:var(--green-ink);font-weight:600}
+  .navgroup{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:18px 0 4px 11px}
+  .main{flex:1;padding:30px 34px;min-width:0}
+  .hello{font-family:var(--serif);font-size:30px;font-weight:600;margin:0}
+  .date{color:var(--muted);font-size:13.5px;margin:2px 0 22px}
+
+  /* one-thing card */
+  .onething{position:relative;background:linear-gradient(180deg,#F0F4EE,#EDF2EA);border:1px solid #D5E2D3;
+    border-left:5px solid var(--green);border-radius:16px;padding:22px 24px}
+  .kicker{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--green-ink)}
+  .onething h2{font-family:var(--serif);font-size:26px;font-weight:600;margin:8px 0 4px}
+  .src{color:var(--muted);font-size:13px}
+  .row{display:flex;gap:10px;align-items:center;margin-top:16px;flex-wrap:wrap}
+  .btn{border:none;border-radius:11px;padding:11px 18px;font-size:13.5px;font-weight:700;cursor:pointer}
+  .btn.p{background:var(--green);color:#fff}
+  .btn.s{background:#fff;border:1px solid var(--border-2);color:var(--text-2)}
+  .btn.ghost{background:transparent;color:var(--muted);font-weight:600}
+  .chip{font-size:12px;color:var(--muted)}
+
+  .softbox{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px}
+  .softbox .ph{color:var(--muted);font-size:14px}
+
+  .listlabel{display:flex;align-items:center;gap:9px;font-size:12px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin:24px 0 8px}
+  .count{background:#fff;border:1px solid var(--border);border-radius:999px;min-width:22px;height:22px;display:inline-grid;place-items:center;font-size:11.5px;color:var(--text-2);font-weight:700}
+  .count.calm{background:var(--green-soft);border-color:#D5E2D3;color:var(--green-ink)}
+  .miniitem{display:flex;gap:12px;align-items:flex-start;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px;margin-top:8px}
+  .miniitem .who{font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--amber)}
+  .miniitem h4{margin:3px 0 0;font-family:var(--serif);font-size:16px;font-weight:600}
+
+  /* focus mode */
+  .focus{background:radial-gradient(1200px 400px at 50% -10%, #24463a 0%, #1c3830 55%, #172f28 100%);color:#EAF1EC;
+    padding:40px;display:flex;flex-direction:column;align-items:center;text-align:center;min-height:460px;justify-content:center;gap:8px}
+  .focus .k{font-size:11px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:#8FBBA6}
+  .focus h2{font-family:var(--serif);font-size:30px;font-weight:600;margin:6px 0 2px;max-width:560px}
+  .focus .sub{color:#A9C6B6;font-size:14px;margin-bottom:14px}
+  .ring{--p:38;width:150px;height:150px;border-radius:50%;margin:8px 0 6px;
+    background:conic-gradient(#7FB79E calc(var(--p)*1%), rgba(255,255,255,.12) 0);display:grid;place-items:center;position:relative}
+  .ring::before{content:"";position:absolute;inset:11px;border-radius:50%;background:#1b342c}
+  .ring .t{position:relative;font-variant-numeric:tabular-nums;font-size:30px;font-weight:700;letter-spacing:.02em}
+  .ring .t small{display:block;font-size:11px;font-weight:600;color:#9DC3B1;letter-spacing:.1em}
+  .fbtns{display:flex;gap:10px;margin-top:10px;flex-wrap:wrap;justify-content:center}
+  .fbtn{border:1px solid rgba(255,255,255,.22);background:rgba(255,255,255,.06);color:#EAF1EC;border-radius:11px;padding:10px 16px;font-size:13px;font-weight:600}
+  .fbtn.p{background:#DDE8E0;color:#173029;border-color:transparent;font-weight:700}
+  .doubling{margin-top:16px;font-size:12.5px;color:#9DC3B1;display:flex;align-items:center;gap:8px}
+  .pulse{width:9px;height:9px;border-radius:50%;background:#7FB79E;box-shadow:0 0 0 0 rgba(127,183,158,.6);animation:p 2s infinite}
+  @keyframes p{0%{box-shadow:0 0 0 0 rgba(127,183,158,.5)}70%{box-shadow:0 0 0 10px rgba(127,183,158,0)}100%{box-shadow:0 0 0 0 rgba(127,183,158,0)}}
+
+  /* generic card grid */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+  @media(max-width:880px){.grid2{grid-template-columns:1fr}.app{flex-direction:column}.side{width:auto;display:none}}
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:18px;padding:22px 22px;box-shadow:var(--shadow)}
+  .panel h3{font-family:var(--serif);font-size:19px;font-weight:600;margin:0 0 3px}
+  .panel .cap{color:var(--muted);font-size:12.5px;margin:0 0 14px}
+
+  /* breakdown steps */
+  .task-h{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px}
+  .task-h .name{font-family:var(--serif);font-size:17px;font-weight:600}
+  .spicy{display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted)}
+  .spicy .track{width:78px;height:6px;border-radius:6px;background:var(--surface-2);position:relative;border:1px solid var(--border)}
+  .spicy .fill{position:absolute;left:0;top:0;bottom:0;width:66%;background:var(--amber);border-radius:6px}
+  .step{display:flex;align-items:center;gap:11px;padding:10px 12px;border:1px solid var(--border);border-radius:11px;margin-top:8px;background:var(--card)}
+  .cbox{width:19px;height:19px;border-radius:6px;border:1.8px solid var(--border-2);flex:none}
+  .cbox.done{background:var(--green);border-color:var(--green);position:relative}
+  .cbox.done::after{content:"✓";color:#fff;font-size:12px;position:absolute;left:3px;top:-1px}
+  .step .lab{flex:1;font-size:13.5px}
+  .step.done .lab{color:var(--muted);text-decoration:line-through}
+  .est{font-size:11px;color:var(--muted);background:var(--surface-2);border-radius:999px;padding:3px 9px;white-space:nowrap}
+
+  /* nudge / resurface */
+  .nudge{display:flex;gap:14px;align-items:flex-start}
+  .nudge .icon{width:38px;height:38px;border-radius:11px;background:var(--green-soft);display:grid;place-items:center;flex:none;font-size:18px}
+  .nudge p{margin:2px 0 0;font-size:13.5px;color:var(--text-2)}
+  .nudge .q{font-family:var(--serif);font-size:16px;font-weight:600;color:var(--text)}
+
+  /* momentum */
+  .streak{display:flex;gap:6px;margin:10px 0 4px}
+  .day{flex:1;height:34px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);display:grid;place-items:center;font-size:11px;color:var(--muted)}
+  .day.on{background:var(--green-soft);border-color:#CFE0D1;color:var(--green-ink);font-weight:700}
+  .win{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--text-2);margin-top:9px}
+  .win .d{width:16px;height:16px;border-radius:5px;background:var(--green);display:grid;place-items:center;color:#fff;font-size:10px;flex:none}
+
+  /* timeline */
+  .tl{display:flex;flex-direction:column;gap:0;margin-top:6px}
+  .tlrow{display:grid;grid-template-columns:52px 1fr;gap:12px;align-items:stretch}
+  .tlrow .time{font-size:11.5px;color:var(--muted);padding-top:9px;font-variant-numeric:tabular-nums}
+  .tlrow .block{border-radius:10px;padding:9px 12px;margin:4px 0;font-size:13px;font-weight:600}
+  .b-green{background:var(--green-soft);border:1px solid #CFE0D1;color:var(--green-ink)}
+  .b-amber{background:var(--amber-soft);border:1px solid #E7D6B4;color:var(--amber)}
+  .b-blue{background:#E4EDF3;border:1px solid #CBDCE7;color:var(--blue)}
+  .b-now{border:1.5px dashed var(--green);background:transparent;color:var(--green-ink);display:flex;justify-content:space-between}
+  .free{color:var(--muted);font-weight:500;font-size:12px;padding:6px 12px}
+
+  .note{font-size:12px;color:var(--muted);margin-top:10px}
+  .callout{display:flex;gap:10px;background:var(--green-soft);border:1px solid #D5E2D3;border-radius:12px;padding:12px 15px;font-size:13px;color:var(--green-ink);margin-top:12px}
+  .foot{margin-top:56px;padding-top:20px;border-top:1px solid var(--border);color:var(--muted);font-size:12.5px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .do,.dont{border-radius:10px;padding:10px 12px;font-size:12.5px;border:1px solid var(--border)}
+  .do{background:var(--green-soft);border-color:#D5E2D3;color:var(--green-ink)}
+  .dont{background:#F6EAE6;border-color:#EAD3CC;color:#9A4B3B}
+  .do b,.dont b{display:block;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2px;opacity:.8}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <span class="tag">Concept board · not final UI</span>
+  <h1 class="title">Xanî, tuned for an ADHD brain</h1>
+  <p class="lede">Xanî already has the right instincts — one thing at a time, a place to dump your head, a runtime that triages the noise. These are concepts for making that promise land harder: reduce the choices, make time visible, lower the cost of starting, and never, ever shame you for a full inbox.</p>
+
+  <!-- 1 -->
+  <div class="sec-label"><span class="n">1</span> A calmer Home — one decision, warm voice</div>
+  <p class="sec-desc">The whole screen points at a single next action. Counts are neutral, never red. Empty-ish is a feature, not a failure. Everything else is one scroll away when you ask for it.</p>
+  <div class="frame">
+    <div class="browser"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="url">localhost — Xanî</span></div>
+    <div class="app">
+      <div class="side">
+        <div class="brand">Xanî<small>PERSONAL OS · MARVIN</small></div>
+        <div class="navitem active"><span class="ic">🏠</span> Home</div>
+        <div class="navitem"><span class="ic">✉️</span> Inbox</div>
+        <div class="navitem"><span class="ic">📁</span> Drive</div>
+        <div class="navitem"><span class="ic">🗓️</span> Calendar</div>
+        <div class="navitem"><span class="ic">💬</span> Slack</div>
+        <div class="navgroup">Assistant</div>
+        <div class="navitem"><span class="ic">🎯</span> Focus</div>
+        <div class="navitem"><span class="ic">🎓</span> Train</div>
+        <div class="navitem"><span class="ic">✨</span> Momentum</div>
+      </div>
+      <div class="main">
+        <h1 class="hello">Good afternoon, Rebaz.</h1>
+        <p class="date">Wednesday 1 July · you’ve got this</p>
+        <div class="onething">
+          <div class="kicker">Right now — just this one</div>
+          <h2>Reply to Chelsea about payday</h2>
+          <div class="src">Email · leadstories · takes about 4 minutes · I’ve drafted it for you</div>
+          <div class="row">
+            <button class="btn p">▶ Focus with me</button>
+            <button class="btn s">✓ Done</button>
+            <button class="btn ghost">Not now →</button>
+          </div>
+        </div>
+        <div class="softbox">
+          <span class="ph">Brain-dump anything — I’ll hold it so you don’t have to.</span>
+          <button class="btn p">Hold it</button>
+        </div>
+        <div class="listlabel">When you’re ready — a few more <span class="count calm">3</span></div>
+        <div class="miniitem">
+          <div>
+            <div class="who">Slack · amargi</div>
+            <h4>Edda asked you to look at the campaign page</h4>
+          </div>
+        </div>
+        <div class="callout">🌿 Nothing is on fire. The rest can wait until you want it.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2 -->
+  <div class="sec-label"><span class="n">2</span> Focus with me — body-doubling + visible time</div>
+  <p class="sec-desc">The single hardest ADHD moment is <em>starting</em>. Tap “Focus with me” and the world narrows to one task, a timer you can actually see draining, and a companion sitting with you. Time-blindness gets an external clock; task-initiation gets a ritual.</p>
+  <div class="frame">
+    <div class="browser"><span class="dot r"></span><span class="dot y"></span><span class="dot g"></span><span class="url">localhost — Xanî · Focus</span></div>
+    <div class="focus">
+      <div class="k">Focusing with you · 1 task</div>
+      <h2>Reply to Chelsea about payday</h2>
+      <div class="sub">Your draft is open on the right. Just read it and hit send.</div>
+      <div class="ring" style="--p:38"><div class="t">09:14<small>OF 15:00</small></div></div>
+      <div class="fbtns">
+        <button class="fbtn p">✓ Done — that felt good</button>
+        <button class="fbtn">＋5 min</button>
+        <button class="fbtn">Pause</button>
+      </div>
+      <div class="doubling"><span class="pulse"></span> I’m here with you. No rush — one small thing at a time.</div>
+    </div>
+  </div>
+
+  <!-- 3 + 4 -->
+  <div class="sec-label"><span class="n">3</span> Break it down &amp; make time visible</div>
+  <p class="sec-desc">A big vague task is a wall. Xanî turns it into tiny first steps — with time estimates and an adjustable “how small do you need it” dial — and lays your day out as blocks so “later” stops being invisible.</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="task-h">
+        <span class="name">Prep the Amargi fundraising post</span>
+        <span class="spicy">tiny <span class="track"><span class="fill"></span></span> detailed</span>
+      </div>
+      <p class="cap">You don’t have to do it all. Just the top one.</p>
+      <div class="step"><span class="cbox done"></span><span class="lab" style="text-decoration:line-through;color:var(--muted)">Open the Startnext page</span><span class="est">1 min</span></div>
+      <div class="step" style="border-color:#CFE0D1;background:#F3F8F3"><span class="cbox"></span><span class="lab"><b>Skim it once, note 3 things to fix</b></span><span class="est">~5 min</span></div>
+      <div class="step"><span class="cbox"></span><span class="lab">Draft the caption (I’ll start it in your voice)</span><span class="est">~8 min</span></div>
+      <div class="step"><span class="cbox"></span><span class="lab">Pick a photo from the shared drive</span><span class="est">~3 min</span></div>
+      <div class="callout">🎈 That’s only ~5 minutes to start. Want me to just do the first one with you?</div>
+    </div>
+    <div class="panel">
+      <h3>Today, as blocks</h3>
+      <p class="cap">Not a to-do list — a shape for the day. “Now” is always obvious.</p>
+      <div class="tl">
+        <div class="tlrow"><div class="time">10:00</div><div class="block b-blue">Editorial standup · 30m</div></div>
+        <div class="tlrow"><div class="time">now</div><div class="block b-now"><span>▶ Reply to Chelsea</span><span>~4m left</span></div></div>
+        <div class="tlrow"><div class="time">13:00</div><div class="free">— open · protect this for lunch —</div></div>
+        <div class="tlrow"><div class="time">14:30</div><div class="block b-green">Deep work: fundraising post · 45m</div></div>
+        <div class="tlrow"><div class="time">17:00</div><div class="block b-amber">Soft stop · wind down</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5 + 6 -->
+  <div class="sec-label"><span class="n">4</span> Gentle re-surfacing &amp; earned momentum</div>
+  <p class="sec-desc">Dropped threads come back as an invitation, not an accusation. Wins are celebrated to feed the dopamine loop — small, real, and never guilt-shaped.</p>
+  <div class="grid2">
+    <div class="panel">
+      <div class="nudge">
+        <div class="icon">🌱</div>
+        <div>
+          <div class="q">Want to pick this back up?</div>
+          <p>Ten days ago you told Mahtab you’d send the subtitle notes. No pressure — I kept it safe. Two minutes now, or snooze it to tomorrow?</p>
+          <div class="row">
+            <button class="btn p">Do it now (2 min)</button>
+            <button class="btn s">Tomorrow</button>
+            <button class="btn ghost">It’s handled</button>
+          </div>
+        </div>
+      </div>
+      <div class="two">
+        <div class="do"><b>We say</b>“Want to pick this back up?”</div>
+        <div class="dont"><b>We never say</b>“⚠ 1 OVERDUE · 10 days late”</div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Momentum</h3>
+      <p class="cap">You showed up. That counts — streaks survive an off day.</p>
+      <div class="streak">
+        <div class="day on">M</div><div class="day on">T</div><div class="day on">W</div>
+        <div class="day">T</div><div class="day">F</div><div class="day">S</div><div class="day">S</div>
+      </div>
+      <div class="win"><span class="d">✓</span> Cleared 4 Slack asks before noon</div>
+      <div class="win"><span class="d">✓</span> Sent the invoice you’d been avoiding 🎉</div>
+      <div class="win"><span class="d">✓</span> 2 focus sessions · 38 min in flow</div>
+      <div class="callout">🔥 3-day streak. An off day won’t break it — just come back.</div>
+    </div>
+  </div>
+
+  <div class="foot">
+    <b>Design spine:</b> reduce decisions to one · make time and progress visible · lower the cost of starting (breakdown + body-doubling) · externalize memory (capture + gentle resurfacing) · protect dopamine with real wins · and a voice that is calm, warm, and never shaming. &nbsp;— Full research-backed report to follow.
+  </div>
+</div>
+</body>
+</html>

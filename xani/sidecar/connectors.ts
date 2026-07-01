@@ -422,12 +422,12 @@ export async function getWritingSamples(p: {
     const ws = slack.workspaces.find((w) => !p.workspace || w.role === p.workspace);
     const selfId = ws?.selfId;
     if (!selfId) return { ok: false, samples: [], error: 'Slack needs a USER token (xoxp-) to read your own messages.' };
-    const convos = slack.channels.filter((c) => !p.workspace || c.workspace === p.workspace).slice(0, 8);
-    const histories = await Promise.all(
-      convos.map((c) => getSlackHistory({ workspace: c.workspace, channel: c.id, limit: 30 }).catch(() => null)),
-    );
+    const convos = slack.channels.filter((c) => !p.workspace || c.workspace === p.workspace).slice(0, 6);
+    // Sequential — conversations.history is rate-limited hard; never burst it.
     const mine: string[] = [];
-    for (const h of histories) {
+    for (const c of convos) {
+      let h: SlackHistory | null = null;
+      try { h = await getSlackHistory({ workspace: c.workspace, channel: c.id, limit: 30 }); } catch { h = null; }
       if (!h || !h.ok) continue;
       for (const m of h.messages) {
         if (m.userId !== selfId) continue;

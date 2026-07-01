@@ -152,13 +152,17 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   const cache = (data: SlackTriage) => { slackTriageCache = { at: Date.now(), key: learnKey, data }; return data; };
   if (scan.length === 0) return cache({ connected: true, triaged: [] });
 
-  const histories = await Promise.all(
-    scan.map((c) =>
-      getSlackHistory({ workspace: c.workspace, channel: c.id, limit: 12 })
-        .then((h) => ({ c, h }))
-        .catch(() => ({ c, h: null as SlackHistory | null })),
-    ),
-  );
+  // conversations.history is Slack's strictest tier (as low as 1 req/min for newer apps).
+  // Fetch SEQUENTIALLY, never in a parallel burst, so we respect retry-after instead of
+  // triggering a 429 storm. Cached 90s + API-gated, so this runs rarely.
+  const histories: { c: (typeof scan)[number]; h: SlackHistory | null }[] = [];
+  for (const c of scan) {
+    try {
+      histories.push({ c, h: await getSlackHistory({ workspace: c.workspace, channel: c.id, limit: 10 }) });
+    } catch {
+      histories.push({ c, h: null });
+    }
+  }
 
   type Cand = { id: string; workspace: string; workspaceName: string; channelId: string; channel: string; dm: boolean; from: string; text: string; ts: string; emergency: boolean };
   const candidates: Cand[] = [];

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="night">
+<html lang="en" data-theme="day">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -207,7 +207,7 @@ h1,h2,h3,.disp{font-family:var(--fdisp),Georgia,serif;}
       </div>
       <div class="sp"></div>
       <div class="pill"><span class="mono" id="clock">08:42</span> · <b>Wed 1 Jul</b></div>
-      <div class="pill t" id="themeToggle">🌙 Night</div>
+      <div class="pill t" id="themeToggle">☀️ Day</div>
     </div>
 
     <!-- HOME -->
@@ -362,7 +362,7 @@ document.querySelectorAll('[data-v]').forEach(el=>el.addEventListener('click',()
 /* ---------- clock + theme ---------- */
 function tick(){const d=new Date();document.getElementById('clock').textContent=String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
 tick();setInterval(tick,20000);
-document.getElementById('themeToggle').addEventListener('click',function(){const r=document.documentElement,n=r.getAttribute('data-theme')==='night';r.setAttribute('data-theme',n?'day':'night');this.textContent=n?'☀️ Day':'🌙 Night';});
+document.getElementById('themeToggle').addEventListener('click',function(){const r=document.documentElement,n=r.getAttribute('data-theme')==='night';r.setAttribute('data-theme',n?'day':'night');this.textContent=n?'☀️ Day':'🌙 Night';if(window.__setOrbTheme)window.__setOrbTheme();});
 
 /* ---------- toast + confetti ---------- */
 let tT;window.toast=function(m){const t=document.getElementById('toast');t.innerHTML=m;t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),1900);};
@@ -428,15 +428,35 @@ if(renderer){
   const grp=new THREE.Group();scene.add(grp);
   const N=2600,R=1.55,base=new Float32Array(N*3),pos=new Float32Array(N*3),col=new Float32Array(N*3),sd=new Float32Array(N);
   const jd=new Float32Array(N*3),jf=new Float32Array(N);
-  const RAMP=[new THREE.Color('#8df7e6'),new THREE.Color('#5aa9ff'),new THREE.Color('#b088ff'),new THREE.Color('#ff7a52')];
-  function ramp(t){t=Math.max(0,Math.min(1,t));const f=t*3,i=Math.floor(f);const c=RAMP[i].clone();if(i<3)c.lerp(RAMP[i+1],f-i);return c;}
+  const colLight=new Float32Array(N*3);
+  const RAMP=[new THREE.Color('#8df7e6'),new THREE.Color('#5aa9ff'),new THREE.Color('#b088ff'),new THREE.Color('#ff7a52')];         // dark theme: bright aurora (additive)
+  const RAMPL=[new THREE.Color('#12a08e'),new THREE.Color('#2f6fd0'),new THREE.Color('#6f4fc6'),new THREE.Color('#d64e28')];        // light theme: deep saturated (normal blend, reads on cream)
+  function rampOf(P,t){t=Math.max(0,Math.min(1,t));const f=t*3,i=Math.floor(f);const c=P[i].clone();if(i<3)c.lerp(P[i+1],f-i);return c;}
   const gold=Math.PI*(3-Math.sqrt(5));
-  for(let i=0;i<N;i++){const y=1-(i/(N-1))*2,r=Math.sqrt(1-y*y),th=gold*i,j=.93+Math.random()*.12;base[i*3]=Math.cos(th)*r*R*j;base[i*3+1]=y*R*j;base[i*3+2]=Math.sin(th)*r*R*j;pos[i*3]=base[i*3];pos[i*3+1]=base[i*3+1];pos[i*3+2]=base[i*3+2];const c=ramp((y+1)/2+(Math.random()-.5)*.14);col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;sd[i]=Math.random()*6.28;jd[i*3]=Math.random()*2-1;jd[i*3+1]=Math.random()*2-1;jd[i*3+2]=Math.random()*2-1;jf[i]=14+Math.random()*24;}
+  for(let i=0;i<N;i++){const y=1-(i/(N-1))*2,r=Math.sqrt(1-y*y),th=gold*i,j=.93+Math.random()*.12;base[i*3]=Math.cos(th)*r*R*j;base[i*3+1]=y*R*j;base[i*3+2]=Math.sin(th)*r*R*j;pos[i*3]=base[i*3];pos[i*3+1]=base[i*3+1];pos[i*3+2]=base[i*3+2];
+    const tv=(y+1)/2+(Math.random()-.5)*.14; const c=rampOf(RAMP,tv),cl=rampOf(RAMPL,tv);
+    col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b; colLight[i*3]=cl.r;colLight[i*3+1]=cl.g;colLight[i*3+2]=cl.b;
+    sd[i]=Math.random()*6.28;jd[i*3]=Math.random()*2-1;jd[i*3+1]=Math.random()*2-1;jd[i*3+2]=Math.random()*2-1;jf[i]=14+Math.random()*24;}
   const geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.setAttribute('color',new THREE.BufferAttribute(col,3));
   const cMat=new THREE.PointsMaterial({size:0.055,map:spr,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.95});
   const bMat=new THREE.PointsMaterial({size:0.16,map:sprS,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.3});
+  // seat: soft dark disc behind the orb — grounds the (non-additive) particles on the light background
+  const seat=new THREE.Sprite(new THREE.SpriteMaterial({map:sprS,color:0x312c4a,transparent:true,opacity:.12,blending:THREE.NormalBlending,depthWrite:false}));seat.scale.setScalar(4.4);seat.position.z=-1.4;grp.add(seat);
   grp.add(new THREE.Points(geo,bMat));grp.add(new THREE.Points(geo,cMat));
   const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:sprS,color:0x7aa8ff,transparent:true,opacity:.4,blending:THREE.AdditiveBlending,depthWrite:false}));halo.scale.setScalar(5);halo.position.z=-1;grp.add(halo);
+
+  // theme-aware orb: additive bright aurora on dark, normal-blend deep aurora on light
+  let orbLight=false;
+  function setOrbTheme(){
+    orbLight = document.documentElement.getAttribute('data-theme')!=='night';
+    geo.attributes.color.array.set(orbLight?colLight:col); geo.attributes.color.needsUpdate=true;
+    const bl = orbLight?THREE.NormalBlending:THREE.AdditiveBlending;
+    cMat.blending=bl; bMat.blending=bl; halo.material.blending=bl;
+    cMat.needsUpdate=bMat.needsUpdate=halo.material.needsUpdate=true;
+    if(orbLight){ halo.material.color.set('#8f88bd'); halo.material.opacity=.18; seat.visible=true; }
+    else { halo.material.color.set(0x7aa8ff); halo.material.opacity=.4; seat.visible=false; }
+  }
+  window.__setOrbTheme=setOrbTheme; setOrbTheme();
   // voice reactivity
   let level=0,listening=false,simUntil=0,ctx,analyser,freq;
   async function startMic(){try{ctx=ctx||new(window.AudioContext||window.webkitAudioContext)();await ctx.resume();const st=await navigator.mediaDevices.getUserMedia({audio:true});const s=ctx.createMediaStreamSource(st);analyser=ctx.createAnalyser();analyser.fftSize=128;freq=new Uint8Array(analyser.frequencyBinCount);s.connect(analyser);return true;}catch(e){return false;}}
@@ -453,7 +473,13 @@ if(renderer){
       const jx=jd[i*3]*Math.sin(t*jf[i]+sd[i])*amp,jy=jd[i*3+1]*Math.sin(t*jf[i]*1.13+sd[i]*1.7)*amp,jz=jd[i*3+2]*Math.sin(t*jf[i]*0.87+sd[i]*2.3)*amp;
       p[i*3]=base[i*3]*ex*sh+jx;p[i*3+1]=base[i*3+1]*ex*sh+jy;p[i*3+2]=base[i*3+2]*ex*sh+jz;}
     geo.attributes.position.needsUpdate=true;
-    cMat.size=0.055+e*0.05;bMat.size=0.16+e*0.22;bMat.opacity=0.28+e*0.4;halo.material.opacity=0.32+e*0.4;halo.scale.setScalar(4.6+e*2.4+Math.sin(t*0.8)*0.2);
+    const lo=orbLight;
+    cMat.size=(lo?0.05:0.055)+e*0.05;
+    bMat.size=(lo?0.12:0.16)+e*0.22;
+    bMat.opacity=(lo?0.20:0.28)+e*(lo?0.28:0.4);
+    halo.material.opacity=(lo?0.16:0.32)+e*(lo?0.22:0.4);
+    halo.scale.setScalar(4.6+e*2.4+Math.sin(t*0.8)*0.2);
+    if(lo) seat.material.opacity=0.12+e*0.06;
     grp.scale.setScalar(1+Math.sin(t*1.1)*0.03+e*0.06);grp.rotation.y=t*(0.06+e*0.28);grp.rotation.x=Math.sin(t*0.3)*0.03;
     grp.position.x=Math.sin(t*0.6)*0.04+Math.sin(t*3.2)*e*0.12;grp.position.y=Math.cos(t*0.5)*0.04+Math.cos(t*2.7)*e*0.12;
     renderer.render(scene,cam);}

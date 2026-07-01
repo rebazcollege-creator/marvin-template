@@ -131,13 +131,19 @@ function runClaude(args: string[], input: string): Promise<string> {
     });
     child.on('close', (code) => {
       clearTimeout(timer);
-      if (code !== 0) return reject(new Error(`claude cli exited ${code}: ${err.slice(0, 300)}`));
+      // Claude -p writes its own error to STDOUT (as JSON) on failure — surface both streams.
+      let j: { result?: string; is_error?: boolean; error?: string; subtype?: string } | null = null;
       try {
-        const j = JSON.parse(out) as { result?: string };
-        resolve(typeof j.result === 'string' ? j.result : out.trim());
+        j = JSON.parse(out);
       } catch {
-        resolve(out.trim()); // plain-text output (no --output-format json)
+        /* not JSON */
       }
+      if (code !== 0 || j?.is_error) {
+        const detail = (j?.error || j?.result || j?.subtype || err || out || '(no output)').toString().slice(0, 400);
+        return reject(new Error(`claude cli exited ${code}: ${detail}`));
+      }
+      if (j && typeof j.result === 'string') return resolve(j.result);
+      resolve(out.trim()); // plain-text output (no --output-format json)
     });
     child.stdin.write(input);
     child.stdin.end();

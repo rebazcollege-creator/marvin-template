@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en" data-look="clay">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Xanî — identity options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   XANÎ — four identities, one ADHD home layout.
+   Switch look via the top bar. Almost everything is driven by
+   CSS variables + per-[data-look] overrides so the STRUCTURE
+   stays identical and only the IDENTITY changes.
+   ============================================================ */
+
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{ font-family:var(--fbody); background:var(--bg); color:var(--text); -webkit-font-smoothing:antialiased; transition: background .3s, color .3s;}
+
+/* ---------- design tokens per look ---------- */
+:root{ --r:18px; --bw:1px; --shadow:0 20px 44px -26px rgba(0,0,0,.4); --hardshadow:none; }
+
+/* 1) SOFT CLAY — friendly, chunky, tactile, playful-bold */
+:root[data-look="clay"]{
+  --bg:#f2eee6; --panel:#e9e3d7; --surface:#fffdf8; --surface-2:#f6f1e8;
+  --hover:#efe9dd; --border:#1f1b16; --border-soft:#e2dccf;
+  --text:#1f1b16; --text-2:#6b6459; --muted:#9a9384;
+  --accent:#ff5c39; --accent-2:#ff7a52; --accent-ink:#fff;
+  --c-focus:#8b6cf0; --c-cal:#2f7bff; --c-inbox:#ff9f1c; --c-slack:#17b877; --c-social:#ff5aa8;
+  --fdisp:'Inter'; --fbody:'Inter';
+  --r:20px; --bw:2px; --shadow:none; --hardshadow:4px 4px 0 var(--border);
+}
+/* 2) KURDISH SUN — warm editorial, huge type, cultural, high-contrast */
+:root[data-look="sun"]{
+  --bg:#faf6ee; --panel:#f3ecdd; --surface:#fffdf9; --surface-2:#f7f1e4;
+  --hover:#f1e9d8; --border:#e4dbc6; --border-soft:#ece3d0;
+  --text:#211c14; --text-2:#5c5344; --muted:#a99e86;
+  --accent:#c8402a; --accent-2:#e06a2d; --accent-ink:#fffaf0;
+  --c-focus:#8a5a2b; --c-cal:#2c6e63; --c-inbox:#d99414; --c-slack:#5c7a3f; --c-social:#b23a6a;
+  --fdisp:'Fraunces'; --fbody:'Inter';
+  --r:6px; --bw:1px; --shadow:0 24px 50px -30px rgba(80,40,10,.4); --hardshadow:none;
+}
+/* 3) MIDNIGHT NEON — dark, glass, electric, premium AI-OS */
+:root[data-look="neon"]{
+  --bg:#0a0b10; --panel:#0f1118; --surface:rgba(255,255,255,.045); --surface-2:rgba(255,255,255,.07);
+  --hover:rgba(255,255,255,.1); --border:rgba(255,255,255,.1); --border-soft:rgba(255,255,255,.07);
+  --text:#eef1f8; --text-2:#9aa3b8; --muted:#606a83;
+  --accent:#00e0c6; --accent-2:#38f2d8; --accent-ink:#04120f;
+  --c-focus:#b98cff; --c-cal:#4db5ff; --c-inbox:#ffca52; --c-slack:#3ee08f; --c-social:#ff6bd0;
+  --fdisp:'Space Grotesk'; --fbody:'Space Grotesk';
+  --r:16px; --bw:1px; --shadow:0 24px 60px -28px rgba(0,0,0,.8); --hardshadow:none;
+}
+/* 4) QUIET STONE — calm, muji, low-stimulation, spacious */
+:root[data-look="quiet"]{
+  --bg:#eceae4; --panel:#e4e1d9; --surface:#f6f5f1; --surface-2:#efede7;
+  --hover:#e8e6df; --border:#dcd9d0; --border-soft:#e6e3db;
+  --text:#33322d; --text-2:#6e6c64; --muted:#a2a096;
+  --accent:#7a8b6f; --accent-2:#8fa082; --accent-ink:#fbfbf8;
+  --c-focus:#8a86a0; --c-cal:#6f8ca0; --c-inbox:#b89968; --c-slack:#789a7e; --c-social:#a3819a;
+  --fdisp:'Fraunces'; --fbody:'Inter';
+  --r:14px; --bw:1px; --shadow:0 18px 40px -30px rgba(60,60,50,.35); --hardshadow:none;
+}
+
+h1,h2,h3,.disp{ font-family:var(--fdisp), Georgia, serif; }
+.mono{ font-family:'JetBrains Mono', monospace; }
+
+::-webkit-scrollbar{width:9px;height:9px;} ::-webkit-scrollbar-thumb{background:var(--border-soft);border-radius:6px;}
+
+/* ---------- switcher ---------- */
+.switch{ position:sticky; top:0; z-index:30; display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+  padding:14px 24px; background:var(--panel); border-bottom:var(--bw) solid var(--border-soft); backdrop-filter:blur(10px); }
+.switch .lead{ font-family:var(--fdisp); font-weight:700; font-size:16px; display:flex; align-items:center; gap:9px;}
+.switch .lead .o{ width:22px;height:22px;border-radius:50%;
+  background:conic-gradient(from 200deg,#8df7e6,#5aa9ff,#b088ff,#ff6b3d,#8df7e6); }
+.looks{ display:flex; gap:8px; flex-wrap:wrap; }
+.lk{ display:flex; flex-direction:column; gap:6px; padding:8px 12px; border-radius:12px; cursor:pointer;
+  border:2px solid transparent; background:var(--surface); transition:.16s; min-width:132px; }
+.lk:hover{ transform:translateY(-2px); }
+.lk.active{ border-color:var(--accent); }
+.lk b{ font-size:13px; }
+.lk small{ font-size:10.5px; color:var(--text-2); }
+.lk .sw{ display:flex; gap:4px; margin-top:2px; }
+.lk .sw i{ width:14px;height:14px;border-radius:4px; display:block; }
+.switch .hint{ margin-left:auto; font-size:12px; color:var(--text-2); }
+
+/* ---------- preview frame ---------- */
+.wrap{ max-width:1080px; margin:0 auto; padding:26px 24px 70px; }
+.tag-look{ font-size:12.5px; color:var(--text-2); margin-bottom:18px; }
+.tag-look b{ color:var(--accent-2); font-weight:700; }
+
+/* orb + greet */
+.hero{ display:grid; grid-template-columns:230px 1fr; gap:24px; align-items:center; }
+@media(max-width:820px){ .hero{ grid-template-columns:1fr; text-align:center; } }
+.orb{ width:170px;height:170px;border-radius:50%;position:relative;margin:auto;
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255,255,255,.95), transparent 30%),
+    radial-gradient(circle at 60% 62%, rgba(115,155,255,.6), transparent 52%),
+    radial-gradient(circle at 44% 46%, rgba(125,245,214,.7), transparent 44%),
+    radial-gradient(circle at 50% 50%, #8df7e6, #426ddf 46%, #352067);
+  box-shadow:0 22px 54px -18px rgba(66,109,223,.55), inset -8px -14px 36px rgba(53,32,103,.5), inset 12px 14px 34px rgba(255,255,255,.4);
+  animation:breath 7s ease-in-out infinite; overflow:hidden;}
+.orb::after{content:"";position:absolute;inset:-30%;border-radius:50%;mix-blend-mode:screen;filter:blur(3px);
+  background:conic-gradient(from 20deg at 50% 50%, transparent 4%, rgba(75,227,166,.9) 24%, rgba(160,255,225,.85) 36%, transparent 55%);
+  animation:spin 12s linear infinite;}
+.greet .eyebrow{ font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent-2); font-weight:700; }
+.greet h1{ font-weight:700; letter-spacing:-.01em; line-height:1.05; margin:6px 0 6px; }
+.greet .sub{ color:var(--text-2); font-size:14.5px; }
+
+/* ask */
+.ask{ margin-top:16px; display:flex; align-items:center; gap:10px; background:var(--surface);
+  border:var(--bw) solid var(--border); border-radius:var(--r); padding:5px 5px 5px 15px; box-shadow:var(--hardshadow); }
+.ask input{ flex:1; background:none;border:none;outline:none;color:var(--text);font-family:inherit;font-size:14px;padding:11px 0;}
+.ask input::placeholder{ color:var(--muted); }
+.ask .go{ border:none; background:var(--accent); color:var(--accent-ink); border-radius:calc(var(--r) - 5px);
+  padding:10px 15px; font-weight:700; font-size:13px; cursor:pointer; font-family:inherit; }
+
+/* cards */
+.grid{ margin-top:22px; display:grid; grid-template-columns:1.3fr 1fr; gap:18px; }
+@media(max-width:820px){ .grid{ grid-template-columns:1fr; } }
+.card{ background:var(--surface); border:var(--bw) solid var(--border); border-radius:var(--r); padding:20px; box-shadow:var(--shadow); }
+[data-look="clay"] .card{ box-shadow:var(--hardshadow); }
+[data-look="neon"] .card{ backdrop-filter:blur(16px); box-shadow:var(--shadow), inset 0 1px 0 rgba(255,255,255,.06); }
+
+.now{ border-color:var(--c-focus); background:linear-gradient(160deg, color-mix(in srgb,var(--c-focus) 14%, var(--surface)), var(--surface) 60%); }
+[data-look="clay"] .now{ box-shadow:4px 4px 0 var(--c-focus); }
+.now .k{ font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--c-focus); }
+.now .t{ font-family:var(--fdisp); font-weight:700; font-size:22px; margin:7px 0 5px; line-height:1.2; }
+.now .w{ font-size:13px; color:var(--text-2); }
+.now .row{ display:flex; gap:10px; margin-top:15px; flex-wrap:wrap; align-items:center; }
+.btnp{ display:flex; align-items:center; gap:8px; border:none; border-radius:calc(var(--r) - 4px); cursor:pointer; font-family:inherit;
+  background:var(--c-focus); color:#fff; padding:11px 16px; font-weight:700; font-size:13px; }
+[data-look="clay"] .btnp{ box-shadow:3px 3px 0 var(--border); color:#fff; }
+.btng{ border:var(--bw) solid var(--border); background:var(--surface-2); color:var(--text-2); border-radius:calc(var(--r) - 4px); padding:11px 14px; font-size:13px; cursor:pointer; font-family:inherit; }
+
+.mom .top{ display:flex; align-items:center; gap:10px; }
+.mom .fl{ font-size:26px; } .mom .n{ font-family:var(--fdisp); font-weight:700; font-size:26px; }
+.mom .n small{ display:block; font-size:11px; color:var(--text-2); font-family:var(--fbody); font-weight:500; }
+.win{ display:flex; align-items:center; gap:11px; font-size:13px; color:var(--text-2); margin-top:9px; }
+.win .b{ width:20px;height:20px;border-radius:6px;border:2px solid var(--border-soft); display:grid;place-items:center; }
+.win.on .b{ background:var(--c-slack); border-color:var(--c-slack); color:#fff; } .win.on span{ text-decoration:line-through; color:var(--muted); }
+.bar{ margin-top:14px;height:8px;background:var(--border-soft);border-radius:6px;overflow:hidden;}
+.bar>i{ display:block;height:100%;width:68%;border-radius:6px;background:var(--c-slack); }
+
+/* doors */
+.doors{ margin-top:20px; display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+@media(max-width:820px){ .doors{ grid-template-columns:repeat(2,1fr);} }
+.door{ background:var(--surface); border:var(--bw) solid var(--border); border-radius:var(--r); padding:15px; cursor:pointer; transition:.16s; }
+[data-look="clay"] .door{ box-shadow:var(--hardshadow); }
+.door:hover{ transform:translateY(-3px); }
+.door .i{ width:32px;height:32px;border-radius:9px;display:grid;place-items:center;margin-bottom:11px; }
+.door .c{ font-family:var(--fdisp); font-weight:700; font-size:27px; line-height:1; }
+.door .l{ font-size:12.5px; color:var(--text-2); margin-top:5px; }
+
+.foot-note{ margin-top:26px; font-size:12.5px; color:var(--muted); text-align:center; }
+
+@keyframes breath{0%,100%{transform:translateY(0) scale(1);}50%{transform:translateY(-6px) scale(1.02);}}
+@keyframes spin{to{transform:rotate(360deg);}}
+@media (prefers-reduced-motion: reduce){ *{animation:none!important;} }
+</style>
+</head>
+<body>
+
+<div class="switch">
+  <div class="lead"><span class="o"></span> Xanî · pick an identity</div>
+  <div class="looks" id="looks">
+    <div class="lk active" data-look="clay">
+      <b>Soft Clay</b><small>friendly · chunky · bold</small>
+      <span class="sw"><i style="background:#ff5c39"></i><i style="background:#8b6cf0"></i><i style="background:#17b877"></i><i style="background:#ff9f1c"></i></span>
+    </div>
+    <div class="lk" data-look="sun">
+      <b>Kurdish Sun</b><small>editorial · warm · cultural</small>
+      <span class="sw"><i style="background:#c8402a"></i><i style="background:#d99414"></i><i style="background:#2c6e63"></i><i style="background:#211c14"></i></span>
+    </div>
+    <div class="lk" data-look="neon">
+      <b>Midnight Neon</b><small>dark · glass · premium</small>
+      <span class="sw"><i style="background:#00e0c6"></i><i style="background:#b98cff"></i><i style="background:#4db5ff"></i><i style="background:#0a0b10"></i></span>
+    </div>
+    <div class="lk" data-look="quiet">
+      <b>Quiet Stone</b><small>calm · muji · low-stim</small>
+      <span class="sw"><i style="background:#7a8b6f"></i><i style="background:#8a86a0"></i><i style="background:#b89968"></i><i style="background:#33322d"></i></span>
+    </div>
+  </div>
+  <span class="hint">← same layout, four skins</span>
+</div>
+
+<div class="wrap">
+  <div class="tag-look" id="tagLook"></div>
+
+  <div class="hero">
+    <div class="orb"></div>
+    <div class="greet">
+      <div class="eyebrow">● Ready when you are</div>
+      <h1 style="font-size:32px">Good morning, Rebaz.</h1>
+      <div class="sub">3 things actually matter today. I’ll hold the rest.</div>
+      <div class="ask">
+        <input placeholder="Brain-dump anything — I’ll sort it." />
+        <button class="go">Send ↵</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="card now">
+      <div class="k">● Right now — your one thing</div>
+      <div class="t">Finish the LeadStories fact-check script</div>
+      <div class="w">Due 13:00 · ~35 min of work · everything else can wait.</div>
+      <div class="row">
+        <button class="btnp">▶ Focus with me · 25:00</button>
+        <button class="btng">Not now →</button>
+      </div>
+    </div>
+
+    <div class="card mom">
+      <div class="top"><span class="fl">🔥</span><span class="n">7<small>day streak — don’t break it</small></span></div>
+      <div class="win on"><span class="b">✓</span><span>Cleared 9 emails</span></div>
+      <div class="win on"><span class="b">✓</span><span>Approved 2 captions</span></div>
+      <div class="win"><span class="b"></span><span>Fact-check script</span></div>
+      <div class="bar"><i></i></div>
+    </div>
+  </div>
+
+  <div class="doors">
+    <div class="door"><div class="i" style="background:color-mix(in srgb,var(--c-inbox) 16%,transparent);color:var(--c-inbox)">✉</div><div class="c">6</div><div class="l">Emails to triage</div></div>
+    <div class="door"><div class="i" style="background:color-mix(in srgb,var(--c-slack) 16%,transparent);color:var(--c-slack)">#</div><div class="c">3</div><div class="l">Slack mentions</div></div>
+    <div class="door"><div class="i" style="background:color-mix(in srgb,var(--c-cal) 16%,transparent);color:var(--c-cal)">◷</div><div class="c">4</div><div class="l">Events today</div></div>
+    <div class="door"><div class="i" style="background:color-mix(in srgb,var(--c-focus) 16%,transparent);color:var(--c-focus)">✓</div><div class="c">2</div><div class="l">Need approval</div></div>
+  </div>
+
+  <div class="foot-note">Same ADHD layout every time. Only the identity changes. Click a look above.</div>
+</div>
+
+<script>
+const NOTE={
+  clay:'<b>Soft Clay</b> — warm off-white, chunky rounded cards with a hard offset shadow, thick ink borders, playful primary colours. Toy-like and tactile; arguably the most ADHD-friendly — everything reads as a big, obvious, pressable object. Boldness: <b>high, but friendly</b>.',
+  sun:'<b>Kurdish Sun</b> — editorial magazine energy: Fraunces serif at large sizes, warm cream, terracotta + sun-gold + deep ink, thin rules and lots of contrast. Carries cultural identity (Xanî, the sun). Boldness: <b>confident, grown-up</b>.',
+  neon:'<b>Midnight Neon</b> — near-black glassmorphism, electric teal/violet/blue glow, Space Grotesk. Feels like a premium AI operating system. Striking and modern; watch contrast/fatigue. Boldness: <b>maximal, techy</b>.',
+  quiet:'<b>Quiet Stone</b> — muji calm: stone, sage, sand, one soft accent, thin lines, generous space. Lowest stimulation — good if bright colour feels overwhelming on a bad-focus day. Boldness: <b>deliberately low</b>.'
+};
+function setLook(l){
+  document.documentElement.setAttribute('data-look',l);
+  document.querySelectorAll('.lk').forEach(x=>x.classList.toggle('active',x.dataset.look===l));
+  document.getElementById('tagLook').innerHTML=NOTE[l];
+}
+document.querySelectorAll('.lk').forEach(x=>x.addEventListener('click',()=>setLook(x.dataset.look)));
+setLook('clay');
+</script>
+</body>
+</html>

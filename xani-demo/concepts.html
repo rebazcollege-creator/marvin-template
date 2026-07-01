@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en" data-concept="stream">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Xanî — three foundational concepts</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   XANÎ — three concepts, three DIFFERENT apps.
+   • STREAM : agent-first. No dashboard. The app is a conversation.
+   • DECK   : one-thing-at-a-time. The app drives your whole day.
+   • CANVAS : spatial. A calm command board, not a list.
+   Switch concept in the top bar. Each has its own logic + identity.
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;transition:background .35s,color .35s;}
+.mono{font-family:'JetBrains Mono',monospace;}
+::-webkit-scrollbar{width:8px;} ::-webkit-scrollbar-thumb{background:var(--border);border-radius:5px;}
+
+/* ---- per-concept identity ---- */
+:root{
+  --stone-bg:#eeece5; --stone-surf:#f7f6f1; --stone-sfa:#efede6; --stone-bd:#ddd9cf; --stone-tx:#2f2e28; --stone-t2:#6c6a60; --stone-mut:#a3a094; --stone-ac:#7d8b6a; --stone-ac2:#93a17e;
+}
+[data-concept="stream"] body,body[data-c="stream"]{}
+:root[data-concept="stream"]{ --bg:var(--stone-bg); --surf:var(--stone-surf); --sfa:var(--stone-sfa); --bd:var(--stone-bd); --tx:var(--stone-tx); --t2:var(--stone-t2); --mut:var(--stone-mut); --ac:var(--stone-ac); --ac2:var(--stone-ac2); --fdisp:'Fraunces'; }
+:root[data-concept="deck"]{ --bg:#f4efe6; --surf:#fffdf8; --sfa:#f7f1e6; --bd:#e7dfce; --tx:#211d16; --t2:#5b5346; --mut:#a99f8c; --ac:#0f766e; --ac2:#14938a; --fdisp:'Fraunces'; }
+:root[data-concept="canvas"]{ --bg:#14161c; --surf:#1b1e26; --sfa:#222630; --bd:#2c313d; --tx:#eceef3; --t2:#a4abbb; --mut:#6b7383; --ac:#7fd8c4; --ac2:#9be6d5; --fdisp:'Space Grotesk'; }
+
+body{background:var(--bg);color:var(--tx);}
+h1,h2,h3,.disp{font-family:var(--fdisp),Georgia,serif;}
+
+/* ---- concept switcher ---- */
+.bar{position:fixed;top:0;left:0;right:0;z-index:50;display:flex;align-items:center;gap:16px;padding:12px 22px;
+  background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--bd);}
+.bar .brand{display:flex;align-items:center;gap:9px;font-family:var(--fdisp);font-weight:700;font-size:17px;}
+.bar .brand .o{width:22px;height:22px;border-radius:50%;background:conic-gradient(from 200deg,#8df7e6,#5aa9ff,#b088ff,#ff6b3d,#8df7e6);}
+.segs{display:flex;gap:4px;background:var(--surf);border:1px solid var(--bd);border-radius:12px;padding:4px;}
+.seg{border:none;background:none;font-family:inherit;font-size:12.5px;font-weight:600;color:var(--t2);padding:7px 14px;border-radius:9px;cursor:pointer;transition:.16s;}
+.seg.active{background:var(--ac);color:#fff;}
+.bar .desc{margin-left:auto;font-size:12px;color:var(--t2);max-width:440px;text-align:right;line-height:1.4;}
+.bar .desc b{color:var(--ac2);}
+
+.stage{position:absolute;inset:58px 0 0 0;overflow:hidden;}
+.screen{position:absolute;inset:0;display:none;}
+.screen.on{display:block;animation:fade .4s ease both;}
+
+/* ============ STREAM ============ */
+#stream{display:grid;grid-template-columns:78px 1fr;}
+.amb{border-right:1px solid var(--bd);display:flex;flex-direction:column;align-items:center;gap:20px;padding:22px 0;background:var(--sfa);}
+.amb .orb{width:44px;height:44px;border-radius:50%;background:
+  radial-gradient(circle at 34% 28%,rgba(255,255,255,.9),transparent 40%),
+  radial-gradient(circle at 50% 50%,#8df7e6,#426ddf 46%,#352067);
+  box-shadow:0 8px 22px -8px rgba(66,109,223,.6);animation:breath 7s ease-in-out infinite;}
+.amb .qc{writing-mode:vertical-rl;transform:rotate(180deg);font-size:11.5px;color:var(--mut);letter-spacing:.08em;cursor:pointer;padding:6px 0;}
+.amb .qc.a{color:var(--ac);font-weight:700;}
+.amb .me{margin-top:auto;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:12px;font-weight:700;background:linear-gradient(135deg,var(--ac),var(--ac2));}
+.flow{overflow-y:auto;padding:34px 0 120px;}
+.thread{max-width:640px;margin:0 auto;padding:0 22px;display:flex;flex-direction:column;gap:16px;}
+.mrow{display:flex;gap:12px;align-items:flex-start;}
+.mrow .ava{width:30px;height:30px;border-radius:50%;flex:none;margin-top:2px;background:conic-gradient(from 200deg,#8df7e6,#5aa9ff,#b088ff,#ff6b3d,#8df7e6);}
+.mrow.me{justify-content:flex-end;}
+.bub{background:var(--surf);border:1px solid var(--bd);border-radius:16px;padding:13px 16px;font-size:14px;line-height:1.5;max-width:80%;}
+.bub.mine{background:var(--ac);color:#fff;border-color:transparent;}
+.bub .lead{font-family:var(--fdisp);font-size:16px;font-weight:600;}
+.icard{background:var(--surf);border:1px solid var(--bd);border-radius:16px;overflow:hidden;max-width:86%;}
+.icard .h{display:flex;align-items:center;gap:9px;padding:12px 16px;border-bottom:1px solid var(--bd);font-size:12.5px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;}
+.icard .h .d{width:8px;height:8px;border-radius:50%;}
+.icard .bd{padding:14px 16px;}
+.line{display:flex;justify-content:space-between;padding:7px 0;font-size:13.5px;border-bottom:1px solid var(--bd);}
+.line:last-child{border:none;}
+.line .v{font-weight:700;} .line .lab{color:var(--t2);}
+.focusc{background:linear-gradient(160deg,color-mix(in srgb,#8b6cf0 12%,var(--surf)),var(--surf));}
+.focusc .t{font-family:var(--fdisp);font-size:18px;font-weight:600;margin-bottom:3px;}
+.focusc .w{font-size:12.5px;color:var(--t2);}
+.mini{display:inline-flex;align-items:center;gap:7px;background:#8b6cf0;color:#fff;border:none;border-radius:10px;padding:9px 14px;font-family:inherit;font-size:12.5px;font-weight:700;cursor:pointer;margin-top:10px;}
+.emailc .qa{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;}
+.qbtn{border:1px solid var(--bd);background:var(--sfa);color:var(--t2);border-radius:10px;padding:8px 12px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s;}
+.qbtn:hover{color:var(--tx);border-color:var(--ac);}
+.icard.gone{opacity:.5;}
+.icard .cleared{display:none;padding:12px 16px;color:var(--ac);font-size:13px;font-weight:600;}
+.icard.gone .cleared{display:block;} .icard.gone .bd,.icard.gone .h{display:none;}
+.chips{display:flex;gap:8px;flex-wrap:wrap;padding-left:42px;}
+.chip{border:1px solid var(--bd);background:var(--surf);border-radius:20px;padding:8px 14px;font-size:12.5px;color:var(--t2);cursor:pointer;transition:.15s;}
+.chip:hover{color:var(--ac);border-color:var(--ac);}
+.composer{position:absolute;bottom:0;left:78px;right:0;padding:16px 22px 22px;background:linear-gradient(transparent,var(--bg) 34%);}
+.composer .box{max-width:640px;margin:0 auto;display:flex;gap:10px;align-items:center;background:var(--surf);border:1.5px solid var(--bd);border-radius:16px;padding:5px 5px 5px 16px;box-shadow:0 14px 34px -22px rgba(0,0,0,.4);}
+.composer input{flex:1;border:none;background:none;outline:none;font-family:inherit;font-size:14px;color:var(--tx);padding:11px 0;}
+.composer input::placeholder{color:var(--mut);}
+.composer .snd{border:none;background:var(--ac);color:#fff;border-radius:11px;padding:11px 15px;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;}
+
+/* ============ DECK ============ */
+#deck{display:flex;flex-direction:column;align-items:center;padding:34px 22px;overflow-y:auto;}
+.spine{width:100%;max-width:560px;}
+.spine .top{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--t2);}
+.spine .top b{color:var(--tx);}
+.spine .rail{margin-top:8px;height:6px;background:var(--bd);border-radius:5px;overflow:hidden;}
+.spine .rail>i{display:block;height:100%;background:linear-gradient(90deg,var(--ac),var(--ac2));border-radius:5px;transition:width .4s;}
+.deckwrap{margin-top:30px;width:100%;max-width:560px;position:relative;min-height:360px;}
+.dcard{background:var(--surf);border:1px solid var(--bd);border-radius:22px;padding:30px;box-shadow:0 26px 60px -34px rgba(0,0,0,.4);}
+.dcard.anim{animation:pop .35s ease both;}
+.dkind{font-size:11.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;display:inline-flex;align-items:center;gap:7px;}
+.dkind .d{width:9px;height:9px;border-radius:50%;}
+.dtitle{font-family:var(--fdisp);font-size:26px;font-weight:600;line-height:1.2;margin:14px 0 10px;}
+.dbody{font-size:14px;color:var(--t2);line-height:1.55;}
+.dmarvin{margin-top:16px;background:var(--sfa);border:1px solid var(--bd);border-radius:14px;padding:13px 15px;font-size:13px;color:var(--t2);display:flex;gap:10px;}
+.dmarvin .mo{width:20px;height:20px;border-radius:50%;flex:none;background:conic-gradient(from 200deg,#8df7e6,#5aa9ff,#b088ff,#ff6b3d,#8df7e6);}
+.dmarvin b{color:var(--ac2);}
+.dactions{margin-top:22px;display:flex;gap:10px;flex-wrap:wrap;}
+.da{flex:1;min-width:120px;border:1px solid var(--bd);background:var(--sfa);color:var(--tx);border-radius:14px;padding:14px;font-family:inherit;font-size:13.5px;font-weight:700;cursor:pointer;transition:.16s;display:flex;flex-direction:column;align-items:center;gap:5px;}
+.da:hover{transform:translateY(-2px);border-color:var(--ac);}
+.da small{font-size:10.5px;font-weight:500;color:var(--mut);}
+.da.primary{background:var(--ac);color:#fff;border-color:transparent;} .da.primary small{color:rgba(255,255,255,.7);}
+.deckdone{display:none;text-align:center;padding:60px 20px;}
+.deckdone.on{display:block;animation:pop .5s ease both;}
+.deckdone .big{font-size:60px;} .deckdone h2{font-family:var(--fdisp);font-size:28px;margin:12px 0 6px;} .deckdone p{color:var(--t2);}
+
+/* ============ CANVAS ============ */
+#canvas{position:relative;overflow:hidden;}
+.cbg{position:absolute;inset:0;background:
+  radial-gradient(700px 460px at 50% 34%,rgba(127,216,196,.14),transparent 60%),
+  radial-gradient(600px 400px at 82% 88%,rgba(176,136,255,.12),transparent 60%);}
+.ribbon{position:absolute;top:26px;left:8%;right:8%;height:40px;}
+.ribbon .l{position:absolute;top:20px;left:0;right:0;height:2px;background:var(--bd);}
+.ribbon .now{position:absolute;top:14px;transform:translateX(-50%);width:12px;height:12px;border-radius:50%;background:var(--ac);box-shadow:0 0 0 5px color-mix(in srgb,var(--ac) 25%,transparent);}
+.ribbon .e{position:absolute;top:8px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;font-size:10.5px;color:var(--t2);white-space:nowrap;}
+.ribbon .e .b{width:9px;height:9px;border-radius:50%;}
+.cscene{position:absolute;inset:0;display:grid;place-items:center;}
+.chub{display:flex;flex-direction:column;align-items:center;gap:12px;z-index:2;}
+.cOrb{width:150px;height:150px;border-radius:50%;position:relative;background:
+  radial-gradient(circle at 34% 26%,rgba(255,255,255,.95),transparent 30%),
+  radial-gradient(circle at 60% 62%,rgba(115,155,255,.6),transparent 52%),
+  radial-gradient(circle at 44% 46%,rgba(125,245,214,.7),transparent 44%),
+  radial-gradient(circle at 50% 50%,#8df7e6,#426ddf 46%,#352067);
+  box-shadow:0 26px 64px -18px rgba(66,109,223,.6);animation:breath 7s ease-in-out infinite;overflow:hidden;}
+.cOrb::after{content:"";position:absolute;inset:-30%;border-radius:50%;mix-blend-mode:screen;filter:blur(3px);background:conic-gradient(from 20deg at 50% 50%,transparent 4%,rgba(75,227,166,.9) 24%,rgba(160,255,225,.85) 36%,transparent 55%);animation:spin 12s linear infinite;}
+.chub .g{font-family:var(--fdisp);font-size:24px;font-weight:600;}
+.chub .s{font-size:13px;color:var(--t2);}
+.tile{position:absolute;background:color-mix(in srgb,var(--surf) 86%,transparent);border:1px solid var(--bd);border-radius:18px;padding:15px 17px;backdrop-filter:blur(12px);box-shadow:0 18px 44px -28px rgba(0,0,0,.6);cursor:pointer;transition:.2s;min-width:150px;}
+.tile:hover{transform:translateY(-4px);border-color:var(--ac);}
+.tile .tt{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);font-weight:700;display:flex;align-items:center;gap:6px;}
+.tile .tt .d{width:8px;height:8px;border-radius:50%;}
+.tile .big{font-family:var(--fdisp);font-size:30px;font-weight:700;line-height:1;margin-top:8px;}
+.tile .sm{font-size:12px;color:var(--t2);margin-top:4px;}
+.tile.focus{border-color:#b088ff;background:linear-gradient(160deg,rgba(176,136,255,.16),color-mix(in srgb,var(--surf) 86%,transparent));min-width:230px;}
+.spot{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:9px;background:var(--surf);border:1px solid var(--bd);border-radius:30px;padding:10px 18px;font-size:13px;font-weight:700;color:var(--tx);cursor:pointer;box-shadow:0 14px 30px -18px rgba(0,0,0,.6);}
+#canvas.spotlight .tile:not(.focus),#canvas.spotlight .ribbon{opacity:.12;filter:blur(1px);}
+#canvas.spotlight .chub{opacity:.3;}
+.tile,.ribbon,.chub{transition:opacity .4s,filter .4s,transform .2s;}
+
+/* toast */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(24px);background:var(--surf);border:1px solid var(--bd);color:var(--tx);padding:11px 17px;border-radius:12px;font-size:13px;font-weight:600;box-shadow:0 16px 34px -20px rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.28s;z-index:80;}
+.toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
+
+@keyframes fade{from{opacity:0}to{opacity:1}}
+@keyframes pop{from{opacity:0;transform:translateY(12px) scale(.98);}to{opacity:1;transform:none;}}
+@keyframes breath{0%,100%{transform:translateY(0) scale(1);}50%{transform:translateY(-6px) scale(1.02);}}
+@keyframes spin{to{transform:rotate(360deg);}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;}}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div class="brand"><span class="o"></span>Xanî</div>
+  <div class="segs">
+    <button class="seg active" data-c="stream">Stream</button>
+    <button class="seg" data-c="deck">Deck</button>
+    <button class="seg" data-c="canvas">Canvas</button>
+  </div>
+  <div class="desc" id="desc"></div>
+</div>
+
+<div class="stage">
+
+  <!-- ========= STREAM ========= -->
+  <section class="screen on" id="stream">
+    <aside class="amb">
+      <div class="orb"></div>
+      <div class="qc a">Today</div>
+      <div class="qc">Triage</div>
+      <div class="qc">Studios</div>
+      <div class="me">R</div>
+    </aside>
+    <div style="position:relative;">
+      <div class="flow" id="flow">
+        <div class="thread" id="thread">
+          <div class="mrow"><div class="ava"></div><div class="bub"><span class="lead">Good morning, Rebaz.</span><br>Quiet start. 6 emails came in overnight — 2 need you, I can handle the rest. Your one thing is the fact-check script before 1pm. Want the shape of the day, or shall we just start?</div></div>
+
+          <div class="mrow"><div class="ava"></div>
+            <div class="icard"><div class="h"><span class="d" style="background:var(--ac)"></span>Today at a glance</div>
+              <div class="bd">
+                <div class="line"><span class="lab">Calendar events</span><span class="v">4</span></div>
+                <div class="line"><span class="lab">Needs a reply</span><span class="v">2</span></div>
+                <div class="line"><span class="lab">Next up · Standup</span><span class="v">09:30</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="mrow me"><div class="bub mine">what’s my one thing?</div></div>
+
+          <div class="mrow"><div class="ava"></div>
+            <div class="icard focusc"><div class="h"><span class="d" style="background:#8b6cf0"></span>Your one thing</div>
+              <div class="bd">
+                <div class="t">Finish the LeadStories fact-check script</div>
+                <div class="w">Due 13:00 · ~35 min left · I’ll hold notifications while you’re in it.</div>
+                <button class="mini" onclick="toast('🎯 Focus session started — I’m right here.')">▶ Focus with me · 25:00</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mrow"><div class="ava"></div>
+            <div class="icard emailc" id="ec1"><div class="h"><span class="d" style="background:#ffb454"></span>1 of 2 · needs your call</div>
+              <div class="bd">
+                <div style="font-weight:700;font-size:14px;">Sarah Chen · confirm source timestamp</div>
+                <div style="font-size:13px;color:var(--t2);margin-top:5px;line-height:1.5;">“Can you confirm the timestamp before we publish? Editorial wants it locked by 1pm.”</div>
+                <div style="font-size:12.5px;color:var(--ac2);margin-top:9px;">MARVIN drafted a 2-line confirm — review & send?</div>
+                <div class="qa">
+                  <button class="qbtn" onclick="clr('ec1','✉️ Reply sent')">Send reply</button>
+                  <button class="qbtn" onclick="clr('ec1','😴 Snoozed to 12:30')">Snooze</button>
+                  <button class="qbtn" onclick="clr('ec1','🤖 Handed to MARVIN')">You handle it</button>
+                </div>
+              </div>
+              <div class="cleared">✓ Handled — one less thing.</div>
+            </div>
+          </div>
+
+          <div class="chips" id="chips">
+            <div class="chip" onclick="ask('Clear the rest of my inbox')">Clear the rest</div>
+            <div class="chip" onclick="ask('What’s on after standup?')">After standup?</div>
+            <div class="chip" onclick="ask('Hide everything but today')">Hide all but today</div>
+          </div>
+        </div>
+      </div>
+      <div class="composer"><div class="box">
+        <input id="sInput" placeholder="Talk to MARVIN — ask, capture, or just think out loud…" onkeydown="if(event.key==='Enter'){ask(this.value);this.value='';}">
+        <button class="snd" onclick="var i=document.getElementById('sInput');ask(i.value);i.value='';">Send ↵</button>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- ========= DECK ========= -->
+  <section class="screen" id="deck">
+    <div class="spine">
+      <div class="top"><span>Today, one decision at a time</span><span><b id="dN">0</b> of 4 handled</span></div>
+      <div class="rail"><i id="dRail" style="width:0%"></i></div>
+    </div>
+    <div class="deckwrap">
+      <div id="dCard"></div>
+      <div class="deckdone" id="dDone">
+        <div class="big">🌿</div>
+        <h2>You’re clear.</h2>
+        <p>Four decisions, done. Nothing else needs you right now — go do your one thing, or rest.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ========= CANVAS ========= -->
+  <section class="screen" id="canvas">
+    <div class="cbg"></div>
+    <div class="ribbon">
+      <div class="l"></div>
+      <div class="now" style="left:38%"></div>
+      <div class="e" style="left:8%"><span class="b" style="background:var(--ac)"></span>Deep work · 8:00</div>
+      <div class="e" style="left:46%"><span class="b" style="background:#5aa9ff"></span>Standup · 9:30</div>
+      <div class="e" style="left:70%"><span class="b" style="background:#ffb454"></span>LeadStories · 13:00</div>
+      <div class="e" style="left:92%"><span class="b" style="background:#b088ff"></span>Amargi · 16:00</div>
+    </div>
+    <div class="cscene">
+      <div class="chub">
+        <div class="cOrb"></div>
+        <div class="g">Good morning, Rebaz.</div>
+        <div class="s">3 things matter today. I’m holding the rest.</div>
+      </div>
+    </div>
+    <div class="tile focus" style="top:30%;left:50%;transform:translateX(-50%);">
+      <div class="tt"><span class="d" style="background:#b088ff"></span>Right now</div>
+      <div style="font-family:var(--fdisp);font-size:16px;font-weight:600;margin-top:7px;">Fact-check script</div>
+      <div class="sm">Due 13:00 · 35 min</div>
+    </div>
+    <div class="tile" style="top:24%;left:13%;"><div class="tt"><span class="d" style="background:#ffb454"></span>Inbox</div><div class="big">6</div><div class="sm">2 need you</div></div>
+    <div class="tile" style="top:62%;left:18%;"><div class="tt"><span class="d" style="background:#4ecb8d"></span>Slack</div><div class="big">3</div><div class="sm">mentions</div></div>
+    <div class="tile" style="top:64%;left:64%;"><div class="tt"><span class="d" style="background:#ff6b3d"></span>Streak</div><div class="big">7</div><div class="sm">days 🔥</div></div>
+    <div class="tile" style="top:26%;right:11%;"><div class="tt"><span class="d" style="background:#b088ff"></span>Approvals</div><div class="big">2</div><div class="sm">waiting</div></div>
+    <div class="spot" id="spotBtn">🔦 Spotlight my one thing</div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DESC={
+  stream:'<b>STREAM</b> — no dashboard. The whole app is one calm conversation; MARVIN brings email, schedule &amp; decisions to you as inline cards. You pull, you never browse. <i>Logic: agent-first.</i>',
+  deck:'<b>DECK</b> — no home, no menu. On open, Xanî hands you your day as one card at a time and advances as you decide. Zero navigation, zero overwhelm. <i>Logic: the app drives.</i>',
+  canvas:'<b>CANVAS</b> — a calm spatial command board, not a list. Your day is a time-ribbon; everything lives as glanceable tiles. Hit Spotlight to dim all but your one thing. <i>Logic: spatial, not linear.</i>'
+};
+function setC(c){
+  document.documentElement.setAttribute('data-concept',c);
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===c));
+  document.querySelectorAll('.seg').forEach(s=>s.classList.toggle('active',s.dataset.c===c));
+  document.getElementById('desc').innerHTML=DESC[c];
+  if(c==='deck') resetDeck();
+}
+document.querySelectorAll('.seg').forEach(s=>s.addEventListener('click',()=>setC(s.dataset.c)));
+
+let tT; function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),1800);}
+
+/* stream */
+function clr(id,msg){document.getElementById(id).classList.add('gone');toast(msg);}
+function ask(q){ if(!q||!q.trim())return;
+  const th=document.getElementById('thread'), chips=document.getElementById('chips');
+  const me=document.createElement('div');me.className='mrow me';me.innerHTML=`<div class="bub mine">${q}</div>`;
+  th.insertBefore(me,chips);
+  const rep=document.createElement('div');rep.className='mrow';
+  rep.innerHTML=`<div class="ava"></div><div class="bub">On it. <span style="color:var(--ac2)">(demo)</span> — in the real app I’d act on “${q}” and surface the result right here, in the flow.</div>`;
+  th.insertBefore(rep,chips);
+  document.getElementById('flow').scrollTop=99999;
+}
+
+/* deck */
+const ITEMS=[
+  {kind:'DECISION',c:'#b088ff',title:'Start your one thing?',body:'It’s 08:42. Your fact-check script is due at 13:00 and your calendar is clear until Standup at 09:30.',marvin:'Best window of your day. Say the word and I’ll hold notifications for 25 minutes.',
+    acts:[{l:'Yes — focus 25:00',s:'body-double + timer',p:1,t:'🎯 Focus started'},{l:'Later',s:'remind me at 09:45',t:'⏰ I’ll nudge you at 09:45'}]},
+  {kind:'EMAIL',c:'#ffb454',title:'Sarah needs a timestamp confirmed',body:'“Confirm the source timestamp before we publish — editorial wants it locked by 1pm.”',marvin:'I drafted a 2-line confirm. Send it, or hand it to me entirely.',
+    acts:[{l:'Send my reply',s:'MARVIN drafted it',p:1,t:'✉️ Reply sent'},{l:'You handle it',s:'delegate',t:'🤖 Handed to MARVIN'},{l:'Snooze',s:'12:30',t:'😴 Back at 12:30'}]},
+  {kind:'APPROVAL',c:'#4ecb8d',title:'2 Amargi captions ready to post',body:'Batch of captions for the Amargi studio queue are drafted and awaiting your OK.',marvin:'They match your voice + brand rules. Approve all, or open to review one by one.',
+    acts:[{l:'Approve all',s:'post to queue',p:1,t:'✅ Queued'},{l:'Review first',s:'open studio',t:'👀 Opening studio'}]},
+  {kind:'CAPTURE',c:'#5aa9ff',title:'One loose thought from yesterday',body:'You said “remind me to book the Q3 board room.” Want this as a task, a calendar hold, or gone?',marvin:'I can hold Thursday 15:00 and invite the team in one tap.',
+    acts:[{l:'Hold Thu 15:00',s:'+invite team',p:1,t:'📅 Held & invited'},{l:'Just a task',s:'no time',t:'📝 Added to tasks'},{l:'Drop it',s:'',t:'🗑️ Cleared'}]},
+];
+let di=0;
+function resetDeck(){di=0;document.getElementById('dDone').classList.remove('on');render();}
+function render(){
+  const w=document.getElementById('dCard');
+  if(di>=ITEMS.length){w.innerHTML='';document.getElementById('dDone').classList.add('on');
+    document.getElementById('dN').textContent=ITEMS.length;document.getElementById('dRail').style.width='100%';return;}
+  const it=ITEMS[di];
+  w.innerHTML=`<div class="dcard anim">
+    <div class="dkind" style="color:${it.c}"><span class="d" style="background:${it.c}"></span>${it.kind}</div>
+    <div class="dtitle">${it.title}</div>
+    <div class="dbody">${it.body}</div>
+    <div class="dmarvin"><span class="mo"></span><div><b>MARVIN:</b> ${it.marvin}</div></div>
+    <div class="dactions">${it.acts.map((a,i)=>`<button class="da ${a.p?'primary':''}" data-i="${i}">${a.l}<small>${a.s||'&nbsp;'}</small></button>`).join('')}</div>
+  </div>`;
+  w.querySelectorAll('.da').forEach(b=>b.addEventListener('click',()=>{toast(it.acts[b.dataset.i].t);advance();}));
+  document.getElementById('dN').textContent=di;
+  document.getElementById('dRail').style.width=Math.round(di/ITEMS.length*100)+'%';
+}
+function advance(){di++;setTimeout(render,220);}
+
+/* canvas */
+document.getElementById('spotBtn').addEventListener('click',()=>{
+  const c=document.getElementById('canvas');c.classList.toggle('spotlight');
+  document.getElementById('spotBtn').textContent=c.classList.contains('spotlight')?'☀ Show everything':'🔦 Spotlight my one thing';
+});
+
+setC('stream');
+</script>
+</body>
+</html>

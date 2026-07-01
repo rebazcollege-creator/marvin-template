@@ -1,0 +1,754 @@
+<!doctype html>
+<html lang="en" data-theme="night">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Xanî — reimagined (ADHD-first) demo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   XANÎ — reimagined identity. ADHD-first "cockpit" concept.
+   Deep, calm night base + purposeful color-coding + one clear
+   focus + momentum/dopamine cues + always-there capture.
+   Single self-contained file. No build step.
+   ============================================================ */
+
+:root {
+  --bg:        #0f1115;
+  --bg-2:      #12151b;
+  --surface:   #171b22;
+  --surface-2: #1d222b;
+  --hover:     #232a34;
+  --border:    #262d38;
+  --border-2:  #2f3745;
+  --text:      #f2efe9;
+  --text-2:    #a9b0bd;
+  --muted:     #6f7787;
+
+  /* Identity accent — evolved terracotta, warmer + brighter */
+  --accent:    #ff6b3d;
+  --accent-2:  #ff8a5c;
+  --accent-soft: rgba(255,107,61,.12);
+
+  /* Domain color-coding (ADHD wayfinding — every area has a color) */
+  --focus:   #b088ff;   /* violet — deep work */
+  --calendar:#5aa9ff;   /* blue */
+  --inbox:   #ffb454;   /* amber */
+  --slack:   #4ecb8d;   /* green */
+  --social:  #ff77c8;   /* pink — buffer/studios */
+
+  --focus-soft:   rgba(176,136,255,.14);
+  --calendar-soft:rgba(90,169,255,.14);
+  --inbox-soft:   rgba(255,180,84,.15);
+  --slack-soft:   rgba(78,203,141,.15);
+  --social-soft:  rgba(255,119,200,.14);
+
+  --radius: 18px;
+  --shadow: 0 20px 50px -24px rgba(0,0,0,.75);
+}
+
+:root[data-theme="day"] {
+  --bg:#f4f2ec; --bg-2:#efece4; --surface:#ffffff; --surface-2:#faf8f3;
+  --hover:#f0ede6; --border:#e6e2d8; --border-2:#ded9cc;
+  --text:#20222a; --text-2:#5a5f6b; --muted:#9a9fab;
+  --shadow:0 20px 50px -28px rgba(60,40,20,.35);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: 'Inter', system-ui, sans-serif;
+  background:
+    radial-gradient(1100px 700px at 78% -8%, rgba(255,107,61,.10), transparent 60%),
+    radial-gradient(900px 620px at 8% 108%, rgba(176,136,255,.10), transparent 60%),
+    var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+h1,h2,h3,.wordmark { font-family: 'Playfair Display', Georgia, serif; }
+.mono { font-family: 'JetBrains Mono', monospace; }
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- shell ---------- */
+.app { display: grid; grid-template-columns: 232px 1fr; height: 100vh; }
+
+/* ---------- rail ---------- */
+.rail {
+  border-right: 1px solid var(--border);
+  background: linear-gradient(180deg, var(--bg-2), var(--bg));
+  padding: 20px 14px 16px;
+  display: flex; flex-direction: column; gap: 4px;
+  overflow-y: auto;
+}
+.brand { display: flex; align-items: center; gap: 11px; padding: 2px 6px 4px; }
+.brand .mini-orb {
+  width: 30px; height: 30px; border-radius: 50%; flex: none;
+  background:
+    radial-gradient(circle at 34% 28%, rgba(255,255,255,.9), transparent 40%),
+    conic-gradient(from 200deg, #8df7e6, #5aa9ff, #b088ff, #ff6b3d, #8df7e6);
+  box-shadow: 0 0 16px rgba(120,160,255,.5);
+  animation: spin 14s linear infinite;
+}
+.brand .wordmark { font-size: 25px; font-weight: 700; letter-spacing: .01em; line-height: 1; }
+.brand small { display:block; font-size: 10.5px; color: var(--text-2); margin-top: 3px; letter-spacing:.03em;}
+
+.kbtn {
+  margin: 12px 4px 8px; display:flex; align-items:center; gap:9px;
+  border:1px solid var(--border); background: var(--surface); color: var(--text-2);
+  border-radius: 12px; padding: 9px 11px; cursor: pointer; width: calc(100% - 8px);
+  transition: .18s; font-size: 12.5px;
+}
+.kbtn:hover { background: var(--hover); color: var(--text); border-color: var(--border-2); }
+.kbd { border:1px solid var(--border-2); border-radius:5px; padding:1px 6px; font-size:11px; font-weight:600; }
+
+.nsec { font-size: 10px; text-transform: uppercase; letter-spacing: .1em; color: var(--muted);
+  font-weight: 700; padding: 16px 8px 6px; }
+.nav { display:flex; flex-direction:column; gap:1px; }
+.nlink {
+  display:flex; align-items:center; gap:11px; padding:8px 10px; border-radius:10px;
+  color: var(--text-2); font-size:13.5px; font-weight:500; cursor:pointer; transition:.14s;
+  border: 1px solid transparent;
+}
+.nlink:hover { background: var(--hover); color: var(--text); }
+.nlink.active { background: var(--surface); color: var(--text); font-weight:600; border-color: var(--border); }
+.nlink .dot { width:7px; height:7px; border-radius:50%; flex:none; }
+.nlink .lbl { flex:1; }
+.nlink .badge {
+  font-size:10.5px; font-weight:700; min-width:18px; height:18px; padding:0 5px;
+  display:grid; place-items:center; border-radius:9px; background: var(--accent-soft); color: var(--accent-2);
+}
+.rail .foot { margin-top:auto; display:flex; align-items:center; gap:9px; padding:10px 8px 0; border-top:1px solid var(--border); }
+.rail .foot .live { width:8px; height:8px; border-radius:50%; background: var(--slack); box-shadow:0 0 8px var(--slack); }
+.rail .foot small { font-size:11px; color: var(--text-2); flex:1; }
+.rail .foot .me { width:26px; height:26px; border-radius:50%; display:grid; place-items:center;
+  font-size:12px; font-weight:700; color:#fff; background: linear-gradient(135deg,var(--accent),var(--accent-2)); }
+
+/* ---------- main / topbar ---------- */
+.main { overflow-y: auto; position: relative; }
+.topbar {
+  position: sticky; top: 0; z-index: 20;
+  display:flex; align-items:center; gap:8px; padding: 14px 26px;
+  backdrop-filter: blur(14px);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  border-bottom: 1px solid var(--border);
+}
+.tabs { display:flex; gap:4px; background: var(--surface); padding:4px; border-radius:12px; border:1px solid var(--border); }
+.tab { padding:7px 15px; border-radius:9px; font-size:13px; font-weight:600; color: var(--text-2); cursor:pointer; transition:.16s; border:none; background:none; font-family:inherit;}
+.tab.active { background: var(--accent); color:#fff; box-shadow: 0 6px 16px -6px var(--accent); }
+.topbar .spacer { flex:1; }
+.pill { display:flex; align-items:center; gap:8px; font-size:12.5px; color: var(--text-2);
+  background: var(--surface); border:1px solid var(--border); padding:7px 12px; border-radius:11px; }
+.pill b { color: var(--text); }
+.tgl { cursor:pointer; }
+
+/* ---------- views ---------- */
+.view { display:none; padding: 26px 26px 60px; max-width: 1180px; margin: 0 auto; }
+.view.on { display:block; animation: fade .4s ease both; }
+
+/* reveal on load (stagger) */
+.rise { opacity:0; animation: rise .55s cubic-bezier(.2,.7,.2,1) forwards; }
+
+/* ---------- HOME ---------- */
+.hero-row { display:grid; grid-template-columns: 300px 1fr; gap: 22px; align-items:center; }
+@media (max-width: 1080px){ .hero-row{ grid-template-columns:1fr; text-align:center; } }
+
+.orb-wrap { display:flex; flex-direction:column; align-items:center; gap:14px; }
+.orb {
+  width: 210px; height: 210px; border-radius:50%; position:relative; cursor:pointer;
+  background:
+    radial-gradient(circle at 34% 26%, rgba(255,255,255,.95), rgba(255,255,255,.3) 15%, transparent 30%),
+    radial-gradient(circle at 60% 62%, rgba(115,155,255,.6), transparent 52%),
+    radial-gradient(circle at 44% 46%, rgba(125,245,214,.7), transparent 44%),
+    radial-gradient(circle at 50% 50%, #8df7e6, #426ddf 46%, #352067);
+  box-shadow: 0 24px 60px -18px rgba(66,109,223,.6),
+    inset -10px -16px 42px rgba(53,32,103,.55),
+    inset 14px 16px 40px rgba(255,255,255,.4),
+    inset 0 0 30px rgba(125,245,214,.25);
+  animation: breath 7s ease-in-out infinite;
+  isolation:isolate; overflow:hidden;
+}
+.orb::after{ /* aurora ribbon */
+  content:""; position:absolute; inset:-30%; border-radius:50%; mix-blend-mode:screen; filter:blur(3px);
+  background: conic-gradient(from 20deg at 50% 50%, transparent 4%, rgba(75,227,166,.9) 24%, rgba(160,255,225,.85) 36%, transparent 55%);
+  animation: ribbon 12s linear infinite;
+}
+.orb .halo{ position:absolute; inset:-26%; border-radius:50%; filter:blur(22px); z-index:-1;
+  background: radial-gradient(circle,rgba(125,245,214,.3),rgba(176,136,255,.18) 55%,transparent 74%); }
+.listen { display:flex; align-items:center; gap:7px; font-size:12.5px; color: var(--text-2); }
+.listen .cap { width:7px; height:7px; border-radius:50%; background: var(--accent-2); animation: pulse 2s infinite; }
+
+.greet h1 { font-size: 34px; font-weight:700; letter-spacing:-.01em; }
+.greet .sub { color: var(--text-2); margin-top:4px; font-size:14px; }
+
+/* ask bar — always-there capture, the single primary action */
+.ask {
+  margin-top:16px; display:flex; align-items:center; gap:10px;
+  background: var(--surface); border:1.5px solid var(--border-2); border-radius:15px;
+  padding: 4px 4px 4px 16px; box-shadow: var(--shadow);
+  transition:.2s;
+}
+.ask:focus-within { border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft), var(--shadow); }
+.ask svg { color: var(--muted); flex:none; }
+.ask input { flex:1; background:none; border:none; outline:none; color: var(--text); font-size:14.5px; font-family:inherit; padding:12px 0; }
+.ask input::placeholder{ color: var(--muted); }
+.ask .go { background: var(--accent); color:#fff; border:none; border-radius:11px; padding:11px 16px; font-weight:600; font-size:13px; cursor:pointer; font-family:inherit; transition:.16s; }
+.ask .go:hover{ background: var(--accent-2); }
+.ask-hint { margin-top:8px; font-size:12px; color: var(--muted); display:flex; gap:14px; flex-wrap:wrap;}
+.ask-hint span b{ color: var(--text-2); font-weight:600; }
+
+/* day timeline — time made visible */
+.timeline { margin-top: 24px; background: var(--surface); border:1px solid var(--border); border-radius: var(--radius); padding:16px 18px; }
+.timeline .th { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+.timeline .th h3 { font-size:14px; font-family:'Inter'; font-weight:700; }
+.timeline .th .now { font-size:12px; color: var(--calendar); font-weight:600; }
+.track { position:relative; height: 46px; }
+.track .line { position:absolute; top:22px; left:0; right:0; height:2px; background: var(--border-2); border-radius:2px; }
+.track .fill { position:absolute; top:22px; left:0; height:2px; background: linear-gradient(90deg,var(--accent),var(--accent-2)); border-radius:2px; width:0; animation: grow 1.4s ease .3s forwards; }
+.ev { position:absolute; top:8px; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:4px; }
+.ev .bead { width:12px; height:12px; border-radius:50%; border:2.5px solid var(--bg); }
+.ev .lab { font-size:10.5px; color: var(--text-2); white-space:nowrap; }
+.ev.next .bead { box-shadow:0 0 0 4px var(--calendar-soft); }
+.ev .t { position:absolute; top:26px; font-size:10px; color: var(--muted); }
+.nowdot { position:absolute; top:16px; transform:translateX(-50%); width:14px; height:14px; border-radius:50%;
+  background: var(--accent); box-shadow:0 0 0 5px var(--accent-soft), 0 0 14px var(--accent); animation: pulse 2.4s infinite; z-index:2; }
+
+/* grid of home cards */
+.grid { margin-top: 22px; display:grid; grid-template-columns: 1.35fr 1fr; gap:18px; }
+@media (max-width:1080px){ .grid{ grid-template-columns:1fr; } }
+
+.card { background: var(--surface); border:1px solid var(--border); border-radius: var(--radius); padding:20px; box-shadow: var(--shadow); }
+.card .ch { display:flex; align-items:center; gap:9px; margin-bottom:14px; }
+.card .ch .ci { width:26px; height:26px; border-radius:8px; display:grid; place-items:center; }
+.card .ch h3 { font-family:'Inter'; font-size:14px; font-weight:700; flex:1; }
+.card .ch .meta { font-size:12px; color: var(--muted); }
+
+/* RIGHT NOW — the one focus */
+.now-card { border:1px solid var(--focus); background: linear-gradient(160deg, var(--focus-soft), var(--surface) 55%); position:relative; overflow:hidden; }
+.now-card::before{ content:""; position:absolute; inset:0; background: radial-gradient(400px 200px at 90% -20%, var(--focus-soft), transparent 70%); pointer-events:none; }
+.now-card .tag { font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color: var(--focus); }
+.now-card .task { font-family:'Playfair Display'; font-size:23px; font-weight:600; margin:6px 0 4px; line-height:1.25; }
+.now-card .why { font-size:13px; color: var(--text-2); }
+.now-actions { display:flex; align-items:center; gap:10px; margin-top:16px; flex-wrap:wrap; }
+.focusbtn { display:flex; align-items:center; gap:9px; background: var(--focus); color:#1b1230; border:none; border-radius:12px;
+  padding:11px 18px; font-weight:700; font-size:13.5px; cursor:pointer; font-family:inherit; transition:.16s; }
+.focusbtn:hover{ filter:brightness(1.08); transform: translateY(-1px); }
+.ghost { background: var(--surface-2); color: var(--text-2); border:1px solid var(--border); border-radius:12px; padding:11px 14px; font-size:13px; cursor:pointer; font-family:inherit; transition:.16s;}
+.ghost:hover{ color: var(--text); background: var(--hover); }
+.ring { --p:0; width:52px; height:52px; border-radius:50%; flex:none; display:grid; place-items:center;
+  background: conic-gradient(var(--focus) calc(var(--p)*1%), var(--border-2) 0);
+  transition: background .4s; position:relative; }
+.ring::after{ content:""; position:absolute; inset:5px; border-radius:50%; background: var(--surface); }
+.ring b{ position:relative; z-index:1; font-size:12px; }
+
+/* momentum / dopamine */
+.momentum .row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.streak { display:flex; align-items:center; gap:10px; }
+.flame { font-size:26px; filter: drop-shadow(0 0 10px rgba(255,140,60,.6)); }
+.streak b { font-size:26px; font-family:'Playfair Display'; }
+.streak small { display:block; color: var(--text-2); font-size:11.5px; }
+.wins { margin-top:14px; display:flex; flex-direction:column; gap:8px; }
+.win { display:flex; align-items:center; gap:11px; font-size:13px; color: var(--text-2); }
+.win .box { width:20px; height:20px; border-radius:6px; border:1.5px solid var(--border-2); flex:none; display:grid; place-items:center; cursor:pointer; transition:.16s; }
+.win.done .box { background: var(--slack); border-color: var(--slack); color:#0c130f; }
+.win.done .lbl { color: var(--muted); text-decoration: line-through; }
+.win .box svg { opacity:0; transition:.16s; }
+.win.done .box svg { opacity:1; }
+.progress-lbl { margin-top:14px; font-size:12px; color: var(--muted); }
+.bar { margin-top:6px; height:8px; background: var(--border-2); border-radius:6px; overflow:hidden; }
+.bar > i { display:block; height:100%; width:0; border-radius:6px; background: linear-gradient(90deg,var(--slack),#8df7c0); animation: growbar 1.4s ease .4s forwards; }
+
+/* triage strip — reduce overwhelm: 4 doors, color-coded, count + 1 action */
+.strip { margin-top:22px; }
+.strip h3 { font-family:'Inter'; font-size:13px; text-transform:uppercase; letter-spacing:.08em; color: var(--muted); font-weight:700; margin-bottom:12px; }
+.doors { display:grid; grid-template-columns: repeat(4,1fr); gap:14px; }
+@media (max-width:900px){ .doors{ grid-template-columns: repeat(2,1fr);} }
+.door { background: var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px; cursor:pointer; transition:.18s; position:relative; overflow:hidden; }
+.door:hover { transform: translateY(-3px); border-color: var(--c); box-shadow: 0 16px 34px -18px var(--c); }
+.door .di { width:34px; height:34px; border-radius:10px; display:grid; place-items:center; margin-bottom:12px; }
+.door .cnt { font-size:30px; font-family:'Playfair Display'; font-weight:700; line-height:1; }
+.door .nm { font-size:13px; color: var(--text-2); margin-top:5px; font-weight:500; }
+.door .act { margin-top:12px; font-size:12px; font-weight:600; color: var(--c); display:flex; align-items:center; gap:5px; }
+
+/* ---------- TRIAGE (inbox reimagined) ---------- */
+.triage-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+.triage-head h1 { font-size:28px; font-weight:700; }
+.triage-head .sub { color: var(--text-2); font-size:13.5px; margin-top:2px; }
+.triage-head .left small{ display:flex; align-items:center; gap:7px; margin-top:8px; font-size:12px; color: var(--text-2);}
+.mini-bar { width:180px; height:7px; background: var(--border-2); border-radius:5px; overflow:hidden;}
+.mini-bar>i{ display:block; height:100%; background: linear-gradient(90deg,var(--inbox),#ffd18a); }
+
+.triage-stage { margin-top:26px; display:flex; flex-direction:column; align-items:center; gap:18px; }
+.deck { position:relative; width: 100%; max-width: 640px; height: 340px; }
+.tcard {
+  position:absolute; inset:0; background: var(--surface); border:1px solid var(--border);
+  border-radius:20px; padding:26px 28px; box-shadow: var(--shadow); display:flex; flex-direction:column;
+}
+.tcard.behind-1 { transform: scale(.955) translateY(16px); filter: brightness(.8); z-index:1; }
+.tcard.behind-2 { transform: scale(.91) translateY(32px); filter: brightness(.62); z-index:0; }
+.tcard.front { z-index:2; }
+.tcard.swipe-l { animation: swipeL .4s ease forwards; }
+.tcard.swipe-r { animation: swipeR .4s ease forwards; }
+.tcard.swipe-u { animation: swipeU .4s ease forwards; }
+.tc-top { display:flex; align-items:center; gap:12px; }
+.tc-av { width:42px; height:42px; border-radius:12px; display:grid; place-items:center; font-weight:700; color:#fff; font-size:15px; flex:none; }
+.tc-top .who b { font-size:14.5px; }
+.tc-top .who small { display:block; color: var(--muted); font-size:12px; margin-top:2px; }
+.tc-chip { margin-left:auto; font-size:11px; font-weight:700; padding:5px 10px; border-radius:8px; }
+.tc-subj { font-family:'Playfair Display'; font-size:20px; font-weight:600; margin:16px 0 8px; }
+.tc-body { font-size:13.5px; color: var(--text-2); line-height:1.55; flex:1; }
+.tc-marvin { display:flex; gap:10px; align-items:flex-start; background: var(--accent-soft); border:1px solid color-mix(in srgb,var(--accent) 30%, transparent);
+  border-radius:12px; padding:11px 13px; font-size:12.5px; }
+.tc-marvin .mo { width:20px; height:20px; border-radius:50%; flex:none; margin-top:1px;
+  background: conic-gradient(from 200deg,#8df7e6,#5aa9ff,#b088ff,#ff6b3d,#8df7e6); }
+.tc-marvin b { color: var(--accent-2); }
+
+.swipe-actions { display:flex; align-items:center; gap:12px; }
+.sa { display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer; }
+.sa .k { width:56px; height:56px; border-radius:16px; display:grid; place-items:center; transition:.16s; border:1px solid var(--border);
+  background: var(--surface); }
+.sa:hover .k { transform: translateY(-3px) scale(1.05); }
+.sa small { font-size:11px; color: var(--text-2); }
+.sa .kb { font-size:10px; color: var(--muted); }
+.sa.snooze .k{ color: var(--calendar); } .sa.snooze:hover .k{ background: var(--calendar-soft); border-color: var(--calendar);}
+.sa.done .k{ color: var(--slack); } .sa.done:hover .k{ background: var(--slack-soft); border-color: var(--slack);}
+.sa.reply .k{ color: var(--accent-2); } .sa.reply:hover .k{ background: var(--accent-soft); border-color: var(--accent);}
+.sa.deleg .k{ color: var(--focus); } .sa.deleg:hover .k{ background: var(--focus-soft); border-color: var(--focus);}
+
+.cleared { text-align:center; padding:60px 20px; display:none; }
+.cleared.on { display:block; animation: rise .6s ease both; }
+.cleared .big { font-size:56px; }
+.cleared h2 { font-size:26px; margin:10px 0 6px; }
+.cleared p { color: var(--text-2); }
+
+/* confetti + toast */
+.toast { position: fixed; bottom: 26px; left: 50%; transform: translateX(-50%) translateY(30px);
+  background: var(--surface-2); border:1px solid var(--border-2); color: var(--text); padding:12px 18px; border-radius:13px;
+  font-size:13.5px; font-weight:600; box-shadow: var(--shadow); opacity:0; pointer-events:none; transition:.3s; z-index:80; display:flex; gap:9px; align-items:center;}
+.toast.on { opacity:1; transform: translateX(-50%) translateY(0); }
+.spark { position:fixed; width:9px; height:9px; border-radius:2px; pointer-events:none; z-index:90; }
+
+/* focus-mode overlay (body doubling) */
+.focus-overlay { position:fixed; inset:0; z-index:100; background: rgba(9,10,14,.82); backdrop-filter: blur(10px);
+  display:none; flex-direction:column; align-items:center; justify-content:center; gap:26px; }
+.focus-overlay.on { display:flex; animation: fade .3s ease; }
+.focus-overlay .fo-orb { width:120px; height:120px; border-radius:50%;
+  background: radial-gradient(circle at 40% 30%, #fff, transparent 40%), conic-gradient(from 200deg,#8df7e6,#5aa9ff,#b088ff,#ff6b3d,#8df7e6);
+  animation: spin 10s linear infinite, breath 5s ease-in-out infinite; box-shadow:0 0 60px rgba(120,160,255,.5); }
+.focus-overlay .ft { font-family:'JetBrains Mono'; font-size:52px; font-weight:500; }
+.focus-overlay h2 { font-size:22px; }
+.focus-overlay p { color: var(--text-2); max-width:340px; text-align:center; font-size:14px; }
+.focus-overlay .end { margin-top:6px; }
+
+/* legend panel — explains the ADHD decisions */
+.legend { margin-top: 30px; background: var(--bg-2); border:1px dashed var(--border-2); border-radius:16px; padding:20px 22px; }
+.legend h3 { font-family:'Inter'; font-size:13px; text-transform:uppercase; letter-spacing:.08em; color: var(--accent-2); margin-bottom:14px; }
+.legend ul { list-style:none; display:grid; grid-template-columns: repeat(2,1fr); gap:12px 26px; }
+@media (max-width:900px){ .legend ul{ grid-template-columns:1fr; } }
+.legend li { font-size:13px; color: var(--text-2); display:flex; gap:10px; }
+.legend li b { color: var(--text); font-weight:600; }
+.legend li .n { color: var(--accent-2); font-weight:700; flex:none; }
+
+/* ---------- keyframes ---------- */
+@keyframes fade { from{opacity:0} to{opacity:1} }
+@keyframes rise { from{opacity:0; transform: translateY(14px);} to{opacity:1; transform:none;} }
+@keyframes breath { 0%,100%{ transform: translateY(0) scale(1);} 50%{ transform: translateY(-6px) scale(1.02);} }
+@keyframes ribbon { to { transform: rotate(360deg);} }
+@keyframes spin { to { transform: rotate(360deg);} }
+@keyframes pulse { 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:.45; transform:scale(.8);} }
+@keyframes grow { to { width: 62%; } }
+@keyframes growbar { to { width: 68%; } }
+@keyframes swipeL { to { transform: translateX(-140%) rotate(-12deg); opacity:0; } }
+@keyframes swipeR { to { transform: translateX(140%) rotate(12deg); opacity:0; } }
+@keyframes swipeU { to { transform: translateY(-140%) scale(.9); opacity:0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration:.001ms !important; animation-iteration-count:1 !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ============ RAIL ============ -->
+  <aside class="rail">
+    <div class="brand">
+      <div class="mini-orb"></div>
+      <div>
+        <span class="wordmark">Xanî</span>
+        <small>Personal OS · MARVIN</small>
+      </div>
+    </div>
+
+    <button class="kbtn"><span class="kbd">⌘K</span><span>Ask, jump, or capture…</span></button>
+
+    <div class="nav">
+      <div class="nlink active" data-go="home"><span class="dot" style="background:var(--accent)"></span><span class="lbl">Home</span></div>
+      <div class="nlink" data-go="triage"><span class="dot" style="background:var(--inbox)"></span><span class="lbl">Triage</span><span class="badge">6</span></div>
+      <div class="nlink"><span class="dot" style="background:var(--calendar)"></span><span class="lbl">Calendar</span></div>
+      <div class="nlink"><span class="dot" style="background:var(--slack)"></span><span class="lbl">Slack</span><span class="badge">3</span></div>
+      <div class="nlink"><span class="dot" style="background:var(--focus)"></span><span class="lbl">Memory</span></div>
+    </div>
+
+    <div class="nsec">Studios</div>
+    <div class="nav">
+      <div class="nlink"><span class="dot" style="background:var(--accent)"></span><span class="lbl">Amargi — Captions</span></div>
+      <div class="nlink"><span class="dot" style="background:var(--inbox)"></span><span class="lbl">LeadStories</span></div>
+      <div class="nlink"><span class="dot" style="background:var(--social)"></span><span class="lbl">Moonshot</span></div>
+    </div>
+
+    <div class="foot">
+      <span class="live"></span><small>Runtime connected</small>
+      <span class="me">R</span>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+    <div class="topbar">
+      <div class="tabs">
+        <button class="tab active" data-go="home">Home</button>
+        <button class="tab" data-go="triage">Triage</button>
+      </div>
+      <div class="spacer"></div>
+      <div class="pill"><span class="mono" id="clock">08:42</span> · <b>Wed 1 Jul</b></div>
+      <div class="pill tgl" id="themeToggle">🌙 Night</div>
+    </div>
+
+    <!-- ===== HOME ===== -->
+    <section class="view on" id="home">
+      <div class="hero-row rise" style="animation-delay:.02s">
+        <div class="orb-wrap">
+          <div class="orb"><div class="halo"></div></div>
+          <div class="listen"><span class="cap"></span> Ready when you are</div>
+        </div>
+        <div class="greet">
+          <h1>Good morning, Rebaz.</h1>
+          <div class="sub">You’ve got 3 things that actually matter today. I’ll hold the rest.</div>
+
+          <div class="ask">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <input placeholder="Brain-dump anything — a task, a thought, “remind me to…”. I’ll sort it." />
+            <button class="go">Send ↵</button>
+          </div>
+          <div class="ask-hint">
+            <span>Try: <b>“clear my inbox”</b></span>
+            <span><b>“what’s my one thing?”</b></span>
+            <span><b>“hide everything but today”</b></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- day timeline -->
+      <div class="timeline rise" style="animation-delay:.10s">
+        <div class="th">
+          <h3>Your day, at a glance</h3>
+          <div class="now">↓ 42 min until Standup</div>
+        </div>
+        <div class="track">
+          <div class="line"></div><div class="fill"></div>
+          <div class="nowdot" style="left:38%"></div>
+          <div class="ev" style="left:10%"><span class="bead" style="background:var(--slack)"></span><span class="lab">Deep work</span><span class="t">8:00</span></div>
+          <div class="ev next" style="left:46%"><span class="bead" style="background:var(--calendar)"></span><span class="lab">Standup</span><span class="t">9:30</span></div>
+          <div class="ev" style="left:66%"><span class="bead" style="background:var(--inbox)"></span><span class="lab">LeadStories</span><span class="t">13:00</span></div>
+          <div class="ev" style="left:88%"><span class="bead" style="background:var(--focus)"></span><span class="lab">Amargi edit</span><span class="t">16:00</span></div>
+        </div>
+      </div>
+
+      <!-- main grid -->
+      <div class="grid">
+        <!-- RIGHT NOW -->
+        <div class="card now-card rise" style="animation-delay:.16s">
+          <div class="ch">
+            <span class="tag">● Right now — your one thing</span>
+          </div>
+          <div class="task">Finish the LeadStories fact-check script</div>
+          <div class="why">Due 13:00 · ~35 min left of work · everything else can wait, I promise.</div>
+          <div class="now-actions">
+            <button class="focusbtn" id="startFocus">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              Focus with me · 25:00
+            </button>
+            <button class="ghost">Not now →</button>
+            <div class="ring" style="--p:0" id="focusRing"><b>0%</b></div>
+          </div>
+        </div>
+
+        <!-- MOMENTUM -->
+        <div class="card momentum rise" style="animation-delay:.22s">
+          <div class="ch">
+            <span class="ci" style="background:var(--inbox-soft)">🔥</span>
+            <h3>Momentum</h3>
+            <span class="meta">today</span>
+          </div>
+          <div class="row">
+            <div class="streak">
+              <span class="flame">🔥</span>
+              <div><b id="streakN">7</b><small>day streak — don’t break it</small></div>
+            </div>
+          </div>
+          <div class="wins" id="wins">
+            <div class="win done"><span class="box"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-11"/></svg></span><span class="lbl">Cleared 9 emails</span></div>
+            <div class="win done"><span class="box"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-11"/></svg></span><span class="lbl">Approved 2 captions</span></div>
+            <div class="win"><span class="box"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="m5 12 5 5 9-11"/></svg></span><span class="lbl">Fact-check script</span></div>
+          </div>
+          <div class="progress-lbl">2 of 3 done — one push to a clean day</div>
+          <div class="bar"><i></i></div>
+        </div>
+      </div>
+
+      <!-- triage strip -->
+      <div class="strip rise" style="animation-delay:.28s">
+        <h3>Waiting for you — tap to clear one pile at a time</h3>
+        <div class="doors">
+          <div class="door" style="--c:var(--inbox)" data-go="triage">
+            <div class="di" style="background:var(--inbox-soft); color:var(--inbox)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 13h4l2 3h4l2-3h4"/><path d="M4 13 6 5h12l2 8v6H4z"/></svg>
+            </div>
+            <div class="cnt">6</div><div class="nm">Emails to triage</div>
+            <div class="act">Triage now →</div>
+          </div>
+          <div class="door" style="--c:var(--slack)">
+            <div class="di" style="background:var(--slack-soft); color:var(--slack)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="9" width="6" height="3" rx="1.5"/><rect x="12" y="5" width="3" height="6" rx="1.5"/><rect x="13" y="12" width="6" height="3" rx="1.5"/><rect x="9" y="13" width="3" height="6" rx="1.5"/></svg>
+            </div>
+            <div class="cnt">3</div><div class="nm">Slack mentions</div>
+            <div class="act">Review →</div>
+          </div>
+          <div class="door" style="--c:var(--calendar)">
+            <div class="di" style="background:var(--calendar-soft); color:var(--calendar)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M4 9h16M8 3v4M16 3v4"/></svg>
+            </div>
+            <div class="cnt">4</div><div class="nm">Events today</div>
+            <div class="act">See day →</div>
+          </div>
+          <div class="door" style="--c:var(--focus)">
+            <div class="di" style="background:var(--focus-soft); color:var(--focus)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 3 5 6v5c0 4 3 7 7 8 4-1 7-4 7-8V6z"/><path d="m9.5 12 1.8 1.8L15 10"/></svg>
+            </div>
+            <div class="cnt">2</div><div class="nm">Need approval</div>
+            <div class="act">Approve →</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- legend -->
+      <div class="legend rise" style="animation-delay:.34s">
+        <h3>Why this is built for an ADHD brain</h3>
+        <ul>
+          <li><span class="n">01</span><span><b>One thing, not twenty.</b> “Right now” names the single next action so you never face a blank wall of choices.</span></li>
+          <li><span class="n">02</span><span><b>Time made visible.</b> The day track + “42 min until…” fights time-blindness without a calendar dive.</span></li>
+          <li><span class="n">03</span><span><b>Dopamine on purpose.</b> Streak, wins, progress bar and a satisfying check-off reward momentum.</span></li>
+          <li><span class="n">04</span><span><b>Frictionless capture.</b> One brain-dump bar always in reach — thoughts leave your head before they’re lost.</span></li>
+          <li><span class="n">05</span><span><b>Overwhelm, contained.</b> Triage clears one card at a time; MARVIN pre-decides so you just confirm.</span></li>
+          <li><span class="n">06</span><span><b>Color = place.</b> Every domain owns a colour, so wayfinding is instant and pre-verbal.</span></li>
+          <li><span class="n">07</span><span><b>Body-doubling.</b> “Focus with me” puts MARVIN + a timer beside you for hard starts.</span></li>
+          <li><span class="n">08</span><span><b>Calm, not sterile.</b> Deep night base, gentle motion, honest empty-states — respects <span class="mono">prefers-reduced-motion</span>.</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===== TRIAGE ===== -->
+    <section class="view" id="triage">
+      <div class="triage-head">
+        <div class="left">
+          <h1>Triage</h1>
+          <div class="sub">6 emails. One at a time. MARVIN already drafted a call for each — you just confirm.</div>
+          <small><span class="mono" id="tCount">0</span>/6 cleared
+            <span class="mini-bar"><i id="tBar" style="width:0%"></i></span>
+          </small>
+        </div>
+      </div>
+
+      <div class="triage-stage">
+        <div class="deck" id="deck"><!-- cards injected --></div>
+
+        <div class="swipe-actions" id="swipeActions">
+          <div class="sa snooze" data-act="snooze">
+            <div class="k"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 3h6"/></svg></div>
+            <small>Snooze</small><span class="kb">←</span>
+          </div>
+          <div class="sa done" data-act="done">
+            <div class="k"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="m5 12 5 5 9-11"/></svg></div>
+            <small>Done</small><span class="kb">↑</span>
+          </div>
+          <div class="sa reply" data-act="reply">
+            <div class="k"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 17l-5-5 5-5"/><path d="M4 12h11a5 5 0 0 1 5 5v1"/></svg></div>
+            <small>Reply (AI)</small><span class="kb">→</span>
+          </div>
+          <div class="sa deleg" data-act="deleg">
+            <div class="k"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.2"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg></div>
+            <small>Hand to MARVIN</small><span class="kb">↓</span>
+          </div>
+        </div>
+
+        <div class="cleared" id="cleared">
+          <div class="big">🎉</div>
+          <h2>Inbox zero. Clean day.</h2>
+          <p>Six decisions in under two minutes. Streak protected. Go do your one thing.</p>
+          <button class="focusbtn" style="margin:18px auto 0" data-go="home">← Back to Home</button>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- focus overlay -->
+<div class="focus-overlay" id="focusOverlay">
+  <div class="fo-orb"></div>
+  <div class="ft mono" id="foTimer">25:00</div>
+  <h2>Fact-check script</h2>
+  <p>I’m right here with you. Screen’s quiet, notifications held. One task, one timer.</p>
+  <button class="ghost end" id="endFocus">End session</button>
+</div>
+
+<script>
+/* ---------- tabs / nav ---------- */
+function go(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on', v.id===id));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.go===id));
+  document.querySelectorAll('.rail .nlink').forEach(n=>n.classList.toggle('active', n.dataset.go===id));
+  document.querySelector('.main').scrollTo({top:0,behavior:'smooth'});
+  if(id==='triage') resetTriage();
+}
+document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.go)));
+
+/* ---------- clock ---------- */
+function tick(){ const d=new Date(); document.getElementById('clock').textContent =
+  String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }
+tick(); setInterval(tick,1000*20);
+
+/* ---------- theme ---------- */
+document.getElementById('themeToggle').addEventListener('click', function(){
+  const r=document.documentElement, night=r.getAttribute('data-theme')==='night';
+  r.setAttribute('data-theme', night?'day':'night');
+  this.textContent = night ? '☀️ Day' : '🌙 Night';
+});
+
+/* ---------- toast ---------- */
+let tT;
+function toast(msg){ const t=document.getElementById('toast'); t.innerHTML=msg; t.classList.add('on');
+  clearTimeout(tT); tT=setTimeout(()=>t.classList.remove('on'),1900); }
+
+/* ---------- momentum check-off + confetti ---------- */
+function confetti(x,y){
+  const cols=['#ff6b3d','#b088ff','#5aa9ff','#4ecb8d','#ffb454','#ff77c8'];
+  for(let i=0;i<22;i++){
+    const s=document.createElement('i'); s.className='spark';
+    s.style.left=x+'px'; s.style.top=y+'px'; s.style.background=cols[i%cols.length];
+    document.body.appendChild(s);
+    const ang=Math.random()*Math.PI*2, dist=60+Math.random()*90;
+    s.animate([{transform:'translate(0,0) rotate(0)',opacity:1},
+      {transform:`translate(${Math.cos(ang)*dist}px,${Math.sin(ang)*dist+60}px) rotate(${Math.random()*360}deg)`,opacity:0}],
+      {duration:700+Math.random()*400,easing:'cubic-bezier(.2,.7,.3,1)'}).onfinish=()=>s.remove();
+  }
+}
+document.querySelectorAll('#wins .win').forEach(w=>{
+  w.querySelector('.box').addEventListener('click',()=>{
+    if(w.classList.contains('done')) return;
+    w.classList.add('done');
+    const r=w.getBoundingClientRect(); confetti(r.left+12,r.top+12);
+    document.getElementById('streakN').textContent='8';
+    toast('✅ Clean day — streak now <b style="color:#ffb454">8</b> 🔥');
+  });
+});
+
+/* ---------- focus session ---------- */
+let foInt, foSec=25*60;
+function fmt(s){ return String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); }
+document.getElementById('startFocus').addEventListener('click',()=>{
+  const ov=document.getElementById('focusOverlay'); ov.classList.add('on');
+  foSec=25*60; document.getElementById('foTimer').textContent=fmt(foSec);
+  const ring=document.getElementById('focusRing');
+  clearInterval(foInt);
+  foInt=setInterval(()=>{
+    foSec--; document.getElementById('foTimer').textContent=fmt(foSec);
+    const p=Math.round((1-foSec/(25*60))*100); ring.style.setProperty('--p',p); ring.querySelector('b').textContent=p+'%';
+    if(foSec<=25*60-6){ /* demo: speed up feel handled by user closing */ }
+    if(foSec<=0){ clearInterval(foInt); ov.classList.remove('on'); toast('🎯 Session complete — nice.'); }
+  },1000);
+});
+document.getElementById('endFocus').addEventListener('click',()=>{
+  clearInterval(foInt); document.getElementById('focusOverlay').classList.remove('on');
+});
+
+/* ---------- TRIAGE deck ---------- */
+const EMAILS=[
+  {from:'Sarah Chen', addr:'sarah@leadstories.com', color:'#5aa9ff', ini:'SC', chip:'Needs reply', chipc:'var(--inbox)',
+   subj:'Re: Fact-check — the Gaza clip', body:'Hey Rebaz, can you confirm the source timestamp before we publish? Editorial wants it locked by 1pm.',
+   marvin:'This is time-sensitive & tied to your 1pm task. I drafted a 2-line reply confirming the timestamp — hit <b>Reply</b> to review it.'},
+  {from:'Stripe', addr:'receipts@stripe.com', color:'#b088ff', ini:'$', chip:'FYI', chipc:'var(--muted)',
+   subj:'Your receipt for July', body:'Payment of €49.00 to Xanî Pro succeeded. No action needed.',
+   marvin:'Pure receipt, nothing to do. I’d <b>archive</b> it — swipe up and forget it.'},
+  {from:'Amargi Team', addr:'team@amargi.co', color:'#ff6b3d', ini:'A', chip:'Can wait', chipc:'var(--slack)',
+   subj:'Caption batch ready for review', body:'12 new captions are in the studio queue whenever you have a moment this week.',
+   marvin:'Not urgent — no deadline. <b>Snooze</b> to Thursday’s studio block so it resurfaces at the right time.'},
+  {from:'Moonshot OIC', addr:'reports@moonshot.org', color:'#ff77c8', ini:'M', chip:'Delegate', chipc:'var(--focus)',
+   subj:'Q3 report data request', body:'Could someone pull the engagement numbers for the Q3 board deck?',
+   marvin:'I can pull these from Buffer + Slack myself. <b>Hand to MARVIN</b> and I’ll draft the numbers for your OK.'},
+  {from:'LinkedIn', addr:'noreply@linkedin.com', color:'#5aa9ff', ini:'in', chip:'FYI', chipc:'var(--muted)',
+   subj:'You appeared in 14 searches', body:'See who’s been looking at your profile this week.',
+   marvin:'Low-value notification. <b>Archive</b> — I’ll auto-file these for you going forward if you want.'},
+  {from:'Dr. Amina', addr:'clinic@health.krd', color:'#4ecb8d', ini:'DA', chip:'Needs reply', chipc:'var(--inbox)',
+   subj:'Appointment confirmation', body:'Please confirm your check-up on the 9th at 10:30. Reply YES to keep the slot.',
+   marvin:'Quick yes/no. I drafted “Confirmed, thank you” and can add it to your calendar. <b>Reply</b> to send.'},
+];
+let idx=0, cleared=0;
+const deck=document.getElementById('deck');
+function cardHTML(e,pos){
+  return `<div class="tcard ${pos}">
+    <div class="tc-top">
+      <div class="tc-av" style="background:${e.color}">${e.ini}</div>
+      <div class="who"><b>${e.from}</b><small>${e.addr}</small></div>
+      <span class="tc-chip" style="color:${e.chipc};background:color-mix(in srgb, ${e.chipc} 16%, transparent)">${e.chip}</span>
+    </div>
+    <div class="tc-subj">${e.subj}</div>
+    <div class="tc-body">${e.body}</div>
+    <div class="tc-marvin"><span class="mo"></span><div><b>MARVIN:</b> ${e.marvin}</div></div>
+  </div>`;
+}
+function renderDeck(){
+  deck.innerHTML='';
+  const order=['front','behind-1','behind-2'];
+  for(let i=0;i<3;i++){ const e=EMAILS[idx+i]; if(!e) break; deck.insertAdjacentHTML('beforeend', cardHTML(e,order[i])); }
+}
+function resetTriage(){ idx=0; cleared=0; document.getElementById('cleared').classList.remove('on');
+  document.getElementById('swipeActions').style.display='flex'; deck.style.display='block';
+  document.getElementById('tCount').textContent='0'; document.getElementById('tBar').style.width='0%'; renderDeck(); }
+
+const ACT={ snooze:{cls:'swipe-l',msg:'😴 Snoozed to Thursday'}, done:{cls:'swipe-u',msg:'✅ Archived'},
+  reply:{cls:'swipe-r',msg:'✉️ MARVIN reply opened & sent'}, deleg:{cls:'swipe-u',msg:'🤖 Handed to MARVIN'} };
+function act(kind){
+  const front=deck.querySelector('.front'); if(!front) return;
+  front.classList.add(ACT[kind].cls);
+  const r=front.getBoundingClientRect();
+  if(kind==='done'||kind==='deleg') confetti(r.left+r.width/2,r.top+40);
+  toast(ACT[kind].msg);
+  idx++; cleared++;
+  document.getElementById('tCount').textContent=cleared;
+  document.getElementById('tBar').style.width=Math.round(cleared/EMAILS.length*100)+'%';
+  setTimeout(()=>{
+    if(idx>=EMAILS.length){
+      deck.style.display='none'; document.getElementById('swipeActions').style.display='none';
+      const c=document.getElementById('cleared'); c.classList.add('on');
+      confetti(window.innerWidth/2, 220); document.getElementById('streakN').textContent='8';
+    } else renderDeck();
+  },340);
+}
+document.querySelectorAll('#swipeActions .sa').forEach(b=>b.addEventListener('click',()=>act(b.dataset.act)));
+document.addEventListener('keydown',e=>{
+  if(!document.getElementById('triage').classList.contains('on')) return;
+  const map={ArrowLeft:'snooze',ArrowUp:'done',ArrowRight:'reply',ArrowDown:'deleg'};
+  if(map[e.key]){ e.preventDefault(); act(map[e.key]); }
+});
+renderDeck();
+</script>
+</body>
+</html>

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Xanî — Crystal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --teal: #8df7e6;
+    --blue: #5aa9ff;
+    --violet: #b088ff;
+    --terracotta: #ff7a52;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b0d12; }
+  body {
+    background:
+      radial-gradient(1200px 900px at 50% 42%, rgba(90,169,255,0.10), rgba(11,13,18,0) 60%),
+      radial-gradient(900px 700px at 70% 70%, rgba(176,136,255,0.08), rgba(11,13,18,0) 55%),
+      #0b0d12;
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #fff;
+  }
+  #gl {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+  }
+  .overlay {
+    position: fixed;
+    top: 28px;
+    left: 30px;
+    pointer-events: none;
+    user-select: none;
+    z-index: 10;
+    line-height: 1.4;
+  }
+  .overlay .brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 20px;
+    letter-spacing: 0.14em;
+    color: rgba(255,255,255,0.62);
+  }
+  .overlay .desc {
+    margin-top: 6px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 12.5px;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.34);
+    max-width: 260px;
+  }
+  #fallback {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 16px;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.5);
+    padding: 40px;
+  }
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div class="overlay">
+    <div class="brand">Xanî</div>
+    <div class="desc">Crystal — one clear mind, many facets.</div>
+  </div>
+  <div id="fallback">WebGL unavailable</div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+  import { RoomEnvironment } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/environments/RoomEnvironment.js';
+
+  const AURORA = {
+    teal: 0x8df7e6,
+    blue: 0x5aa9ff,
+    violet: 0xb088ff,
+    terracotta: 0xff7a52
+  };
+
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  try {
+    const canvas = document.getElementById('gl');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b0d12);
+
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 0, 6);
+
+    // --- Procedural colorful gradient environment for refraction/reflection ---
+    // Build a canvas gradient in the aurora palette, run through PMREM for a rich env map.
+    function makeGradientEnv() {
+      const size = 512;
+      const c = document.createElement('canvas');
+      c.width = size; c.height = size;
+      const ctx = c.getContext('2d');
+
+      // vertical aurora gradient
+      const g = ctx.createLinearGradient(0, 0, 0, size);
+      g.addColorStop(0.00, '#0a0f1c');
+      g.addColorStop(0.28, '#123a4d');   // teal-ish deep
+      g.addColorStop(0.48, '#1e5fb0');   // blue
+      g.addColorStop(0.66, '#7a5ad6');   // violet
+      g.addColorStop(0.86, '#c96a45');   // terracotta glow
+      g.addColorStop(1.00, '#120a10');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+
+      // soft colored blobs to give the glass interesting things to refract
+      const blobs = [
+        ['#8df7e6', 0.22, 0.30, 150, 0.55],
+        ['#5aa9ff', 0.72, 0.42, 180, 0.55],
+        ['#b088ff', 0.40, 0.66, 170, 0.50],
+        ['#ff7a52', 0.80, 0.80, 140, 0.45],
+        ['#ffffff', 0.50, 0.14, 90, 0.65]
+      ];
+      for (const [col, x, y, r, a] of blobs) {
+        const rg = ctx.createRadialGradient(x*size, y*size, 0, x*size, y*size, r);
+        rg.addColorStop(0, hexA(col, a));
+        rg.addColorStop(1, hexA(col, 0));
+        ctx.fillStyle = rg;
+        ctx.fillRect(0, 0, size, size);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.mapping = THREE.EquirectangularReflectionMapping;
+      tex.colorSpace = THREE.SRGBColorSpace;
+      return tex;
+    }
+    function hexA(hex, a) {
+      const n = parseInt(hex.slice(1), 16);
+      const r = (n >> 16) & 255, gg = (n >> 8) & 255, b = n & 255;
+      return `rgba(${r},${gg},${b},${a})`;
+    }
+
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    // Blend a RoomEnvironment (for crisp studio reflections) — we use the gradient as the primary env.
+    const gradientTex = makeGradientEnv();
+    const envRT = pmrem.fromEquirectangular(gradientTex);
+    scene.environment = envRT.texture;
+    gradientTex.dispose();
+
+    // Also prepare a room env we could swap; keep gradient as the aesthetic driver.
+    const roomEnv = new RoomEnvironment();
+    const roomRT = pmrem.fromScene(roomEnv, 0.04);
+    // subtle: keep primary env as gradient; room stays available but unused for background look.
+    pmrem.dispose();
+
+    // --- The crystal ---
+    const geo = new THREE.IcosahedronGeometry(1.6, 1); // faceted, flat shading
+    geo.computeVertexNormals();
+    // flat-shade look: keep normals per-face by using non-indexed geometry
+    const flatGeo = geo.toNonIndexed();
+    flatGeo.computeVertexNormals();
+
+    const crystalMat = new THREE.MeshPhysicalMaterial({
+      color: 0xffffff,
+      metalness: 0.0,
+      roughness: 0.04,
+      transmission: 1.0,
+      thickness: 1.8,
+      ior: 1.5,
+      reflectivity: 0.6,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.06,
+      envMapIntensity: 1.6,
+      attenuationColor: new THREE.Color(0x9fd8ff),
+      attenuationDistance: 4.0,
+      flatShading: true,
+      transparent: true
+    });
+    // iridescence if supported by this build
+    if ('iridescence' in crystalMat) {
+      crystalMat.iridescence = 0.6;
+      crystalMat.iridescenceIOR = 1.3;
+      crystalMat.iridescenceThicknessRange = [120, 420];
+    }
+
+    const crystal = new THREE.Mesh(flatGeo, crystalMat);
+    scene.add(crystal);
+
+    // thin emissive edge wireframe so facets read even in flat lighting
+    const edges = new THREE.EdgesGeometry(flatGeo, 1);
+    const edgeMat = new THREE.LineBasicMaterial({
+      color: 0xbfe9ff,
+      transparent: true,
+      opacity: 0.16
+    });
+    const edgeLines = new THREE.LineSegments(edges, edgeMat);
+    crystal.add(edgeLines);
+
+    // --- Soft glow / halo behind the crystal (billboard sprite) ---
+    function makeHalo() {
+      const s = 256;
+      const cc = document.createElement('canvas');
+      cc.width = s; cc.height = s;
+      const cx = cc.getContext('2d');
+      const rg = cx.createRadialGradient(s/2, s/2, 0, s/2, s/2, s/2);
+      rg.addColorStop(0.0, 'rgba(140,200,255,0.55)');
+      rg.addColorStop(0.35, 'rgba(120,150,255,0.28)');
+      rg.addColorStop(0.7, 'rgba(90,80,180,0.08)');
+      rg.addColorStop(1.0, 'rgba(0,0,0,0)');
+      cx.fillStyle = rg;
+      cx.fillRect(0, 0, s, s);
+      const t = new THREE.CanvasTexture(cc);
+      t.colorSpace = THREE.SRGBColorSpace;
+      return t;
+    }
+    const haloMat = new THREE.SpriteMaterial({
+      map: makeHalo(),
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const halo = new THREE.Sprite(haloMat);
+    halo.scale.set(7.5, 7.5, 1);
+    halo.position.z = -1.6;
+    scene.add(halo);
+
+    // --- Lights: aurora palette, orbiting the crystal ---
+    scene.add(new THREE.AmbientLight(0x223044, 0.6));
+
+    const keyLights = [
+      { color: AURORA.teal,       dist: 5.0, speed: 0.6,  phase: 0.0,        intensity: 42 },
+      { color: AURORA.blue,       dist: 5.2, speed: -0.45, phase: Math.PI*0.6, intensity: 46 },
+      { color: AURORA.violet,     dist: 4.8, speed: 0.5,  phase: Math.PI*1.1, intensity: 40 },
+      { color: AURORA.terracotta, dist: 5.4, speed: -0.35, phase: Math.PI*1.7, intensity: 30 }
+    ].map(cfg => {
+      const l = new THREE.PointLight(cfg.color, cfg.intensity, 20, 2);
+      scene.add(l);
+      return { light: l, cfg };
+    });
+
+    // a steady soft directional fill so facets always catch some light
+    const fill = new THREE.DirectionalLight(0xffffff, 0.5);
+    fill.position.set(2, 3, 4);
+    scene.add(fill);
+
+    // --- Interaction: pointer rotates the crystal (lerp) ---
+    const target = { x: 0, y: 0 };
+    const current = { x: 0, y: 0 };
+    window.addEventListener('pointermove', (e) => {
+      const nx = (e.clientX / window.innerWidth) * 2 - 1;
+      const ny = (e.clientY / window.innerHeight) * 2 - 1;
+      target.x = ny * 0.6;
+      target.y = nx * 0.9;
+    });
+
+    // --- Resize ---
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // --- Animate ---
+    const clock = new THREE.Clock();
+    function tick() {
+      const t = clock.getElapsedTime();
+      const dt = reduceMotion ? 0 : 1;
+
+      // orbit lights
+      for (const { light, cfg } of keyLights) {
+        const a = t * cfg.speed * dt + cfg.phase;
+        light.position.set(
+          Math.cos(a) * cfg.dist,
+          Math.sin(a * 0.8) * cfg.dist * 0.6,
+          Math.sin(a) * cfg.dist
+        );
+      }
+
+      // base slow rotation + pointer parallax
+      const autoY = reduceMotion ? 0 : t * 0.16;
+      const autoX = reduceMotion ? 0 : Math.sin(t * 0.25) * 0.12;
+      current.x += (target.x - current.x) * 0.05;
+      current.y += (target.y - current.y) * 0.05;
+      crystal.rotation.x = autoX + current.x;
+      crystal.rotation.y = autoY + current.y;
+
+      // gentle halo breathing
+      const pulse = reduceMotion ? 1 : 1 + Math.sin(t * 0.9) * 0.04;
+      halo.scale.set(7.5 * pulse, 7.5 * pulse, 1);
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+    tick();
+
+  } catch (err) {
+    console.error(err);
+    document.getElementById('gl').style.display = 'none';
+    document.getElementById('fallback').style.display = 'flex';
+  }
+  </script>
+</body>
+</html>

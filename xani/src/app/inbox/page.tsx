@@ -7,6 +7,7 @@ import type { InboxData } from '@/lib/marvin-protocol';
 import { ComposeModal } from '@/components/inbox/ComposeModal';
 import { EmailBody } from '@/components/inbox/EmailBody';
 import { enqueueApproval } from '@/lib/approvals';
+import { mailboxAction } from '@/lib/marvin-client';
 import { voicePromptFor } from '@/lib/voice';
 
 type Msg = InboxData['messages'][number];
@@ -71,6 +72,7 @@ export default function InboxPage() {
   const [split, setSplit] = useState('all');
   const [openId, setOpenId] = useState<string | null>(null);
   const [stars, setStars] = useState<Record<string, boolean>>({});
+  const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [compose, setCompose] = useState<{ mode: 'new' | 'reply'; to?: string; subject?: string; body?: string; account?: string } | null>(null);
   const [queued, setQueued] = useState(false);
   const [confirm, setConfirm] = useState<{ title: string; body: string; detail?: string; okLabel: string; onOk: () => void } | null>(null);
@@ -90,12 +92,12 @@ export default function InboxPage() {
 
   const messages = useMemo(() => {
     const base = data?.messages ?? [];
-    if (more.length === 0) return base;
     const seen = new Set(base.map((m) => m.id));
-    const merged = [...base, ...more.filter((m) => !seen.has(m.id))];
-    merged.sort((x, y) => (y.receivedAt > x.receivedAt ? 1 : y.receivedAt < x.receivedAt ? -1 : 0));
-    return merged;
-  }, [data, more]);
+    const merged = more.length === 0 ? [...base] : [...base, ...more.filter((m) => !seen.has(m.id))];
+    if (more.length > 0) merged.sort((x, y) => (y.receivedAt > x.receivedAt ? 1 : y.receivedAt < x.receivedAt ? -1 : 0));
+    // Optimistically drop archived/trashed messages until the next refresh lands.
+    return hidden.size === 0 ? merged : merged.filter((m) => !hidden.has(m.id));
+  }, [data, more, hidden]);
 
   const nextCursor = pagedOnce ? moreCursor : data?.cursor;
   const canLoadMore = Boolean(nextCursor) && acct === 'all' && split === 'all';
@@ -166,6 +168,23 @@ export default function InboxPage() {
       account: m.account,
     });
     if (draft === null) window.setTimeout(() => alert('MARVIN couldn’t draft a reply — is the runtime running with an API key?'), 0);
+  };
+
+  // Housekeeping — archive / read / star / trash straight from the app (reversible, runs now).
+  const doMailbox = async (m: Msg, kind: 'email.archive' | 'email.read' | 'email.unread' | 'email.star' | 'email.unstar' | 'email.trash') => {
+    const removes = kind === 'email.archive' || kind === 'email.trash';
+    if (removes) {
+      setHidden((h) => new Set(h).add(m.id));
+      if (openId === m.id) setOpenId(null);
+    }
+    if (kind === 'email.star' || kind === 'email.unstar') setStars((s) => ({ ...s, [m.id]: kind === 'email.star' }));
+    const r = await mailboxAction({ kind, account: m.account, id: m.id });
+    if (!r.ok) {
+      if (removes) setHidden((h) => { const n = new Set(h); n.delete(m.id); return n; });
+      window.setTimeout(() => alert(`Couldn’t ${kind.split('.')[1]} — ${r.error ?? (r.offline ? 'runtime offline' : 'failed')}.`), 0);
+      return;
+    }
+    if (kind === 'email.read' || kind === 'email.unread') refresh();
   };
 
   const replyTo = (m: Msg) => {
@@ -320,7 +339,7 @@ export default function InboxPage() {
                   <span
                     role="button"
                     tabIndex={-1}
-                    onClick={(e) => { e.stopPropagation(); setStars((s) => ({ ...s, [m.id]: !s[m.id] })); }}
+                    onClick={(e) => { e.stopPropagation(); void doMailbox(m, stars[m.id] ? 'email.unstar' : 'email.star'); }}
                     className="w-[15px] flex-none text-[15px]"
                     style={{ color: starred ? '#D89A4E' : 'var(--muted)' }}
                   >
@@ -387,7 +406,15 @@ export default function InboxPage() {
                   >
                     <span className="text-[12px]">✦</span> {drafting ? 'Drafting…' : 'AI draft reply'}
                   </button>
-                  <button type="button" onClick={() => addToTrello(open)} className="ml-auto rounded-[18px] border border-border bg-surface px-4 py-1.5 text-[13px] font-medium text-text-2 hover:bg-bg">Add to Trello</button>
+                  <div className="ml-auto flex items-center gap-1.5">
+                    <button type="button" title="Archive" onClick={() => void doMailbox(open, 'email.archive')} className="rounded-[18px] border border-border bg-surface px-3 py-1.5 text-[13px] font-medium text-text-2 hover:bg-bg">Archive</button>
+                    {open.unread
+                      ? <button type="button" title="Mark read" onClick={() => void doMailbox(open, 'email.read')} className="rounded-[18px] border border-border bg-surface px-3 py-1.5 text-[13px] font-medium text-text-2 hover:bg-bg">Mark read</button>
+                      : <button type="button" title="Mark unread" onClick={() => void doMailbox(open, 'email.unread')} className="rounded-[18px] border border-border bg-surface px-3 py-1.5 text-[13px] font-medium text-text-2 hover:bg-bg">Mark unread</button>}
+                    <button type="button" title={stars[open.id] ? 'Unstar' : 'Star'} onClick={() => void doMailbox(open, stars[open.id] ? 'email.unstar' : 'email.star')} className="rounded-[18px] border border-border bg-surface px-3 py-1.5 text-[13px] font-medium text-text-2 hover:bg-bg">{stars[open.id] ? '★' : '☆'}</button>
+                    <button type="button" title="Delete" onClick={() => void doMailbox(open, 'email.trash')} className="rounded-[18px] border border-border bg-surface px-3 py-1.5 text-[13px] font-medium text-text-2 hover:bg-bg">🗑</button>
+                    <button type="button" onClick={() => addToTrello(open)} className="rounded-[18px] border border-border bg-surface px-3 py-1.5 text-[13px] font-medium text-text-2 hover:bg-bg">Add to Trello</button>
+                  </div>
                 </div>
               </div>
 

@@ -18,12 +18,13 @@ import {
   getSlack,
   getSlackHistory,
   getWritingSamples,
+  mailboxAction,
   getTrello,
   getBuffer,
   getGithub,
   executeAction,
 } from './connectors.ts';
-import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload, InboxTriage, SlackTriage, TriagedSlack, SlackHistory } from '../src/lib/marvin-protocol.ts';
+import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload, MailboxAction, InboxTriage, SlackTriage, TriagedSlack, SlackHistory } from '../src/lib/marvin-protocol.ts';
 
 /**
  * MARVIN sidecar HTTP server.
@@ -425,6 +426,17 @@ const server = createServer(async (req, res) => {
       if (!payload || !payload.kind) return json(res, 400, { ok: false, error: 'Missing action payload.' });
       const result = await executeAction(payload);
       return json(res, 200, result);
+    } catch (err) {
+      return json(res, 400, { ok: false, error: (err as Error).message });
+    }
+  }
+
+  // Low-stakes mailbox housekeeping (archive/read/star/trash/react/mark-read) — runs now.
+  if (req.method === 'POST' && req.url === '/mailbox') {
+    try {
+      const { action } = JSON.parse(await readBody(req)) as { action: MailboxAction };
+      if (!action || !action.kind) return json(res, 400, { ok: false, error: 'Missing mailbox action.' });
+      return json(res, 200, await mailboxAction(action));
     } catch (err) {
       return json(res, 400, { ok: false, error: (err as Error).message });
     }

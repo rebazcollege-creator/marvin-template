@@ -11,6 +11,7 @@ import type {
   GithubData,
   ActPayload,
   ActResult,
+  MailboxAction,
 } from '../src/lib/marvin-protocol.ts';
 
 /**
@@ -335,7 +336,20 @@ function extractBody(payload: unknown): { html: string; text: string } {
 export async function getMessageBody(
   accountRole: string,
   id: string,
-): Promise<{ ok: boolean; html?: string; text?: string; body?: string; error?: string }> {
+): Promise<{
+  ok: boolean;
+  html?: string;
+  text?: string;
+  body?: string;
+  error?: string;
+  // Reply context — lets the drafter build a properly threaded reply.
+  threadId?: string;
+  messageId?: string;
+  references?: string;
+  subject?: string;
+  from?: string;
+  to?: string;
+}> {
   const acct = GMAIL_ACCOUNTS.find((a) => a.role === accountRole);
   const c = acct ? gmailCreds(acct.n) : null;
   if (!c || !id) return { ok: false, error: 'Not connected.' };
@@ -346,11 +360,23 @@ export async function getMessageBody(
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!r.ok) return { ok: false, error: `Gmail API ${r.status}` };
-    const j = (await r.json()) as { payload?: unknown; snippet?: string };
+    const j = (await r.json()) as { threadId?: string; payload?: { headers?: { name?: string; value?: string }[] }; snippet?: string };
     const { html, text } = extractBody(j.payload);
     const plain = text || (j.snippet ?? '');
-    // `body` kept for backward compatibility (plain text).
-    return { ok: true, html, text: plain, body: plain };
+    const hdr = (name: string): string | undefined =>
+      (j.payload?.headers ?? []).find((h) => (h.name ?? '').toLowerCase() === name.toLowerCase())?.value;
+    return {
+      ok: true,
+      html,
+      text: plain,
+      body: plain, // kept for backward compatibility
+      threadId: j.threadId,
+      messageId: hdr('Message-ID') ?? hdr('Message-Id'),
+      references: hdr('References'),
+      subject: hdr('Subject'),
+      from: hdr('From'),
+      to: hdr('To'),
+    };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
@@ -804,23 +830,72 @@ function base64url(s: string): string {
   return Buffer.from(s).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-async function sendGmail(p: { to: string; subject: string; body: string; account?: string }): Promise<ActResult> {
+async function sendGmail(p: { to: string; subject: string; body: string; account?: string; threadId?: string; inReplyTo?: string; references?: string }): Promise<ActResult> {
   // Pick the account by role if given, else the first configured one.
   const acct = GMAIL_ACCOUNTS.find((a) => a.role === p.account) ?? GMAIL_ACCOUNTS.find((a) => gmailCreds(a.n));
   const c = acct ? gmailCreds(acct.n) : null;
   if (!c) return { ok: false, note: 'Gmail not connected — add GMAIL_* credentials.' };
   const token = await googleAccessToken(c.id, c.secret, c.refresh);
   if (!token) return { ok: false, error: 'Could not authorise Gmail.' };
-  const raw = base64url(`To: ${p.to}\r\nSubject: ${p.subject}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${p.body}`);
+  // Threading headers make the reply land in the original conversation (Gmail + other clients).
+  const refs = [p.references, p.inReplyTo].filter(Boolean).join(' ').trim();
+  const headers = [
+    `To: ${p.to}`,
+    `Subject: ${p.subject}`,
+    p.inReplyTo ? `In-Reply-To: ${p.inReplyTo}` : '',
+    refs ? `References: ${refs}` : '',
+    'Content-Type: text/plain; charset="UTF-8"',
+  ].filter(Boolean).join('\r\n');
+  const raw = base64url(`${headers}\r\n\r\n${p.body}`);
   try {
     const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw }),
+      body: JSON.stringify(p.threadId ? { raw, threadId: p.threadId } : { raw }),
     });
     if (!r.ok) return { ok: false, error: `Gmail send failed (${r.status}).` };
     const j = (await r.json()) as { id?: string };
     return { ok: true, id: j.id };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** Change a message's Gmail labels (archive / read / star …) — reversible housekeeping. */
+async function gmailModify(account: string, id: string, add: string[], remove: string[]): Promise<ActResult> {
+  const acct = GMAIL_ACCOUNTS.find((a) => a.role === account);
+  const c = acct ? gmailCreds(acct.n) : null;
+  if (!c || !id) return { ok: false, note: 'Gmail not connected.' };
+  const token = await googleAccessToken(c.id, c.secret, c.refresh);
+  if (!token) return { ok: false, error: 'Could not authorise Gmail.' };
+  try {
+    const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/modify`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ addLabelIds: add, removeLabelIds: remove }),
+    });
+    if (!r.ok) return { ok: false, error: `Gmail modify failed (${r.status}).` };
+    bumpInboxCache(); // the inbox listing is now stale
+    return { ok: true, id };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+async function gmailTrash(account: string, id: string): Promise<ActResult> {
+  const acct = GMAIL_ACCOUNTS.find((a) => a.role === account);
+  const c = acct ? gmailCreds(acct.n) : null;
+  if (!c || !id) return { ok: false, note: 'Gmail not connected.' };
+  const token = await googleAccessToken(c.id, c.secret, c.refresh);
+  if (!token) return { ok: false, error: 'Could not authorise Gmail.' };
+  try {
+    const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/trash`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) return { ok: false, error: `Gmail trash failed (${r.status}).` };
+    bumpInboxCache();
+    return { ok: true, id };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
@@ -849,7 +924,7 @@ async function createCalendarEvent(p: { title: string; start?: string; end?: str
   }
 }
 
-async function postSlack(p: { channel: string; text: string; workspace?: string }): Promise<ActResult> {
+async function postSlack(p: { channel: string; text: string; workspace?: string; threadTs?: string }): Promise<ActResult> {
   // Default to the first connected workspace if none specified.
   const w = (p.workspace ? SLACK_WORKSPACES.find((x) => x.role === p.workspace) : undefined)
     ?? SLACK_WORKSPACES.find((x) => slackPostToken(x));
@@ -858,19 +933,69 @@ async function postSlack(p: { channel: string; text: string; workspace?: string 
   try {
     const client = new WebClient(token);
     const name = p.channel.replace(/^#/, '');
-    // Resolve the channel name to an ID within this workspace (postMessage prefers IDs).
-    let ch = name;
-    try {
-      const list = await client.conversations.list({ types: 'public_channel,private_channel', exclude_archived: true, limit: 200 });
-      const found = (list.channels ?? []).find((c) => c.name === name);
-      if (found?.id) ch = found.id;
-    } catch {
-      /* fall back to the raw name */
+    // A channel/DM id is passed straight through; a #name is resolved to its id.
+    let ch = p.channel;
+    if (!/^[A-Z0-9]{8,}$/.test(p.channel)) {
+      try {
+        const list = await client.conversations.list({ types: 'public_channel,private_channel', exclude_archived: true, limit: 200 });
+        const found = (list.channels ?? []).find((c) => c.name === name);
+        if (found?.id) ch = found.id;
+      } catch {
+        /* fall back to the raw name */
+      }
     }
-    const res = await client.chat.postMessage({ channel: ch, text: p.text });
+    const res = await client.chat.postMessage({ channel: ch, text: p.text, ...(p.threadTs ? { thread_ts: p.threadTs } : {}) });
     return res.ok ? { ok: true, id: res.ts } : { ok: false, error: 'Slack post failed.' };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
+  }
+}
+
+// ── Slack + mailbox housekeeping (reversible, user-initiated) ──────
+
+function slackClientFor(role?: string, preferUser = false): WebClient | null {
+  const w = (role ? SLACK_WORKSPACES.find((x) => x.role === role) : undefined) ?? SLACK_WORKSPACES.find((x) => slackReadToken(x));
+  if (!w) return null;
+  const token = preferUser ? (slackReadToken(w) ?? slackPostToken(w)) : (slackPostToken(w) ?? slackReadToken(w));
+  return token ? new WebClient(token) : null;
+}
+
+async function slackReact(workspace: string, channel: string, ts: string, emoji: string): Promise<ActResult> {
+  const client = slackClientFor(workspace);
+  if (!client) return { ok: false, note: 'Slack not connected.' };
+  try {
+    const r = await client.reactions.add({ channel, timestamp: ts, name: emoji.replace(/:/g, '') });
+    return r.ok ? { ok: true } : { ok: false, error: 'Slack reaction failed.' };
+  } catch (e) {
+    const msg = (e as Error).message;
+    // Reacting twice is harmless — treat "already_reacted" as success.
+    return /already_reacted/.test(msg) ? { ok: true } : { ok: false, error: msg };
+  }
+}
+
+async function slackMarkRead(workspace: string, channel: string, ts: string): Promise<ActResult> {
+  const client = slackClientFor(workspace, true); // conversations.mark needs a user token
+  if (!client) return { ok: false, note: 'Slack needs a user token (xoxp-) to mark messages read.' };
+  try {
+    const r = await client.conversations.mark({ channel, ts });
+    return r.ok ? { ok: true } : { ok: false, error: 'Slack mark-read failed.' };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** Dispatch a low-stakes mailbox action (archive/read/star/trash/react/mark-read). */
+export async function mailboxAction(a: MailboxAction): Promise<ActResult> {
+  switch (a.kind) {
+    case 'email.archive': return gmailModify(a.account, a.id, [], ['INBOX']);
+    case 'email.read': return gmailModify(a.account, a.id, [], ['UNREAD']);
+    case 'email.unread': return gmailModify(a.account, a.id, ['UNREAD'], []);
+    case 'email.star': return gmailModify(a.account, a.id, ['STARRED'], []);
+    case 'email.unstar': return gmailModify(a.account, a.id, [], ['STARRED']);
+    case 'email.trash': return gmailTrash(a.account, a.id);
+    case 'slack.react': return slackReact(a.workspace, a.channel, a.ts, a.emoji);
+    case 'slack.read': return slackMarkRead(a.workspace, a.channel, a.ts);
+    default: return { ok: false, error: 'Unsupported mailbox action.' };
   }
 }
 

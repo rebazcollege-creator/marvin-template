@@ -227,7 +227,17 @@ export default function HomePage() {
         flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
         return;
       }
-      enqueueApproval({ kind: 'email', title: `Reply to ${loop.email.from}`, source: `Email · ${loop.email.account}`, preview: r.draft, actionLabel: 'Send', voiceKey: voiceKeyFor('email', 'all') });
+      const reSubject = /^re:/i.test(loop.email.subject) ? loop.email.subject : `Re: ${loop.email.subject}`;
+      enqueueApproval({
+        kind: 'email',
+        title: `Reply to ${loop.email.from}`,
+        source: `Email · ${loop.email.account}`,
+        preview: r.draft,
+        actionLabel: 'Send',
+        voiceKey: voiceKeyFor('email', 'all'),
+        // Real threaded payload → approving actually sends into the same conversation.
+        payload: { kind: 'email', to: loop.email.from, subject: reSubject, body: r.draft, account: loop.email.account, threadId: mb?.threadId, inReplyTo: mb?.messageId, references: mb?.references },
+      });
       flashMsg('✍️ Draft ready in Approvals — review & send.');
       return;
     }
@@ -238,7 +248,16 @@ export default function HomePage() {
         flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
         return;
       }
-      enqueueApproval({ kind: 'slack', title: `Reply to ${loop.slack.from} (${loop.slack.channel})`, source: `Slack · ${loop.slack.workspace}`, preview: r.draft, actionLabel: 'Send', voiceKey: voiceKeyFor('slack', loop.slack.workspace) });
+      const threadTs = loop.ref?.split(':')[1]; // reply in the original thread
+      enqueueApproval({
+        kind: 'slack',
+        title: `Reply to ${loop.slack.from} (${loop.slack.channel})`,
+        source: `Slack · ${loop.slack.workspace}`,
+        preview: r.draft,
+        actionLabel: 'Send',
+        voiceKey: voiceKeyFor('slack', loop.slack.workspace),
+        payload: { kind: 'slack', channel: loop.slack.channelId, text: r.draft, workspace: loop.slack.workspace, threadTs },
+      });
       flashMsg('✍️ Draft ready in Approvals — review & send.');
     }
   };

@@ -4,6 +4,7 @@ import type {
   ChatMessage,
   ChatRequest,
   InboxTriage,
+  MailboxAction,
   ProposedMemory,
   SlackTriage,
   StreamEvent,
@@ -97,6 +98,24 @@ export async function actMarvin(payload: ActPayload): Promise<ActResult & { offl
     return (await resp.json()) as ActResult;
   } catch {
     return { ok: false, offline: true, error: 'Runtime offline.' };
+  }
+}
+
+/**
+ * Run a low-stakes mailbox action now (archive/read/star/trash an email, react/mark-read
+ * on Slack). User-initiated, reversible — does NOT go through the Approvals send-gate.
+ */
+export async function mailboxAction(action: MailboxAction): Promise<ActResult & { offline?: boolean }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/mailbox`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }),
+    });
+    if (!resp.ok) return { ok: false, error: `Runtime responded ${resp.status}.` };
+    return (await resp.json()) as ActResult;
+  } catch {
+    return { ok: false, offline: true, error: 'Runtime offline — start it with: npm run dev:all' };
   }
 }
 

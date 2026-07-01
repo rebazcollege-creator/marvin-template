@@ -145,7 +145,11 @@ export const fetchInboxFolder = (folder: string, cursor?: string) =>
 /** Full body of one message, for the reading pane (real HTML + plain-text fallback).
  *  Email bodies are immutable, so a successful fetch is cached for the session — this
  *  makes hover-prefetch effective and reopening a message instant. */
-type MessageBody = { ok: boolean; html?: string; text?: string; body?: string; error?: string };
+type MessageBody = {
+  ok: boolean; html?: string; text?: string; body?: string; error?: string;
+  /** Reply threading context. */
+  threadId?: string; messageId?: string; references?: string; subject?: string; from?: string; to?: string;
+};
 const bodyCache = new Map<string, MessageBody>();
 const bodyInflight = new Map<string, Promise<MessageBody | null>>();
 export async function fetchMessageBody(account: string, id: string): Promise<MessageBody | null> {

@@ -200,9 +200,19 @@ export interface GithubData {
  * Each is cred-gated; with no credentials the sidecar returns ok:false with a note.
  */
 export type ActPayload =
-  | { kind: 'email'; to: string; subject: string; body: string; account?: string }
+  | {
+      kind: 'email';
+      to: string;
+      subject: string;
+      body: string;
+      account?: string;
+      /** Reply threading — keeps the reply in the original Gmail conversation. */
+      threadId?: string;
+      inReplyTo?: string; // the original Message-ID header
+      references?: string;
+    }
   | { kind: 'calendar'; title: string; start?: string; end?: string }
-  | { kind: 'slack'; channel: string; text: string; workspace?: string }
+  | { kind: 'slack'; channel: string; text: string; workspace?: string; threadTs?: string }
   | { kind: 'social'; platform: string; caption: string }
   | { kind: 'task'; name: string; list?: string; due?: string };
 
@@ -213,6 +223,16 @@ export interface ActResult {
   error?: string;
   note?: string;
 }
+
+/**
+ * Low-stakes, reversible mailbox housekeeping — archive / mark read / star / trash an
+ * email, or react / mark-read on Slack. User-initiated from the Inbox/Slack views, so
+ * these run immediately (they don't go through the Approvals send-gate).
+ */
+export type MailboxAction =
+  | { kind: 'email.archive' | 'email.read' | 'email.unread' | 'email.star' | 'email.unstar' | 'email.trash'; account: string; id: string }
+  | { kind: 'slack.react'; workspace: string; channel: string; ts: string; emoji: string }
+  | { kind: 'slack.read'; workspace: string; channel: string; ts: string };
 
 /** Server-sent events streamed back over /chat. */
 export type StreamEvent =

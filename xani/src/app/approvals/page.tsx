@@ -75,7 +75,17 @@ export default function ApprovalsPage() {
       addVoiceSampleByKey(item.voiceKey, draft.trim());
       setResult('Learned your edit — future drafts will sound more like you.');
     }
-    persist(items.map((i) => (i.id === id ? { ...i, preview: draft } : i)));
+    persist(
+      items.map((i) => {
+        if (i.id !== id) return i;
+        // Keep the send payload in sync with the edit, so we send what he sees.
+        const payload =
+          i.payload?.kind === 'email' ? { ...i.payload, body: draft }
+          : i.payload?.kind === 'slack' ? { ...i.payload, text: draft }
+          : i.payload;
+        return { ...i, preview: draft, payload };
+      }),
+    );
     setEditing(null);
   };
 

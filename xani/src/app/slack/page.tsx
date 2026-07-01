@@ -7,6 +7,7 @@ import { RefreshButton } from '@/components/ui/RefreshButton';
 import type { SlackData } from '@/lib/marvin-protocol';
 import { enqueueApproval } from '@/lib/approvals';
 import { voicePromptFor } from '@/lib/voice';
+import { mailboxAction } from '@/lib/marvin-client';
 import { SlackText, emojiFor } from '@/lib/slack-mrkdwn';
 
 type Msg = SlackData['messages'][number];
@@ -110,6 +111,15 @@ export default function SlackPage() {
     setMarvin(null);
     if (draft) setComposeText(draft);
     else setMarvin({ title: 'DRAFT REPLY', text: 'Couldn’t draft a reply — is the runtime running with an API key?' });
+  };
+  const react = async (m: Msg) => {
+    const r = await mailboxAction({ kind: 'slack.react', workspace: m.workspace, channel: m.channelId, ts: m.ts, emoji: '+1' });
+    if (!r.ok) window.setTimeout(() => alert(`Couldn’t react — ${r.error ?? (r.offline ? 'runtime offline' : 'failed')}.`), 0);
+  };
+  const markRead = async (m: Msg) => {
+    const r = await mailboxAction({ kind: 'slack.read', workspace: m.workspace, channel: m.channelId, ts: m.ts });
+    if (!r.ok) window.setTimeout(() => alert(`Couldn’t mark read — ${r.error ?? 'needs a Slack user token'}.`), 0);
+    else refresh();
   };
   const summarise = async () => {
     if (!activeChan) return;
@@ -283,8 +293,9 @@ export default function SlackPage() {
                 {hover === id && (
                   <div className="absolute -top-3 right-[18px] flex items-center gap-0.5 rounded-[8px] border bg-surface p-[3px] shadow-md" style={{ borderColor: 'var(--accent-soft-border)' }}>
                     <span className="grid h-[22px] w-[22px] place-items-center rounded-[6px] text-[11px] text-on-accent" style={{ background: '#C0613A' }}>✦</span>
-                    <button type="button" onClick={summarise} className="rounded-[6px] px-2 py-1 text-[12px] font-semibold text-text-2 transition hover:bg-hover">Summarise</button>
+                    <button type="button" title="React 👍" onClick={() => void react(m)} className="rounded-[6px] px-2 py-1 text-[12px] font-semibold text-text-2 transition hover:bg-hover">👍</button>
                     <button type="button" onClick={() => void aiDraft(m)} className="rounded-[6px] px-2 py-1 text-[12px] font-semibold text-text-2 transition hover:bg-hover">Draft reply</button>
+                    <button type="button" onClick={() => void markRead(m)} className="rounded-[6px] px-2 py-1 text-[12px] font-semibold text-text-2 transition hover:bg-hover">Mark read</button>
                     <button type="button" onClick={() => addToQueue(m)} className="rounded-[6px] px-2 py-1 text-[12px] font-semibold text-text-2 transition hover:bg-hover">Add to queue</button>
                   </div>
                 )}

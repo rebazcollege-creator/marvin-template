@@ -117,8 +117,11 @@ export interface SlackData {
   connected: boolean;
   error?: string;
   /** Workspaces the runtime can see, with which token type is in use and any auth error.
-   *  selfId = the authed user's Slack id (user tokens), so triage can drop Rebaz's own messages. */
-  workspaces: { role: string; name: string; avBg: string; tokenKind?: 'user' | 'bot'; selfId?: string; error?: string }[];
+   *  selfId = the authed user's Slack id (user tokens), so triage can drop Rebaz's own messages.
+   *  team/teamId/teamUrl = the workspace the TOKEN actually belongs to (from Slack auth.test),
+   *  so a token minted in the wrong workspace is visible. mismatch = authed team name doesn't
+   *  match the expected label — the token is pointing at the wrong Slack. */
+  workspaces: { role: string; name: string; avBg: string; tokenKind?: 'user' | 'bot'; selfId?: string; team?: string; teamId?: string; teamUrl?: string; mismatch?: boolean; error?: string }[];
   /** Channels, private groups and DMs the token can see. Unread is best-effort (user tokens only). */
   channels: {
     workspace: string;

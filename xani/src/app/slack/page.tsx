@@ -194,16 +194,29 @@ export default function SlackPage() {
           <RefreshButton onClick={refresh} refreshing={refreshing} />
         </div>
 
-        {/* token-kind honesty line */}
+        {/* token-kind honesty line — shows the workspace the token REALLY belongs to */}
         <div className="border-b border-border px-4 py-1.5 text-[11px] text-muted">
           {activeWsRec?.tokenKind === 'user'
             ? 'Reading as you · unread + DMs on'
             : activeWsRec?.tokenKind === 'bot'
               ? 'Bot token · no unread or DMs (add a user token)'
               : '—'}
+          {activeWsRec?.team && (
+            <span className="ml-1 text-muted/80">· token workspace: <span className="font-semibold">{activeWsRec.team}</span></span>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 pb-4 pt-2">
+          {activeWsRec?.mismatch && (
+            <div className="mx-1 mb-2 rounded-[9px] border border-red-500/40 bg-red-500/10 px-2.5 py-2 text-[11.5px] text-text-2">
+              ⚠︎ Wrong workspace. This token is signed into{' '}
+              <span className="font-semibold">{activeWsRec.team ?? 'another Slack'}</span>, not{' '}
+              <span className="font-semibold">{activeWsRec.name}</span>. The names and messages here are
+              from that other workspace. Regenerate the token from the real{' '}
+              <span className="font-semibold">{activeWsRec.name}</span> workspace and re-add it on{' '}
+              <a href="/connections" className="underline">Connections</a>.
+            </div>
+          )}
           {activeWsRec?.error && (
             <div className="mx-1 mb-2 rounded-[9px] border border-accent/30 bg-accent-soft px-2.5 py-2 text-[11.5px] text-text-2">
               Slack error: <span className="font-semibold">{activeWsRec.error}</span>

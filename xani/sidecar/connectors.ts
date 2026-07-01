@@ -528,8 +528,11 @@ export async function getDrive(): Promise<DriveData> {
 // Each workspace can have a USER token (xoxp — unlocks unread + DMs, used for
 // reads) and/or a BOT token (xoxb — used for posting). Reads prefer the user token.
 const SLACK_WORKSPACES = [
-  { role: 'amargi', name: 'The Amargi', env: 'SLACK_AMARGI_BOT_TOKEN', userEnv: 'SLACK_AMARGI_USER_TOKEN', avBg: '#C0613A' },
-  { role: 'leadstories', name: 'LeadStories', env: 'SLACK_LEADSTORIES_BOT_TOKEN', userEnv: 'SLACK_LEADSTORIES_USER_TOKEN', avBg: '#6E8B6A' },
+  // `match` = a lowercase substring the real workspace's team name/URL should contain.
+  // If auth.test's team doesn't contain it, the token is pointing at the wrong Slack and
+  // we flag `mismatch` — this is how a token minted in the wrong workspace is surfaced.
+  { role: 'amargi', name: 'The Amargi', env: 'SLACK_AMARGI_BOT_TOKEN', userEnv: 'SLACK_AMARGI_USER_TOKEN', avBg: '#C0613A', match: 'amargi' },
+  { role: 'leadstories', name: 'LeadStories', env: 'SLACK_LEADSTORIES_BOT_TOKEN', userEnv: 'SLACK_LEADSTORIES_USER_TOKEN', avBg: '#6E8B6A', match: 'leadstories' },
 ];
 type SlackWs = (typeof SLACK_WORKSPACES)[number];
 
@@ -619,7 +622,15 @@ async function computeSlack(): Promise<SlackData> {
       const client = new WebClient(slackReadToken(w), SLACK_WC_OPTS);
       try {
         const auth = await client.auth.test(); // fail fast with a precise error (invalid_auth, token_revoked…)
-        wsRec.selfId = (auth as { user_id?: string }).user_id; // so triage can drop Rebaz's own messages
+        const a = auth as { user_id?: string; team?: string; team_id?: string; url?: string };
+        wsRec.selfId = a.user_id; // so triage can drop Rebaz's own messages
+        // Which workspace does this token REALLY belong to? Surface it so a token minted in the
+        // wrong Slack is obvious instead of silently mislabeled.
+        wsRec.team = a.team;
+        wsRec.teamId = a.team_id;
+        wsRec.teamUrl = a.url;
+        const hay = `${a.team ?? ''} ${a.url ?? ''}`.toLowerCase();
+        wsRec.mismatch = Boolean(w.match) && hay.length > 0 && !hay.includes(w.match);
         const names = await slackNames(w.role, client);
         // DMs only exist for user tokens (a bot can't see your DMs).
         const types = kind === 'user' ? 'public_channel,private_channel,im,mpim' : 'public_channel,private_channel';

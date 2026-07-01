@@ -14,12 +14,29 @@ import type {
  * Renderer → sidecar transport. The sidecar owns the API key; the renderer only
  * sends the composed system blocks + conversation and consumes the SSE stream.
  *
- * Dev: http://localhost:8787 (run `npm run sidecar`). Packaged Tauri app: the
- * same loopback port, spawned by Rust and allowed by the app capabilities.
+ * Where the sidecar lives depends on how the app is being viewed:
+ *   - Dev / packaged Tauri: same-machine loopback http://localhost:8787.
+ *   - Remote hosting (Codespaces / a VPS / your LAN, opened from a phone):
+ *     "localhost" would mean the phone, not the host — so the sidecar is reached
+ *     through a same-origin reverse proxy at /__mv (see scripts/serve-remote.mjs).
+ * NEXT_PUBLIC_MARVIN_SIDECAR_URL overrides everything when set.
  */
+function resolveSidecarUrl(): string {
+  const override = process.env.NEXT_PUBLIC_MARVIN_SIDECAR_URL;
+  if (override) return override;
+  if (typeof window !== 'undefined') {
+    const { hostname, origin } = window.location;
+    const loopback =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === 'tauri.localhost' ||
+      hostname.endsWith('.localhost');
+    if (!loopback) return `${origin}/__mv`; // remote: sidecar is reverse-proxied on this origin
+  }
+  return 'http://localhost:8787';
+}
 
-const SIDECAR_URL =
-  process.env.NEXT_PUBLIC_MARVIN_SIDECAR_URL ?? 'http://localhost:8787';
+const SIDECAR_URL = resolveSidecarUrl();
 
 export async function streamMarvin(
   req: ChatRequest,

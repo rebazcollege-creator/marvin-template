@@ -1,0 +1,23 @@
+{
+  "name": "Xanî",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:22",
+  "features": {
+    "ghcr.io/devcontainers/features/github-cli:1": {}
+  },
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "Xanî — open THIS on your phone",
+      "onAutoForward": "notify"
+    }
+  },
+  "postCreateCommand": "cd xani && npm install && curl -fsSL https://claude.ai/install.sh | bash || true",
+  "remoteEnv": {
+    "PATH": "${containerEnv:PATH}:/home/node/.local/bin"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["dbaeumer.vscode-eslint"]
+    }
+  }
+}

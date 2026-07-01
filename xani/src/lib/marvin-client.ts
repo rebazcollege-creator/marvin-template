@@ -318,6 +318,21 @@ export async function breakdownTask(task: string, level = 3): Promise<{ ok: bool
   }
 }
 
+/** Tone-check a draft before sending (P2). mode: check|soften|warm|formal. Read-only. */
+export async function toneCheck(text: string, mode: 'check' | 'soften' | 'warm' | 'formal' = 'check'): Promise<{ ok: boolean; read?: string; rewrite?: string; error?: string }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/tone-check`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, mode }),
+    });
+    if (!resp.ok) return { ok: false, error: `runtime responded ${resp.status}` };
+    return (await resp.json()) as { ok: boolean; read?: string; rewrite?: string; error?: string };
+  } catch {
+    return { ok: false, error: 'runtime unreachable' };
+  }
+}
+
 /** Sort a raw brain-dump into a clean, classified, estimated item (P1.3). */
 export async function sortDump(text: string): Promise<{ ok: boolean; task?: string; kind?: 'task' | 'note' | 'someday'; estMins?: number; error?: string }> {
   try {

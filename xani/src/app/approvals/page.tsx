@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ensureStorageReady } from '@/lib/storage';
 import { AUTONOMY_DEFS, getAutonomy, setAutonomy, type Level } from '@/lib/autonomy';
 import { listApprovals, saveApprovals, decideApproval, type ApprovalItem, type ApprovalKind } from '@/lib/approvals';
-import { actMarvin } from '@/lib/marvin-client';
+import { actMarvin, toneCheck } from '@/lib/marvin-client';
 import { addVoiceSampleByKey } from '@/lib/voice';
 import { ConfirmModal } from '@/components/ui/ConfirmModal';
 
@@ -31,6 +31,20 @@ export default function ApprovalsPage() {
   const [draft, setDraft] = useState('');
   const [confirming, setConfirming] = useState<ApprovalItem | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  const [toneNote, setToneNote] = useState<string | null>(null);
+  const [toneBusy, setToneBusy] = useState(false);
+
+  // Tone-check the current draft before it goes out — "how it lands" + optional softer rewrite.
+  const runTone = async (mode: 'check' | 'soften') => {
+    if (!draft.trim()) return;
+    setToneBusy(true);
+    setToneNote(mode === 'soften' ? 'Softening…' : 'Checking how it lands…');
+    const r = await toneCheck(draft, mode);
+    setToneBusy(false);
+    if (!r.ok) { setToneNote(r.error ?? 'Tone check unavailable.'); return; }
+    if (mode === 'soften' && r.rewrite) setDraft(r.rewrite);
+    setToneNote(r.read || (r.rewrite ? 'Softened — review it above.' : 'Looks fine.'));
+  };
 
   useEffect(() => {
     ensureStorageReady().then(() => {
@@ -154,16 +168,25 @@ export default function ApprovalsPage() {
                 ) : (
                   <div className="mt-3 whitespace-pre-wrap rounded-[11px] border border-border bg-bg px-3.5 py-3 text-[12.5px] leading-relaxed text-text-2">{it.preview}</div>
                 )}
-                <div className="mt-3 flex items-center gap-2">
+                {isEditing && toneNote && (
+                  <p className="mt-2 rounded-[9px] border border-border bg-[color-mix(in_srgb,var(--accent)_5%,var(--surface))] px-3 py-2 text-[12px] italic text-text-2">{toneNote}</p>
+                )}
+                <div className="mt-3 flex flex-wrap items-center gap-2">
                   {isEditing ? (
                     <>
                       <button type="button" onClick={() => saveEdit(it.id)} className="rounded-[9px] bg-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent-dim">Save</button>
-                      <button type="button" onClick={() => setEditing(null)} className="rounded-[9px] border border-border bg-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-text-2 hover:bg-hover">Cancel</button>
+                      {(it.kind === 'email' || it.kind === 'slack') && (
+                        <>
+                          <button type="button" onClick={() => void runTone('soften')} disabled={toneBusy} className="rounded-[9px] border border-border bg-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-text-2 hover:bg-hover disabled:opacity-50">Soften</button>
+                          <button type="button" onClick={() => void runTone('check')} disabled={toneBusy} className="rounded-[9px] border border-border bg-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-text-2 hover:bg-hover disabled:opacity-50">Check tone</button>
+                        </>
+                      )}
+                      <button type="button" onClick={() => { setEditing(null); setToneNote(null); }} className="rounded-[9px] border border-border bg-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-text-2 hover:bg-hover">Cancel</button>
                     </>
                   ) : (
                     <>
                       <button type="button" onClick={() => setConfirming(it)} className="rounded-[9px] bg-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-on-accent hover:bg-accent-dim">{it.actionLabel}</button>
-                      <button type="button" onClick={() => { setEditing(it.id); setDraft(it.preview); }} className="rounded-[9px] border border-border bg-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-text-2 hover:bg-hover">Edit</button>
+                      <button type="button" onClick={() => { setEditing(it.id); setDraft(it.preview); setToneNote(null); }} className="rounded-[9px] border border-border bg-bg px-3.5 py-1.5 text-[12.5px] font-semibold text-text-2 hover:bg-hover">Edit</button>
                       <button type="button" onClick={() => decide(it.id, 'rejected')} className="ml-auto rounded-[9px] px-3 py-1.5 text-[12.5px] font-semibold text-muted hover:text-accent">Reject</button>
                     </>
                   )}

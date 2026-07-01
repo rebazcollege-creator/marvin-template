@@ -16,6 +16,9 @@ import { FocusSession } from '@/components/home/FocusSession';
 import { BreakItDown } from '@/components/home/BreakItDown';
 import { Timeline } from '@/components/home/Timeline';
 import { Momentum } from '@/components/home/Momentum';
+import { MicButton } from '@/components/home/MicButton';
+import { SourceBadge } from '@/components/home/SourceBadge';
+import { DayRitual } from '@/components/home/DayRitual';
 import { whyThisOne, dueLabel, estLabel } from '@/lib/tone';
 
 /**
@@ -63,9 +66,7 @@ function LoopCard({ loop, now, onDone, onSnooze, onDraft }: { loop: OpenLoop; no
   return (
     <div className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex flex-wrap items-center gap-2.5">
-        <span className={`text-[11px] font-bold uppercase tracking-[0.05em] ${src.cls}`}>
-          {loop.channel ?? src.label}
-        </span>
+        <SourceBadge source={loop.source} label={loop.channel ?? src.label} />
         {loop.from && <span className="text-[13px] text-text-2">{loop.from}</span>}
         {(due || loop.estMins) && (
           <span className="ml-auto text-[12px] font-medium text-muted">
@@ -178,8 +179,8 @@ export default function HomePage() {
   );
   const restList = stale ? rest.filter((l) => l.id !== stale.id) : rest;
 
-  const onCapture = () => {
-    const t = capture.trim();
+  const onCapture = (text?: string) => {
+    const t = (text ?? capture).trim();
     if (!t) return;
     // Never lose it: hold it instantly. Then let MARVIN quietly tidy/classify it so Rebaz
     // never has to file his own dump (P1.3). Failure is harmless — the raw loop stays.
@@ -304,6 +305,9 @@ export default function HomePage() {
         </section>
       ) : (
         <>
+          {/* a gentle bookend — morning intention / evening reflection (skippable) */}
+          {settings && !overwhelmed && <DayRitual tz={tz} now={now} name={name} />}
+
           {/* one thing */}
           {oneThing ? (
             <section className="mt-9 rounded-2xl border border-border p-6 shadow-sm"
@@ -317,12 +321,12 @@ export default function HomePage() {
                 )}
               </div>
               <p className="mt-2 font-display text-[24px] font-semibold leading-snug text-text">{oneThing.task}</p>
-              <p className="mt-1.5 text-[13.5px] text-text-2">
-                {oneThing.channel ?? SOURCE[oneThing.source].label}
-                {oneThing.from ? ` · ${oneThing.from}` : ''}
-                {oneThing.estMins ? ` · ${estLabel(oneThing.estMins)}` : ''}
-                {dueLabel(oneThing.dueAt, now) ? ` · ${dueLabel(oneThing.dueAt, now)}` : ''}
-              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-text-2">
+                <SourceBadge source={oneThing.source} label={oneThing.channel ?? SOURCE[oneThing.source].label} />
+                {oneThing.from && <span>· {oneThing.from}</span>}
+                {oneThing.estMins ? <span>· {estLabel(oneThing.estMins)}</span> : null}
+                {dueLabel(oneThing.dueAt, now) ? <span>· {dueLabel(oneThing.dueAt, now)}</span> : null}
+              </div>
               <p className="mt-1 text-[12.5px] italic text-muted">{whyThisOne(oneThing, now)}</p>
               <div className="mt-4 flex flex-wrap gap-2.5">
                 <button type="button" onClick={() => setFocus({ task: oneThing.task, loopId: oneThing.id })} className="rounded-xl bg-accent px-5 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">▶ Focus with me</button>
@@ -361,10 +365,11 @@ export default function HomePage() {
               value={capture}
               onChange={(e) => setCapture(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') onCapture(); }}
-              placeholder="Brain-dump anything — I’ll hold it so you don’t have to."
+              placeholder="Brain-dump anything — type it or say it, I’ll hold it."
               className="flex-1 bg-transparent py-3 text-[14.5px] text-text outline-none placeholder:text-muted"
             />
-            <button type="button" onClick={onCapture} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">Hold it</button>
+            <MicButton onText={(t) => onCapture(t)} />
+            <button type="button" onClick={() => onCapture()} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">Hold it</button>
           </div>
 
           {/* today, as blocks — make time visible for time-blindness */}
@@ -391,7 +396,7 @@ export default function HomePage() {
             {inboxActs?.map((m) => (
               <div key={m.id} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-amber">Email · {m.account}</span>
+                  <SourceBadge source="email" label={m.account} />
                   <span className="text-[13px] text-text-2">{m.from}</span>
                 </div>
                 <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.subject}</p>
@@ -429,9 +434,7 @@ export default function HomePage() {
             {slackActs?.map((m) => (
               <div key={m.id} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <span className={`text-[11px] font-bold uppercase tracking-[0.05em] ${m.emergency ? 'text-lead' : 'text-slack'}`}>
-                    {m.emergency ? 'Slack · URGENT' : `Slack · ${m.dm ? 'DM' : `#${m.channel}`}`} · {m.workspaceName}
-                  </span>
+                  <SourceBadge source="slack" urgent={m.emergency} label={`${m.emergency ? 'URGENT · ' : ''}${m.dm ? 'DM' : `#${m.channel}`} · ${m.workspaceName}`} />
                   <span className="text-[13px] text-text-2">{m.from}</span>
                 </div>
                 <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.text.length > 200 ? `${m.text.slice(0, 197)}…` : m.text}</p>

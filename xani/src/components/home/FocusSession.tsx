@@ -15,6 +15,15 @@ import { setFocusActive } from '@/lib/nudge-policy';
 
 const PRESETS = [25, 15, 45, 5] as const;
 
+// A little novelty so completion never feels like the same rubber stamp (ADHD dopamine).
+const DONE_LINES = [
+  'That’s a real win.',
+  'You did the hard part — starting.',
+  'Nice. That counts.',
+  'Done, and it felt good.',
+  'You showed up. That’s the whole thing.',
+];
+
 function fmt(s: number): string {
   const m = Math.floor(s / 60);
   const r = s % 60;
@@ -36,6 +45,7 @@ export function FocusSession({
   const [running, setRunning] = useState<boolean>(false);
   const [done, setDone] = useState<boolean>(false);
   const startedAt = useRef<number | null>(null);
+  const rounds = useRef<number>(0);
 
   // countdown
   useEffect(() => {
@@ -46,6 +56,7 @@ export function FocusSession({
           window.clearInterval(id);
           setRunning(false);
           setDone(true);
+          rounds.current += 1;
           logActivity({ kind: 'note', title: 'Focus session complete', detail: task.slice(0, 80) });
           recordWin(`Focused: ${task.slice(0, 80)}`, 'focus');
           return 0;
@@ -154,8 +165,11 @@ export function FocusSession({
         // gentle completion — no guilt whether it was 5 min or 45
         <div className="max-w-md px-6 text-center">
           <div className="text-[48px]">🌿</div>
-          <p className="mt-3 font-display text-[26px] font-semibold text-text">That’s a real win.</p>
+          <p className="mt-3 font-display text-[26px] font-semibold text-text">{DONE_LINES[(rounds.current - 1 + DONE_LINES.length) % DONE_LINES.length]}</p>
           <p className="mt-2 text-[14.5px] text-text-2">You showed up and did the hard part — starting. Whatever you got done counts.</p>
+          {(minutes >= 45 || rounds.current >= 2) && (
+            <p className="mt-3 text-[13px] text-accent">You’ve been focused a while — maybe water, a stretch, or look away for a minute? 💧</p>
+          )}
           <div className="mt-6 flex items-center justify-center gap-3">
             {onComplete && (
               <button type="button" onClick={() => { onComplete(); onClose(); }} className="rounded-2xl bg-accent px-6 py-3 text-[14px] font-semibold text-on-accent transition hover:bg-accent-dim">

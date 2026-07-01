@@ -25,6 +25,7 @@ const PRIMARY: Item[] = [
 
 const ASSISTANT: Item[] = [
   { label: 'Train', href: '/train', icon: 'train' },
+  { label: 'Routines', href: '/routines', icon: 'routines' },
   { label: 'Activity', href: '/activity', icon: 'activity' },
   { label: 'Notetaker', href: '/notetaker', icon: 'notetaker' },
   { label: 'Automations', href: '/automations', icon: 'automations' },
@@ -56,6 +57,7 @@ function Icon({ name }: { name: string }) {
     case 'connections': return (<svg {...p}><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="6" r="2.5" /><circle cx="18" cy="18" r="2.5" /><path d="M8.2 11 16 7M8.2 13 16 17" /></svg>);
     case 'approvals': return (<svg {...p}><path d="M12 3 5 6v5c0 4 3 7 7 8 4-1 7-4 7-8V6z" /><path d="m9.5 12 1.8 1.8L15 10" /></svg>);
     case 'train': return (<svg {...p}><path d="M12 4 2 9l10 5 10-5z" /><path d="M6 11v4c0 1.5 2.7 3 6 3s6-1.5 6-3v-4" /></svg>);
+    case 'routines': return (<svg {...p}><path d="M4 6h4M4 12h4M4 18h4" /><path d="m10.5 5 1.3 1.3L14.5 4M10.5 11l1.3 1.3L14.5 10M10.5 17l1.3 1.3 2.7-2.6" /><path d="M18 6h2M18 12h2M18 18h2" /></svg>);
     default: return (<svg {...p}><circle cx="12" cy="12" r="3" /></svg>);
   }
 }

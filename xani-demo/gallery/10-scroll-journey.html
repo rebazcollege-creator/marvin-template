@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Xanî — scroll journey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   XANÎ — SCROLL JOURNEY.
+   One glowing particle cloud that MORPHS as you scroll:
+   Orb → Galaxy → the word XANÎ → a calm settling field.
+   Reliable technique only: THREE.Points + PointsMaterial +
+   additive glow sprite. No custom shaders, no transmission.
+   ============================================================ */
+*{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;}
+body{background:#0a0b10;color:#f2eee6;font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;}
+h1,h2{font-family:'Fraunces',Georgia,serif;font-weight:600;}
+.grotesk{font-family:'Space Grotesk',sans-serif;}
+
+#gl{position:fixed;inset:0;z-index:0;display:block;}
+#fallback{position:fixed;inset:0;display:grid;place-items:center;color:#8aa;z-index:0;font-family:'Space Grotesk';opacity:0;}
+.vig{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(120% 90% at 50% 40%,transparent 45%,rgba(4,5,8,.6));}
+
+/* progress rail */
+.prail{position:fixed;top:0;left:0;height:3px;z-index:40;background:linear-gradient(90deg,#8df7e6,#5aa9ff,#b088ff,#ff7a52);width:0;box-shadow:0 0 12px rgba(120,160,255,.6);}
+.dots{position:fixed;right:26px;top:50%;transform:translateY(-50%);z-index:40;display:flex;flex-direction:column;gap:14px;}
+.dots .d{width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.2);transition:.3s;cursor:pointer;}
+.dots .d.on{background:#8df7e6;box-shadow:0 0 12px #8df7e6;transform:scale(1.3);}
+
+/* fixed brand */
+.brand{position:fixed;top:22px;left:30px;z-index:40;display:flex;align-items:center;gap:10px;font-family:'Fraunces';font-weight:600;font-size:20px;}
+.brand .o{width:22px;height:22px;border-radius:50%;background:conic-gradient(from 200deg,#8df7e6,#5aa9ff,#b088ff,#ff7a52,#8df7e6);box-shadow:0 0 14px rgba(120,160,255,.6);}
+
+/* scroll sections — each 100vh, text pinned centered, fades by scroll */
+.sec{position:relative;z-index:10;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 24px;pointer-events:none;}
+.sec .eyebrow{font-family:'Space Grotesk';font-size:13px;letter-spacing:.32em;text-transform:uppercase;color:#8df7e6;margin-bottom:16px;}
+.sec h1{font-size:clamp(40px,7vw,84px);line-height:1;letter-spacing:-.02em;}
+.sec h1 em{font-style:italic;background:linear-gradient(120deg,#8df7e6,#b088ff 55%,#ff7a52);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.sec p{max-width:520px;margin-top:18px;font-size:17px;color:#aab0be;line-height:1.6;}
+.sec .fx{transition:opacity .5s ease, transform .5s ease;}
+/* the middle sections keep their text near an edge so the shape stays visible */
+.sec.top-anchor{justify-content:flex-end;padding-bottom:12vh;}
+.sec.bottom-anchor{justify-content:flex-start;padding-top:12vh;}
+.enterbtn{pointer-events:auto;margin-top:26px;background:linear-gradient(120deg,#8df7e6,#5aa9ff);color:#04120f;border:none;border-radius:13px;padding:14px 26px;font-family:'Inter';font-weight:700;font-size:14px;cursor:pointer;box-shadow:0 16px 34px -16px #5aa9ff;}
+.cue{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:40;font-family:'Space Grotesk';font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:#5a6272;animation:bob 2.4s ease-in-out infinite;}
+@keyframes bob{0%,100%{transform:translateX(-50%) translateY(0);}50%{transform:translateX(-50%) translateY(6px);}}
+@media (prefers-reduced-motion:reduce){.cue{animation:none;}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="fallback">WebGL unavailable — try a different browser.</div>
+<div class="vig"></div>
+<div class="prail" id="prail"></div>
+<div class="brand"><span class="o"></span>Xanî</div>
+<div class="dots" id="dots"></div>
+<div class="cue" id="cue">Scroll ↓</div>
+
+<!-- 4 scroll stages -->
+<section class="sec top-anchor" data-stage="0">
+  <div class="fx">
+    <div class="eyebrow">Personal OS · MARVIN</div>
+    <h1>Your mind,<br><em>externalised.</em></h1>
+    <p>It starts as one calm point of focus. Keep scrolling.</p>
+  </div>
+</section>
+
+<section class="sec" data-stage="1">
+  <div class="fx">
+    <div class="eyebrow">Everything you carry</div>
+    <h1>Your whole world,<br>in orbit.</h1>
+    <p>Inbox, calendar, people, projects — held in one place, circling a single intelligence.</p>
+  </div>
+</section>
+
+<section class="sec bottom-anchor" data-stage="2">
+  <div class="fx">
+    <div class="eyebrow">Chaos into clarity</div>
+    <p style="margin-top:0">Out of all that noise, one name pulls it together.</p>
+  </div>
+</section>
+
+<section class="sec" data-stage="3">
+  <div class="fx">
+    <div class="eyebrow">And it settles</div>
+    <h1>One next thing.<br>Always.</h1>
+    <p>The noise falls away. Xanî hands you exactly one thing to do — and holds the rest.</p>
+    <button class="enterbtn">Enter Xanî →</button>
+  </div>
+</section>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+const canvas=document.getElementById('gl');
+let renderer;
+try{ renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true,powerPreference:'high-performance'}); }
+catch(e){ document.getElementById('fallback').style.opacity='1'; }
+
+if(renderer){
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,0.1,100);
+  camera.position.set(0,0,6);
+  function size(){ renderer.setPixelRatio(Math.min(devicePixelRatio,2)); renderer.setSize(innerWidth,innerHeight); camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); }
+  size(); addEventListener('resize',()=>{ size(); buildText(); });
+
+  // glow sprite
+  function glow(){ const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');
+    const g=x.createRadialGradient(32,32,0,32,32,32);
+    g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.3,'rgba(255,255,255,.7)');g.addColorStop(.6,'rgba(255,255,255,.2)');g.addColorStop(1,'rgba(255,255,255,0)');
+    x.fillStyle=g;x.fillRect(0,0,64,64);return new THREE.CanvasTexture(c); }
+  const spr=glow();
+
+  const N=7000;
+  // aurora color per particle (fixed identity across all shapes)
+  const RAMP=[new THREE.Color('#8df7e6'),new THREE.Color('#5aa9ff'),new THREE.Color('#b088ff'),new THREE.Color('#ff7a52')];
+  function ramp(t){t=Math.max(0,Math.min(1,t));const f=t*(RAMP.length-1),i=Math.floor(f);const c=RAMP[i].clone();if(i<RAMP.length-1)c.lerp(RAMP[i+1],f-i);return c;}
+  const col=new Float32Array(N*3);
+  for(let i=0;i<N;i++){const c=ramp(i/N + (Math.random()-.5)*.12);col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b;}
+
+  // ---- target shapes (each Float32Array N*3) ----
+  const gold=Math.PI*(3-Math.sqrt(5));
+  function orb(){ const a=new Float32Array(N*3),R=1.75;
+    for(let i=0;i<N;i++){const y=1-(i/(N-1))*2,r=Math.sqrt(1-y*y),th=gold*i,j=.95+Math.random()*.1;
+      a[i*3]=Math.cos(th)*r*R*j;a[i*3+1]=y*R*j;a[i*3+2]=Math.sin(th)*r*R*j;} return a; }
+  function galaxy(){ const a=new Float32Array(N*3),arms=4,maxR=3.4,spin=2.4;
+    for(let i=0;i<N;i++){const r=Math.pow(Math.random(),1.7)*maxR;const br=(i%arms)/arms*Math.PI*2;
+      const ang=br+r*spin/maxR*2.2;const sc=(Math.random()-.5)*(0.12+r*0.18);
+      const x=Math.cos(ang)*r+(Math.random()-.5)*sc*3, z=Math.sin(ang)*r+(Math.random()-.5)*sc*3;
+      const yy=(Math.random()-.5)*(0.5-r*0.1);
+      // tilt the disc
+      const tilt=0.5; a[i*3]=x; a[i*3+1]=yy*Math.cos(tilt)-z*Math.sin(tilt); a[i*3+2]=yy*Math.sin(tilt)+z*Math.cos(tilt);} return a; }
+  let TEXT=new Float32Array(N*3);
+  function buildText(){ const cw=1024,ch=384;const c=document.createElement('canvas');c.width=cw;c.height=ch;const x=c.getContext('2d');
+    x.fillStyle='#000';x.fillRect(0,0,cw,ch);x.fillStyle='#fff';x.textAlign='center';x.textBaseline='middle';
+    x.font='bold 300px Arial';x.fillText('XANÎ',cw/2,ch/2+10);
+    const d=x.getImageData(0,0,cw,ch).data;const pts=[];
+    for(let py=0;py<ch;py+=3)for(let px=0;px<cw;px+=3){ if(d[(py*cw+px)*4]>128) pts.push([px,py]); }
+    const sX=6.4/cw, sY=6.4/cw; // uniform scale by width
+    for(let i=0;i<N;i++){ const p=pts.length?pts[Math.floor(Math.random()*pts.length)]:[cw/2,ch/2];
+      TEXT[i*3]=(p[0]-cw/2)*sX; TEXT[i*3+1]=-(p[1]-ch/2)*sY; TEXT[i*3+2]=(Math.random()-.5)*.25; } }
+  buildText();
+  function settle(){ const a=new Float32Array(N*3),R=2.6; // expanded calm shell + drift to edges
+    for(let i=0;i<N;i++){const y=1-(i/(N-1))*2,r=Math.sqrt(1-y*y),th=gold*i*1.7,rad=R*(0.85+Math.random()*0.4);
+      a[i*3]=Math.cos(th)*r*rad*1.5;a[i*3+1]=y*rad*0.8;a[i*3+2]=Math.sin(th)*r*rad;} return a; }
+
+  const STAGES=[orb(),galaxy(),TEXT,settle()];
+  // note: TEXT ref is same array buildText mutates → keep reference fresh
+  function stageArr(k){ return k===2?TEXT:STAGES[k]; }
+
+  const pos=new Float32Array(N*3); pos.set(STAGES[0]);
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+  const mat=new THREE.PointsMaterial({size:0.05,map:spr,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.95});
+  const points=new THREE.Points(geo,mat); scene.add(points);
+
+  // faint starfield backdrop
+  const SN=500,sp=new Float32Array(SN*3);
+  for(let i=0;i<SN;i++){sp[i*3]=(Math.random()-.5)*24;sp[i*3+1]=(Math.random()-.5)*16;sp[i*3+2]=(Math.random()-.5)*12-4;}
+  const sg=new THREE.BufferGeometry();sg.setAttribute('position',new THREE.BufferAttribute(sp,3));
+  scene.add(new THREE.Points(sg,new THREE.PointsMaterial({size:0.02,map:spr,color:0x9fb4d0,transparent:true,opacity:.45,blending:THREE.AdditiveBlending,depthWrite:false})));
+
+  // scroll + cursor state
+  let scroll=0,scrollT=0,mx=0,my=0,tx=0,ty=0;
+  function onScroll(){ const max=document.documentElement.scrollHeight-innerHeight; scrollT=max>0?scrollY/max:0; }
+  addEventListener('scroll',onScroll,{passive:true}); onScroll();
+  addEventListener('pointermove',e=>{tx=e.clientX/innerWidth-.5;ty=e.clientY/innerHeight-.5;});
+
+  // section fade + dots
+  const secs=[...document.querySelectorAll('.sec')];
+  const dotsWrap=document.getElementById('dots');
+  secs.forEach((s,i)=>{const d=document.createElement('div');d.className='d';d.onclick=()=>window.scrollTo({top:i*innerHeight,behavior:'smooth'});dotsWrap.appendChild(d);});
+  const dots=[...dotsWrap.children];
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function smooth(a,b,t){t=t*t*(3-2*t);return a+(b-a)*t;} // smoothstep lerp
+
+  const clock=new THREE.Clock();
+  function loop(){
+    const t=clock.getElapsedTime();
+    scroll+=(scrollT-scroll)*(reduce?1:0.08);
+    mx+=(tx-mx)*.05; my+=(ty-my)*.05;
+
+    // morph across stages
+    const K=STAGES.length, seg=scroll*(K-1); let i=Math.floor(seg); if(i>K-2)i=K-2; const f=seg-i;
+    const A=stageArr(i), B=stageArr(i+1); const p=geo.attributes.position.array;
+    const ff=f*f*(3-2*f);
+    const wob=reduce?0:1;
+    for(let k=0;k<N;k++){const x0=A[k*3],y0=A[k*3+1],z0=A[k*3+2],x1=B[k*3],y1=B[k*3+1],z1=B[k*3+2];
+      const sw=1+Math.sin(t*1.4+k)*0.006*wob;
+      p[k*3]=(x0+(x1-x0)*ff)*sw; p[k*3+1]=(y0+(y1-y0)*ff)*sw; p[k*3+2]=(z0+(z1-z0)*ff)*sw; }
+    geo.attributes.position.needsUpdate=true;
+
+    // rotation: gentle idle + scroll-linked + cursor parallax. Freeze spin while text (stage 2) is dominant so XANÎ stays readable.
+    const textFocus=Math.max(0,1-Math.abs(seg-2)); // 1 at stage 2
+    points.rotation.y=(t*0.05*(1-textFocus))+mx*0.5 + scroll*0.6*(1-textFocus);
+    points.rotation.x=my*0.35 + Math.sin(t*0.3)*0.03*(1-textFocus);
+
+    // ui: progress + dots + section fade
+    document.getElementById('prail').style.width=(scrollT*100)+'%';
+    const active=Math.round(scroll*(K-1));
+    dots.forEach((d,di)=>d.classList.toggle('on',di===active));
+    secs.forEach((s,si)=>{const fx=s.querySelector('.fx');const d=Math.abs(seg-si);const o=Math.max(0,1-d*1.5);fx.style.opacity=o;fx.style.transform=`translateY(${(1-o)*24}px)`;});
+    document.getElementById('cue').style.opacity=scrollT>0.03?0:0.9;
+
+    renderer.render(scene,camera);
+    requestAnimationFrame(loop);
+  }
+  loop();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Xanî — Spiral Galaxy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #0b0d12;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+  body {
+    background:
+      radial-gradient(ellipse 120% 90% at 50% 45%, #14171f 0%, #0b0d12 55%, #07080c 100%);
+    font-family: 'Inter', system-ui, sans-serif;
+    color: #fff;
+  }
+  #gl {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  #overlay {
+    position: fixed;
+    top: 22px;
+    left: 26px;
+    z-index: 10;
+    pointer-events: none;
+    user-select: none;
+  }
+  #overlay .brand {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 20px;
+    letter-spacing: 0.02em;
+    color: rgba(255,255,255,0.82);
+    line-height: 1;
+  }
+  #overlay .desc {
+    margin-top: 7px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 12.5px;
+    letter-spacing: 0.01em;
+    color: rgba(255,255,255,0.42);
+  }
+  #fallback {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 18px;
+    color: rgba(255,255,255,0.6);
+    letter-spacing: 0.04em;
+  }
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div id="overlay">
+    <div class="brand">Xanî</div>
+    <div class="desc">Spiral Galaxy — your world, in orbit.</div>
+  </div>
+  <div id="fallback">WebGL unavailable</div>
+
+  <script type="importmap">
+  { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+
+  try {
+    const canvas = document.getElementById('gl');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // ---- Renderer ----
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x000000, 0);
+
+    // ---- Scene & Camera ----
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(55, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 6.2, 12.5);
+    camera.lookAt(0, 0, 0);
+
+    // ---- Procedural radial-gradient glow sprite ----
+    function makeGlowTexture(size, inner, mid, outer) {
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      const g = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+      g.addColorStop(0.0, inner);
+      g.addColorStop(0.25, mid);
+      g.addColorStop(1.0, outer);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+      const tex = new THREE.CanvasTexture(c);
+      tex.needsUpdate = true;
+      return tex;
+    }
+
+    const starTex = makeGlowTexture(128,
+      'rgba(255,255,255,1)',
+      'rgba(255,255,255,0.35)',
+      'rgba(255,255,255,0)');
+
+    const coreTex = makeGlowTexture(256,
+      'rgba(255,252,240,1)',
+      'rgba(160,225,255,0.28)',
+      'rgba(120,180,255,0)');
+
+    // ---- Aurora palette (by radius) ----
+    const palette = [
+      new THREE.Color('#f2fffb'), // near-white teal core
+      new THREE.Color('#8df7e6'), // warm teal
+      new THREE.Color('#5aa9ff'), // blue
+      new THREE.Color('#b088ff'), // violet
+      new THREE.Color('#ff7a52'), // terracotta outer
+    ];
+    function paletteColor(t) {
+      t = Math.min(Math.max(t, 0), 1) * (palette.length - 1);
+      const i = Math.floor(t);
+      const f = t - i;
+      const a = palette[i];
+      const b = palette[Math.min(i + 1, palette.length - 1)];
+      return a.clone().lerp(b, f);
+    }
+
+    // ---- Galaxy geometry ----
+    const COUNT = 11000;
+    const BRANCHES = 4;
+    const MAX_R = 8.5;
+    const SPIN = 1.05;
+
+    const positions = new Float32Array(COUNT * 3);
+    const colors = new Float32Array(COUNT * 3);
+    const radii = new Float32Array(COUNT);        // per-particle radius (for differential rotation)
+    const baseAngle = new Float32Array(COUNT);     // base angular position
+
+    const tmp = new THREE.Color();
+    for (let i = 0; i < COUNT; i++) {
+      const i3 = i * 3;
+
+      // radius biased toward center for a dense core
+      const rand = Math.random();
+      const r = Math.pow(rand, 2.3) * MAX_R;
+      radii[i] = r;
+      const rNorm = r / MAX_R;
+
+      // assign to a spiral arm
+      const branch = (i % BRANCHES) / BRANCHES * Math.PI * 2;
+      const spiralAngle = branch + r * SPIN;
+
+      // scatter grows with radius (fuzzy arms)
+      const scatterMag = (0.12 + rNorm * 0.55);
+      const sx = (Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1)) * scatterMag;
+      const sz = (Math.pow(Math.random(), 3) * (Math.random() < 0.5 ? 1 : -1)) * scatterMag;
+
+      const angle = spiralAngle;
+      baseAngle[i] = angle;
+
+      const x = Math.cos(angle) * r + sx;
+      const z = Math.sin(angle) * r + sz;
+
+      // vertical thickness: thinner near center, gently flaring out
+      const thickness = (0.06 + rNorm * 0.35);
+      const y = (Math.pow(Math.random(), 2) * (Math.random() < 0.5 ? 1 : -1)) * thickness;
+
+      positions[i3]     = x;
+      positions[i3 + 1] = y;
+      positions[i3 + 2] = z;
+
+      // color by radius with slight random brightening near core
+      const col = paletteColor(rNorm);
+      const coreBoost = (1 - rNorm) * 0.55;
+      tmp.copy(col).lerp(new THREE.Color('#ffffff'), coreBoost * Math.random());
+      colors[i3]     = tmp.r;
+      colors[i3 + 1] = tmp.g;
+      colors[i3 + 2] = tmp.b;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 0.14,
+      map: starTex,
+      vertexColors: true,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true,
+    });
+
+    const points = new THREE.Points(geo, mat);
+
+    const galaxy = new THREE.Group();
+    galaxy.add(points);
+
+    // ---- Bright central core (large additive sprite) ----
+    const coreMat = new THREE.SpriteMaterial({
+      map: coreTex,
+      color: 0xffffff,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      opacity: 0.9,
+    });
+    const core = new THREE.Sprite(coreMat);
+    core.scale.set(4.2, 4.2, 1);
+    galaxy.add(core);
+
+    const coreMat2 = coreMat.clone();
+    coreMat2.opacity = 0.55;
+    const coreHalo = new THREE.Sprite(coreMat2);
+    coreHalo.scale.set(8.5, 8.5, 1);
+    galaxy.add(coreHalo);
+
+    // ---- Faint background starfield (depth) ----
+    const bgCount = 1400;
+    const bgPos = new Float32Array(bgCount * 3);
+    for (let i = 0; i < bgCount; i++) {
+      const i3 = i * 3;
+      const R = 30 + Math.random() * 55;
+      const th = Math.random() * Math.PI * 2;
+      const ph = Math.acos(2 * Math.random() - 1);
+      bgPos[i3]     = R * Math.sin(ph) * Math.cos(th);
+      bgPos[i3 + 1] = R * Math.sin(ph) * Math.sin(th);
+      bgPos[i3 + 2] = R * Math.cos(ph);
+    }
+    const bgGeo = new THREE.BufferGeometry();
+    bgGeo.setAttribute('position', new THREE.BufferAttribute(bgPos, 3));
+    const bgMat = new THREE.PointsMaterial({
+      size: 0.18,
+      map: starTex,
+      color: 0x9fb4d8,
+      transparent: true,
+      opacity: 0.5,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      sizeAttenuation: true,
+    });
+    const bgStars = new THREE.Points(bgGeo, bgMat);
+    scene.add(bgStars);
+
+    // pleasing initial tilt so the disc reads as 3D
+    galaxy.rotation.x = -0.62;
+    scene.add(galaxy);
+
+    // ---- Pointer parallax / tilt ----
+    const pointer = { x: 0, y: 0 };
+    const target = { x: 0, y: 0 };
+    window.addEventListener('pointermove', (e) => {
+      target.x = (e.clientX / window.innerWidth) * 2 - 1;
+      target.y = (e.clientY / window.innerHeight) * 2 - 1;
+    });
+    window.addEventListener('pointerleave', () => { target.x = 0; target.y = 0; });
+
+    // differential rotation: rebuild angles into position buffer
+    const posAttr = geo.getAttribute('position');
+    const posArr = posAttr.array;
+
+    // ---- Resize ----
+    function onResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+    window.addEventListener('resize', onResize);
+
+    // ---- Animate ----
+    const clock = new THREE.Clock();
+    const speed = reduceMotion ? 0 : 1;
+
+    function tick() {
+      const t = clock.getElapsedTime();
+
+      // differential rotation of the disc particles
+      if (speed > 0) {
+        for (let i = 0; i < COUNT; i++) {
+          const i3 = i * 3;
+          const r = radii[i];
+          // inner particles rotate faster
+          const omega = 0.10 + 0.55 / (r + 1.2);
+          const ang = baseAngle[i] + t * omega * speed;
+          const x0 = posArr[i3];
+          const z0 = posArr[i3 + 2];
+          // preserve the scatter offset by re-deriving from stored polar of the base ring
+          const rad = Math.sqrt(x0 * x0 + z0 * z0);
+          posArr[i3]     = Math.cos(ang) * rad;
+          posArr[i3 + 2] = Math.sin(ang) * rad;
+        }
+        posAttr.needsUpdate = true;
+      }
+
+      // pointer eased tilt of the whole galaxy plane
+      pointer.x += (target.x - pointer.x) * 0.045;
+      pointer.y += (target.y - pointer.y) * 0.045;
+
+      galaxy.rotation.x = -0.62 + pointer.y * 0.45;
+      galaxy.rotation.z = pointer.x * 0.35;
+      if (speed > 0) galaxy.rotation.y = t * 0.02;
+
+      // subtle camera parallax
+      camera.position.x = pointer.x * 1.6;
+      camera.position.y = 6.2 - pointer.y * 1.4;
+      camera.lookAt(0, 0, 0);
+
+      // gentle background drift
+      bgStars.rotation.y = t * 0.005 * speed;
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(tick);
+    }
+
+    // When reduced motion: bake a single differential-rotation snapshot so arms still look swept
+    if (reduceMotion) {
+      for (let i = 0; i < COUNT; i++) {
+        const i3 = i * 3;
+        const x0 = posArr[i3];
+        const z0 = posArr[i3 + 2];
+        const rad = Math.sqrt(x0 * x0 + z0 * z0);
+        const ang = baseAngle[i];
+        posArr[i3]     = Math.cos(ang) * rad;
+        posArr[i3 + 2] = Math.sin(ang) * rad;
+      }
+      posAttr.needsUpdate = true;
+    }
+
+    tick();
+  } catch (err) {
+    console.error(err);
+    document.getElementById('fallback').style.display = 'flex';
+    const c = document.getElementById('gl');
+    if (c) c.style.display = 'none';
+  }
+  </script>
+</body>
+</html>

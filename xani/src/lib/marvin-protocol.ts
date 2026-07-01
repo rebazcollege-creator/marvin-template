@@ -81,6 +81,27 @@ export interface InboxData {
     split?: 'important' | 'calendar' | 'news' | 'other';
   }[];
 }
+
+// ── MARVIN email triage (GET /triage/inbox) ───────────────────────
+/** act = a real person needs Rebaz to reply/decide/do; know = genuine info, no action;
+ *  ignore = marketing/ads/platform noise. Judged by content + intent, not just domain. */
+export type EmailVerdict = 'act' | 'know' | 'ignore';
+export interface TriagedEmail {
+  id: string;
+  account: string;
+  from: string;
+  subject: string;
+  snippet: string;
+  receivedAt: string;
+  verdict: EmailVerdict;
+  /** MARVIN's short reason for the verdict (≤ ~8 words). */
+  reason: string;
+}
+export interface InboxTriage {
+  connected: boolean;
+  triaged: TriagedEmail[];
+  error?: string;
+}
 export interface TrelloData {
   connected: boolean;
   /** `list` = the card's list name (Review/Planning/Video feed/Website feed …);

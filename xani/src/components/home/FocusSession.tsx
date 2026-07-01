@@ -98,8 +98,8 @@ export function FocusSession({
             <p className="font-display text-[22px] font-semibold leading-snug text-text">{task}</p>
             <p className="mt-2 text-[14px] text-text-2">
               {running
-                ? 'I’m right here. Notifications are held — just this, nothing else.'
-                : 'One thing, one timer. I’ll sit with you. Starting is the whole win.'}
+                ? 'Go do the thing — I’ll keep time here. Come back when it rings. Just this one.'
+                : 'One thing, one timer. Starting is the whole win.'}
             </p>
           </div>
 

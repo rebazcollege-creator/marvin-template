@@ -5,7 +5,8 @@ import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady } from '@/lib/storage';
 import { fetchBriefingData, peekData, PATHS } from '@/lib/marvin-data';
-import type { BriefingData } from '@/lib/marvin-protocol';
+import { fetchInboxTriage } from '@/lib/marvin-client';
+import type { BriefingData, TriagedEmail } from '@/lib/marvin-protocol';
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
 import { FocusSession } from '@/components/home/FocusSession';
@@ -85,6 +86,9 @@ export default function HomePage() {
   const [data, setData] = useState<BriefingData | null>(() => peekData<BriefingData>(PATHS.briefing));
   const [capture, setCapture] = useState('');
   const [focus, setFocus] = useState<{ task: string; loopId?: string } | null>(null);
+  const [inboxActs, setInboxActs] = useState<TriagedEmail[] | null>(null);
+  const [inboxKnow, setInboxKnow] = useState(0);
+  const [inboxFiled, setInboxFiled] = useState(0);
   const now = useMemo(() => new Date(), []);
 
   const reloadLoops = useCallback(() => setLoops(activeLoops()), []);
@@ -96,6 +100,12 @@ export default function HomePage() {
       void syncOpenLoops().then(reloadLoops); // pull live Trello commitments into Open Loops
     });
     fetchBriefingData().then((d) => d && setData(d));
+    fetchInboxTriage().then((t) => {
+      if (!t) return;
+      setInboxActs(t.triaged.filter((m) => m.verdict === 'act'));
+      setInboxKnow(t.triaged.filter((m) => m.verdict === 'know').length);
+      setInboxFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
+    });
     window.addEventListener('xani:loops-changed', reloadLoops);
     return () => window.removeEventListener('xani:loops-changed', reloadLoops);
   }, [reloadLoops]);
@@ -124,6 +134,12 @@ export default function HomePage() {
     captureLoop({ source: 'manual', task: t });
     setCapture('');
   };
+
+  const trackEmail = (m: TriagedEmail) => {
+    captureLoop({ source: 'email', channel: `Email · ${m.account}`, from: m.from, task: m.subject });
+    setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
+  };
+  const dismissEmail = (m: TriagedEmail) => setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
 
   return (
     <div className="mx-auto max-w-2xl px-8 pb-24 pt-10">
@@ -182,6 +198,38 @@ export default function HomePage() {
             />
             <button type="button" onClick={onCapture} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">Hold it</button>
           </div>
+
+          {/* from your inbox — MARVIN triage: only what needs you */}
+          {inboxActs && inboxActs.length > 0 && (
+            <section className="mt-10">
+              <div className="mb-4 flex items-baseline gap-3 px-1">
+                <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted">From your inbox — needs you</h2>
+                <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-2">{inboxActs.length}</span>
+              </div>
+              {inboxActs.map((m) => (
+                <div key={m.id} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span className="text-[11px] font-bold uppercase tracking-[0.05em] text-amber">Email · {m.account}</span>
+                    <span className="text-[13px] text-text-2">{m.from}</span>
+                  </div>
+                  <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.subject}</p>
+                  {m.reason && <p className="mt-1 text-[12.5px] text-muted">{m.reason}</p>}
+                  <div className="mt-4 flex flex-wrap gap-2.5">
+                    <button type="button" onClick={() => trackEmail(m)} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">+ Track it</button>
+                    <button type="button" onClick={() => dismissEmail(m)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Not for me</button>
+                  </div>
+                </div>
+              ))}
+              {(inboxKnow > 0 || inboxFiled > 0) && (
+                <p className="mt-4 px-1 text-[12.5px] text-muted">
+                  {inboxKnow > 0 && `${inboxKnow} good to know`}
+                  {inboxKnow > 0 && inboxFiled > 0 && ' · '}
+                  {inboxFiled > 0 && `${inboxFiled} filed away as noise`}
+                  .
+                </p>
+              )}
+            </section>
+          )}
 
           {/* the rest of the open loops */}
           {rest.length > 0 && (

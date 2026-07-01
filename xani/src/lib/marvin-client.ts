@@ -3,6 +3,7 @@ import type {
   ActResult,
   ChatMessage,
   ChatRequest,
+  InboxTriage,
   ProposedMemory,
   StreamEvent,
 } from '@/lib/marvin-protocol';
@@ -181,6 +182,21 @@ export async function getCredStatus(): Promise<Record<string, boolean> | null> {
     const resp = await fetch(`${SIDECAR_URL}/creds/status`);
     if (!resp.ok) return null;
     return (await resp.json()) as Record<string, boolean>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * MARVIN email triage — the runtime reads the live inbox and classifies each message
+ * as act / know / ignore (with a short reason). Returns null when the runtime is
+ * unreachable so the UI can show an honest "start the runtime" state.
+ */
+export async function fetchInboxTriage(): Promise<InboxTriage | null> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/triage/inbox`, { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as InboxTriage;
   } catch {
     return null;
   }

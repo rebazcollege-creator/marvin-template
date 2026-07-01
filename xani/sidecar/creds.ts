@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { bumpInboxCache } from './connectors.ts';
+import { bumpInboxCache, bumpSlackCache } from './connectors.ts';
 
 /**
  * Dev-side credential store for keys entered in the app's Connections screen.
@@ -69,6 +69,7 @@ export function setCred(name: string, value: string): boolean {
   process.env[name] = value;
   persist();
   bumpInboxCache(); // a new credential invalidates any cached inbox
+  bumpSlackCache();
   return true;
 }
 
@@ -79,6 +80,7 @@ export function clearCred(name: string): boolean {
   delete process.env[name];
   persist();
   bumpInboxCache();
+  bumpSlackCache();
   return true;
 }
 

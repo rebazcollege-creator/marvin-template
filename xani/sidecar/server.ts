@@ -147,7 +147,7 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   // Prioritise DMs & group DMs (direct asks), then unread channels. Cap hard for rate safety.
   const dms = slack.channels.filter((c) => c.kind === 'dm' || c.kind === 'group');
   const unread = slack.channels.filter((c) => c.kind === 'channel' && c.hasUnread);
-  const scan = [...dms, ...unread].slice(0, 12);
+  const scan = [...dms, ...unread].slice(0, 8); // bound conversations.history — it's the strictest Slack tier
 
   const cache = (data: SlackTriage) => { slackTriageCache = { at: Date.now(), key: learnKey, data }; return data; };
   if (scan.length === 0) return cache({ connected: true, triaged: [] });

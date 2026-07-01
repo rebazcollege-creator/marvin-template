@@ -580,7 +580,25 @@ async function slackNames(role: string, client: WebClient): Promise<Map<string, 
  * user's last_read + unread_count_display. A bot token has no read state, so
  * unread is reported as 0/false (we never fake it).
  */
+// Cache the sidebar read — Home, the Slack page, and the 60s watcher all call getSlack;
+// without this they each re-run the conversations.info fan-out and trip Slack's rate limit.
+let slackDataCache: { at: number; data: SlackData } | null = null;
+let slackInflight: Promise<SlackData> | null = null;
+const SLACK_TTL_MS = 90_000;
+/** Only enrich this many conversations per workspace with conversations.info (unread/preview).
+ *  Bounded + pooled so we never burst past Slack's Tier-3 limit. DMs are prioritised. */
+const SLACK_INFO_CAP = 18;
+export function bumpSlackCache(): void { slackDataCache = null; }
+
 export async function getSlack(): Promise<SlackData> {
+  if (slackDataCache && Date.now() - slackDataCache.at < SLACK_TTL_MS) return slackDataCache.data;
+  // Dedupe concurrent callers (Home + Slack page + the 60s watcher) — one read, not three.
+  if (slackInflight) return slackInflight;
+  slackInflight = computeSlack();
+  try { return await slackInflight; } finally { slackInflight = null; }
+}
+
+async function computeSlack(): Promise<SlackData> {
   const active = SLACK_WORKSPACES.filter((w) => slackReadToken(w));
   if (active.length === 0) return { connected: false, workspaces: [], channels: [], messages: [] };
 
@@ -604,16 +622,25 @@ export async function getSlack(): Promise<SlackData> {
         const list = await client.conversations.list({ types, exclude_archived: true, limit: 1000 });
         const convos = (list.channels ?? []).filter((c) => c.is_member || c.is_im || c.is_mpim).slice(0, MAX_SLACK_CONVOS);
 
-        await Promise.all(
-          convos.map(async (c) => {
-            if (!c.id) return;
-            let info: typeof c = c;
-            try {
-              const r = await client.conversations.info({ channel: c.id });
-              if (r.channel) info = r.channel as typeof c;
-            } catch {
-              /* keep the list entry */
-            }
+        // conversations.info is rate-limited (Tier 3). Only enrich a bounded, DM-first
+        // subset with unread/preview, using a small pool — the rest still list, just
+        // without a preview/unread badge. This is what stops the 429 storm.
+        const rank = (c: typeof convos[number]) => (c.is_im ? 3 : c.is_mpim ? 2 : c.is_member ? 1 : 0);
+        const enrich = [...convos].sort((a, b) => rank(b) - rank(a)).slice(0, SLACK_INFO_CAP);
+        const infoById = new Map<string, typeof convos[number]>();
+        await mapPool(enrich, 4, async (c) => {
+          if (!c.id) return;
+          try {
+            const r = await client.conversations.info({ channel: c.id });
+            if (r.channel) infoById.set(c.id, r.channel as typeof convos[number]);
+          } catch {
+            /* keep the list entry */
+          }
+        });
+
+        for (const c of convos) {
+            if (!c.id) continue;
+            const info: typeof c = infoById.get(c.id) ?? c;
             const lastRead = (info as { last_read?: string }).last_read;
             const latest = (info as { latest?: { text?: string; user?: string; ts?: string; reactions?: { name?: string; count?: number }[]; reply_count?: number } }).latest;
             const unreadCount = typeof (info as { unread_count_display?: number }).unread_count_display === 'number'
@@ -651,8 +678,7 @@ export async function getSlack(): Promise<SlackData> {
                 replies: latest.reply_count || undefined,
               });
             }
-          }),
-        );
+        }
       } catch (e) {
         wsRec.error = (e as Error).message;
         topErrs.push(`${w.name}: ${(e as Error).message}`);
@@ -662,13 +688,16 @@ export async function getSlack(): Promise<SlackData> {
 
   // Unread first, then alphabetical; DMs and channels mixed (the page splits them).
   channels.sort((a, b) => Number(b.hasUnread) - Number(a.hasUnread) || a.name.localeCompare(b.name));
-  return {
+  const data: SlackData = {
     connected: true,
     workspaces,
     channels,
     messages,
     error: channels.length === 0 && topErrs.length ? topErrs.join(' · ') : undefined,
   };
+  // Only cache a real result — don't pin a transient all-workspaces-errored read.
+  if (channels.length > 0 || messages.length > 0) slackDataCache = { at: Date.now(), data };
+  return data;
 }
 
 /**

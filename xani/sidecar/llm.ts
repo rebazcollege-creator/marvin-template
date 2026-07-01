@@ -14,7 +14,9 @@
  */
 
 import { spawn, spawnSync } from 'node:child_process';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
+import { join } from 'node:path';
+import { existsSync } from 'node:fs';
 
 const GEMINI_KEY = (): string => process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = (): string => process.env.GEMINI_MODEL || 'gemini-2.0-flash';
@@ -26,34 +28,69 @@ export function usingGemini(): boolean {
 
 // ---- Claude Code CLI provider ------------------------------------------------
 
-const CLAUDE_BIN = (): string => process.env.XANI_CLAUDE_BIN || 'claude';
-/** Forced on when the user flips "Run AI through Claude Code" (Settings) or sets the env. */
-function claudeForced(): boolean {
-  const v = (process.env.XANI_USE_CLAUDE_CLI || '').toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+/** Standard places the `claude` binary lands, so we don't depend on the sidecar's PATH
+ *  (npm-spawned processes often lack ~/.local/bin, Homebrew, etc.). */
+function claudeCandidates(): string[] {
+  const home = homedir();
+  return [
+    process.env.XANI_CLAUDE_BIN || '',
+    'claude', // whatever's on PATH
+    join(home, '.local/bin/claude'), // native installer (claude.ai/install.sh)
+    join(home, '.claude/local/claude'),
+    '/opt/homebrew/bin/claude', // Apple-silicon Homebrew
+    '/usr/local/bin/claude', // Intel Homebrew / npm -g
+    join(home, '.npm-global/bin/claude'),
+    join(home, '.bun/bin/claude'),
+  ].filter(Boolean);
 }
 
-let cliAvail: boolean | null = null;
-/** Is the `claude` binary on PATH? Probed once (cached). */
-export function claudeCliAvailable(): boolean {
-  if (cliAvail !== null) return cliAvail;
-  try {
-    const r = spawnSync(CLAUDE_BIN(), ['--version'], { stdio: 'ignore', timeout: 8000 });
-    cliAvail = r.status === 0;
-  } catch {
-    cliAvail = false;
+let cliBin: string | null | undefined; // undefined = not probed, null = not found
+/** Find a working `claude` binary once (cached). Tries PATH then the standard install dirs. */
+function resolveClaudeBin(): string | null {
+  if (cliBin !== undefined) return cliBin;
+  for (const cand of claudeCandidates()) {
+    // An absolute path must exist on disk; a bare "claude" is resolved via PATH by spawnSync.
+    if (cand.includes('/') && !existsSync(cand)) continue;
+    try {
+      const r = spawnSync(cand, ['--version'], { stdio: 'ignore', timeout: 8000 });
+      if (r.status === 0) {
+        cliBin = cand;
+        return cliBin;
+      }
+    } catch {
+      /* try the next candidate */
+    }
   }
-  return cliAvail;
+  cliBin = null;
+  return cliBin;
+}
+
+const CLAUDE_BIN = (): string => resolveClaudeBin() ?? 'claude';
+
+/** Explicit opt-OUT: set XANI_USE_CLAUDE_CLI=0/false to stop preferring the CLI. */
+function claudeDisabled(): boolean {
+  const v = (process.env.XANI_USE_CLAUDE_CLI ?? '').toLowerCase();
+  return v === '0' || v === 'false' || v === 'no' || v === 'off';
+}
+
+/** Is a usable `claude` binary present? Probed once (cached). */
+export function claudeCliAvailable(): boolean {
+  return resolveClaudeBin() !== null;
 }
 
 /**
- * Decide which backend to use, given whether an Anthropic client exists. Precedence:
- * forced-CLI (explicit user choice) → Gemini key → Anthropic key → CLI as an automatic
- * fallback when nothing else is set → none.
+ * Decide which backend to use. When the logged-in `claude` CLI is installed it is the
+ * default (free, uses the Claude subscription, no API key) — set XANI_USE_CLAUDE_CLI=0
+ * to opt out, or XANI_AI_PROVIDER=gemini|anthropic|cli to force one. Otherwise fall back
+ * to a Gemini key, then an Anthropic key.
  */
 export function resolveProvider(hasAnthropic: boolean): 'cli' | 'gemini' | 'anthropic' | 'none' {
+  const forced = (process.env.XANI_AI_PROVIDER || '').toLowerCase();
   const cli = claudeCliAvailable();
-  if (claudeForced() && cli) return 'cli';
+  if (forced === 'cli') return cli ? 'cli' : 'none';
+  if (forced === 'gemini') return usingGemini() ? 'gemini' : 'none';
+  if (forced === 'anthropic') return hasAnthropic ? 'anthropic' : 'none';
+  if (cli && !claudeDisabled()) return 'cli'; // logged-in CLI is the default when present
   if (usingGemini()) return 'gemini';
   if (hasAnthropic) return 'anthropic';
   if (cli) return 'cli';

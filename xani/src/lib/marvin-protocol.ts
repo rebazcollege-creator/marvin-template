@@ -133,6 +133,10 @@ export interface SlackData {
     hasUnread: boolean;
     lastTs?: string;
     preview?: string;
+    /** DM only: the other person's profile photo URL (real Slack avatar). */
+    avatar?: string;
+    /** DM only: the other person's Slack user id. */
+    userId?: string;
   }[];
   /** Latest message per conversation (cheap, no throttled calls). Full history is on-demand. */
   messages: {
@@ -141,6 +145,8 @@ export interface SlackData {
     channel: string;
     user: string;
     userId?: string;
+    /** Author's profile photo URL (real Slack avatar), for the message list. */
+    avatar?: string;
     text: string;
     ts: string;
     emergency: boolean;

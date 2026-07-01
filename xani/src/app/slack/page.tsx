@@ -35,6 +35,35 @@ function fmtTs(ts: string): string {
   return d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 }
 
+/** Real Slack-style avatar: the person's photo when they have one, else coloured initials —
+ *  exactly like the real client. Falls back to initials if the image fails to load. */
+function Avatar({ name, url, size = 36, group }: { name: string; url?: string; size?: number; group?: boolean }) {
+  const [err, setErr] = useState(false);
+  const radius = Math.round(size * 0.26);
+  if (url && !err) {
+    return (
+      <img
+        src={url}
+        alt={name}
+        width={size}
+        height={size}
+        referrerPolicy="no-referrer"
+        onError={() => setErr(true)}
+        className="flex-none object-cover"
+        style={{ width: size, height: size, borderRadius: radius }}
+      />
+    );
+  }
+  return (
+    <span
+      className="grid flex-none place-items-center font-bold text-on-accent"
+      style={{ width: size, height: size, borderRadius: radius, background: colorFor(name), fontSize: Math.round(size * 0.36) }}
+    >
+      {group ? '👥' : initials(name)}
+    </span>
+  );
+}
+
 export default function SlackPage() {
   const { data, state, refresh, refreshing } = useLiveData<SlackData>(PATHS.slack, fetchSlack);
 
@@ -55,16 +84,29 @@ export default function SlackPage() {
 
   const activeWs = ws ?? workspaces[0]?.role ?? null;
   const activeWsRec = workspaces.find((w) => w.role === activeWs) ?? null;
+  const [showAllDms, setShowAllDms] = useState(false);
   const wsChannels = useMemo(() => allChannels.filter((c) => c.workspace === activeWs && c.kind === 'channel'), [allChannels, activeWs]);
   const wsGroups = useMemo(() => allChannels.filter((c) => c.workspace === activeWs && c.kind === 'group'), [allChannels, activeWs]);
   const wsDms = useMemo(() => allChannels.filter((c) => c.workspace === activeWs && c.kind === 'dm'), [allChannels, activeWs]);
-  const sidebarConvos = useMemo(() => [...wsChannels, ...wsGroups], [wsChannels, wsGroups]);
+  const sidebarConvos = wsChannels; // Channels section is channels only now
+  // DMs + group DMs together, active-first — so the pile of stale mpdm groups sinks to the
+  // bottom (or hides) instead of flooding the sidebar the way it did before.
+  const dmConvos = useMemo(() => {
+    return [...wsGroups, ...wsDms].sort(
+      (a, b) =>
+        Number(b.hasUnread) - Number(a.hasUnread) ||
+        Number(b.lastTs || 0) - Number(a.lastTs || 0) ||
+        a.name.localeCompare(b.name),
+    );
+  }, [wsGroups, wsDms]);
+  const DM_CAP = 16;
+  const shownDms = showAllDms ? dmConvos : dmConvos.slice(0, DM_CAP);
 
   const activeChan: Chan | null = allChannels.find((c) => c.workspace === activeWs && c.id === chId) ?? null;
 
   // Default workspace's first conversation; reset channel when workspace changes.
   useEffect(() => { setChId(null); }, [activeWs]);
-  const effectiveChId = chId ?? sidebarConvos[0]?.id ?? wsDms[0]?.id ?? null;
+  const effectiveChId = chId ?? sidebarConvos[0]?.id ?? dmConvos[0]?.id ?? null;
 
   const loadHistory = useCallback(async (workspace: string, channel: string) => {
     setHist({ messages: [], loading: true, loadingMore: false });
@@ -231,8 +273,13 @@ export default function SlackPage() {
           </a>
 
           <div className="px-2.5 pb-1 pt-3.5 text-[13px] font-semibold text-muted">Direct messages</div>
-          {wsDms.map((c) => <ConvoRow key={c.id} c={c} active={c.id === effectiveChId} dm onClick={() => setChId(c.id)} />)}
-          {wsDms.length === 0 && (
+          {shownDms.map((c) => <ConvoRow key={c.id} c={c} active={c.id === effectiveChId} onClick={() => setChId(c.id)} />)}
+          {dmConvos.length > DM_CAP && (
+            <button type="button" onClick={() => setShowAllDms((v) => !v)} className="mt-0.5 w-full rounded-[7px] px-2.5 py-1.5 text-left text-[12.5px] font-medium text-muted transition hover:bg-hover">
+              {showAllDms ? 'Show fewer' : `Show ${dmConvos.length - DM_CAP} more…`}
+            </button>
+          )}
+          {dmConvos.length === 0 && (
             <div className="px-2.5 py-2 text-[12px] leading-snug text-muted">
               {activeWsRec?.tokenKind === 'user' ? 'No direct messages.' : 'DMs need a user token (xoxp-).'}
             </div>
@@ -275,7 +322,6 @@ export default function SlackPage() {
 
           {hist.messages.map((m, i) => {
             const id = `${m.channelId}:${m.ts}:${i}`;
-            const col = colorFor(m.user);
             return (
               <div
                 key={id}
@@ -284,7 +330,7 @@ export default function SlackPage() {
                 className="relative flex gap-2.5 px-5 py-1.5"
                 style={{ background: m.emergency ? 'var(--accent-soft)' : 'transparent', boxShadow: m.emergency ? 'inset 4px 0 0 #C0613A' : 'none' }}
               >
-                <span className="grid h-9 w-9 flex-none place-items-center rounded-[9px] text-[13px] font-bold text-on-accent" style={{ background: col }}>{initials(m.user)}</span>
+                <Avatar name={m.user} url={m.avatar} size={36} />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-[14px] font-bold text-text">{m.user}</span>
@@ -375,19 +421,21 @@ export default function SlackPage() {
   );
 }
 
-function ConvoRow({ c, active, dm, onClick }: { c: Chan; active: boolean; dm?: boolean; onClick: () => void }) {
+function ConvoRow({ c, active, onClick }: { c: Chan; active: boolean; onClick: () => void }) {
   const strong = c.hasUnread;
+  const isDM = c.kind === 'dm';
+  const isGroup = c.kind === 'group';
   return (
     <button
       type="button"
       onClick={onClick}
-      className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-left transition"
+      className="flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-1 text-left transition"
       style={{ background: active ? 'var(--accent-soft)' : 'transparent' }}
     >
-      {dm ? (
-        <span className="grid h-5 w-5 flex-none place-items-center rounded-[6px] text-[10px] font-bold text-on-accent" style={{ background: colorFor(c.name) }}>{initials(c.name)}</span>
+      {isDM || isGroup ? (
+        <Avatar name={c.name} url={c.avatar} size={20} group={isGroup} />
       ) : (
-        <span className="text-[15px] leading-none" style={{ color: active || strong ? 'var(--text)' : 'var(--muted)' }}>{c.kind === 'group' ? '⌗' : '#'}</span>
+        <span className="grid h-5 w-5 flex-none place-items-center text-[15px] leading-none" style={{ color: active || strong ? 'var(--text)' : 'var(--muted)' }}>#</span>
       )}
       <span className="flex-1 truncate text-[14px]" style={{ color: active || strong ? 'var(--text)' : 'var(--text-2)', fontWeight: strong ? 700 : active ? 600 : 400 }}>{c.name}</span>
       {c.unread > 0 ? (

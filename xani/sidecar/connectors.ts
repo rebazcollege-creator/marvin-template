@@ -554,27 +554,55 @@ function resolveMentions(text: string, names: Map<string, string>): string {
   return text.replace(/<@([A-Z0-9]+)>/g, (m, id) => (names.has(id) ? `<@${id}|${names.get(id)}>` : m));
 }
 
-// Cache the user-id → display-name map per workspace (users.list is heavy and
-// shouldn't run on every history fetch). 5-minute TTL.
-const slackNamesCache = new Map<string, { at: number; map: Map<string, string> }>();
+// Cache the user directory per workspace (users.list is heavy — shouldn't run on every
+// history fetch). 5-minute TTL. We keep: id→display name, id→avatar URL (real photo when the
+// user has one; Slack still serves a default coloured-initials image otherwise), and
+// username→id so group-DM names ("mpdm-alice--bob--carol-1") can be resolved to people.
+type SlackDir = { map: Map<string, string>; images: Map<string, string>; byUser: Map<string, string> };
+const slackNamesCache = new Map<string, { at: number; dir: SlackDir }>();
+function slackDir(role: string): SlackDir {
+  return slackNamesCache.get(role)?.dir ?? { map: new Map(), images: new Map(), byUser: new Map() };
+}
 async function slackNames(role: string, client: WebClient): Promise<Map<string, string>> {
   const cached = slackNamesCache.get(role);
-  if (cached && Date.now() - cached.at < 300_000) return cached.map;
+  if (cached && Date.now() - cached.at < 300_000) return cached.dir.map;
   const map = new Map<string, string>();
+  const images = new Map<string, string>();
+  const byUser = new Map<string, string>();
   try {
     let cursor: string | undefined;
     do {
       const ul = await client.users.list({ limit: 200, ...(cursor ? { cursor } : {}) });
       for (const u of ul.members ?? []) {
-        if (u.id) map.set(u.id, u.profile?.display_name || u.real_name || u.name || u.id);
+        if (!u.id) continue;
+        map.set(u.id, u.profile?.display_name || u.real_name || u.name || u.id);
+        const img = u.profile?.image_72 || u.profile?.image_48 || u.profile?.image_192 || '';
+        if (img) images.set(u.id, img);
+        if (u.name) byUser.set(u.name, u.id);
       }
       cursor = ul.response_metadata?.next_cursor || undefined;
     } while (cursor);
   } catch {
     /* users:read may be absent — fall back to ids */
   }
-  slackNamesCache.set(role, { at: Date.now(), map });
+  slackNamesCache.set(role, { at: Date.now(), dir: { map, images, byUser } });
   return map;
+}
+
+/** Human name for a group DM ("mpdm-alice--bob--carol-1") → "Alice, Bob, Carol" (minus you). */
+function mpimDisplayName(rawName: string, role: string, selfId?: string): string {
+  const m = /^mpdm-(.+?)-1$/.exec(rawName);
+  if (!m) return rawName;
+  const dir = slackDir(role);
+  const names = m[1]
+    .split('--')
+    .map((uname) => {
+      const id = dir.byUser.get(uname);
+      if (id && id === selfId) return null; // drop yourself
+      return (id && dir.map.get(id)) || uname;
+    })
+    .filter(Boolean) as string[];
+  return names.length ? names.join(', ') : rawName;
 }
 
 /**
@@ -664,9 +692,14 @@ async function computeSlack(): Promise<SlackData> {
             const latestTs = latest?.ts;
             const hasUnread = unreadCount > 0 || Boolean(lastRead && latestTs && Number(latestTs) > Number(lastRead));
             const ckind: SlackData['channels'][number]['kind'] = c.is_im ? 'dm' : c.is_mpim ? 'group' : 'channel';
+            const dir = slackDir(w.role);
             const name = c.is_im
               ? (c.user && names.get(c.user)) || 'direct message'
-              : c.name || (c.is_mpim ? 'group message' : 'channel');
+              : c.is_mpim
+                ? mpimDisplayName(c.name || '', w.role, wsRec.selfId)
+                : c.name || 'channel';
+            // For a DM, the avatar is the other person's photo; group DMs get no single photo.
+            const avatar = c.is_im && c.user ? dir.images.get(c.user) : undefined;
 
             channels.push({
               workspace: w.role,
@@ -678,6 +711,8 @@ async function computeSlack(): Promise<SlackData> {
               hasUnread,
               lastTs: latestTs,
               preview: latest?.text || undefined,
+              avatar,
+              userId: c.is_im ? c.user : undefined,
             });
             if (latest?.text) {
               messages.push({
@@ -686,6 +721,7 @@ async function computeSlack(): Promise<SlackData> {
                 channel: name,
                 user: (latest.user && names.get(latest.user)) || latest.user || 'unknown',
                 userId: latest.user,
+                avatar: latest.user ? slackDir(w.role).images.get(latest.user) : undefined,
                 text: resolveMentions(latest.text, names),
                 ts: latest.ts || '',
                 emergency: EMERGENCY_RE.test(latest.text),
@@ -729,6 +765,7 @@ export async function getSlackHistory(p: { workspace: string; channel: string; c
   try {
     const client = new WebClient(token, SLACK_WC_OPTS);
     const names = await slackNames(w.role, client);
+    const images = slackDir(w.role).images;
     const res = await client.conversations.history({
       channel: p.channel,
       limit: p.limit ?? 50,
@@ -742,6 +779,7 @@ export async function getSlackHistory(p: { workspace: string; channel: string; c
         channel: '',
         user: (m.user && names.get(m.user)) || m.user || m.username || 'unknown',
         userId: m.user,
+        avatar: m.user ? images.get(m.user) : undefined,
         text: resolveMentions(m.text ?? '', names),
         ts: m.ts ?? '',
         emergency: EMERGENCY_RE.test(m.text ?? ''),

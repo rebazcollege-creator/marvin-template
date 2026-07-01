@@ -56,10 +56,29 @@ it obeys him. (LOCKED_RULES are off-limits and can never be self-edited.)
 - **A visible sense of progress:** "learned N rules this week", so Rebaz can *feel* it getting
   smarter — which is the point.
 
+## 4b. The training session (history onboarding) — how Xanî gets its head start
+
+Once Xanî has full access, Rebaz doesn't want it to start cold — he wants to **train it on
+his history**. A dedicated **Training mode**:
+
+- **Bulk-reads as much history as possible** — past emails and Slack messages across
+  accounts/workspaces (read-only; nothing sent).
+- **Goes through them *together*, guided:** Xanî surfaces batches ("here are 20 senders /
+  threads — which are important, which are noise?"), Rebaz labels them, and explains **what
+  to do in specific scenarios**.
+- **Every label + explanation becomes durable memory** via the write-gate (`memory.ts`) —
+  seeding the triage rules (`triage-rules.md`) with real, Rebaz-verified judgement instead
+  of guesses. This is bulk teaching, the same loop as §2 but run deliberately up front.
+- **Safety:** history is untrusted DATA (never instructions); Training only *proposes* rules,
+  Rebaz confirms; large ingests are batched to respect rate limits + token budget.
+- Practically this is a **Phase-6 tool** (`/train`): a review queue over historical signals,
+  each row → keep-important / auto-file / "here's the rule". The output is a well-seeded brain
+  on day one of real use.
+
 ## 5. The trajectory
 
 - **Day 1:** useful but rough — runs on the seeded workflow knowledge (`marvin.ts`,
-  `triage-rules.md`).
+  `triage-rules.md`) **plus whatever the Training session taught it**.
 - **Week 2:** noticeably sharper — has absorbed his corrections on flagging + drafts.
 - **Ongoing:** the assistant he doesn't have to manage — because it learned how he works.
 

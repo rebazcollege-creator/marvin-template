@@ -59,14 +59,19 @@ Flag cards to Rebaz by list:
 | **Review** | Flag **all** cards. |
 | **Planning** | Flag **all** cards. |
 | **Video feed** | Flag **all** cards. |
-| **Website feed** | Flag **only** cards marked **Published** or **Ready to Publish**. |
+| **Website feed** | Flag **only** cards whose **status field** = **Published** or **Ready to Publish**. |
+
+**"Published" / "Ready to Publish" is a card STATUS FIELD** (confirmed) — read the card's
+status field, not a label or list. The connector fetches that field per card on the
+Website feed list and flags only those two values.
 
 Context: cards auto-push from the Central Workflow Board → Social Media board when marked
-"Ready to Publish" (Rebaz's existing automation — surface it, don't fight it).
+"Ready to Publish" (Rebaz's existing automation — surface it, don't fight it). The Amargi
+Social Media Slack channel announces what's published/scheduled, and each announcement maps
+to its card here — Xanî links the two (see §2).
 
-> Confirm exact list names in Trello so the connector maps them precisely (e.g. is it
-> "Website feed" or "Website"? "Video feed" or "Video"?). "Published / Ready to Publish"
-> — is that a **label**, a **list**, or a **custom field / checklist** on the card?
+> Still confirm the exact list *names* so the connector maps them precisely (e.g. "Website
+> feed" vs "Website", "Video feed" vs "Video").
 
 ## 4. Cross-source contextualisation (applies to all of the above)
 
@@ -119,7 +124,7 @@ but **when it doesn't fully understand the task, it does NOT guess.**
   `self-development.md`).
 
 ## Open confirmations
-1. Trello: exact list names + whether "Published/Ready to Publish" is a label/list/field.
+1. Trello: exact list *names* (resolved: "Published / Ready to Publish" is a card **status field**).
 2. Email: any senders that are the *exception* — automated but must always flag (e.g. a
    specific alerting system)?
 3. Slack: any channels that are always-noise (never surface) or always-flag?

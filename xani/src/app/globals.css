@@ -2,24 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Design tokens (light) ── */
+/* ── Design tokens (light) — IDENTITY: Quiet Stone (calm, ADHD-first) ── */
 :root {
-  --bg: #f7f6f3;
-  --surface: #ffffff;
-  --surface-2: #f8f8f5;
-  --hover: #f1f1ed;
-  --line: #f1f0ec;
-  --border: #e8e7e2;
-  --border-2: #eeede8;
-  --text: #1f1f1d;
-  --text-2: #59574f;
-  --muted: #97948c;
-  --on-accent: #fbf8f2;
-  --accent-soft: #f4f3f0;
-  --accent-soft-2: #eeede9;
-  --accent-soft-border: #e4e2dc;
-  --accent: #c0613a;
-  --accent-dim: #a8512e;
+  --bg: #eceae2;
+  --surface: #fbfaf5;
+  --surface-2: #f4f1e8;
+  --hover: #efece3;
+  --line: #eceae0;
+  --border: #e6e2d6;
+  --border-2: #ece7db;
+  --text: #242219;
+  --text-2: #5e5a4e;
+  --muted: #a19d8f;
+  --on-accent: #fbfaf3;
+  --accent-soft: #e6ece7;
+  --accent-soft-2: #dfe7e0;
+  --accent-soft-border: #d3e0d6;
+  --accent: #40705c;
+  --accent-dim: #365e4d;
 }
 
 /* ── Design tokens (dark) ── */

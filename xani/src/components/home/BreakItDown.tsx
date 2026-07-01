@@ -25,7 +25,7 @@ export function BreakItDown({
   initialSteps?: { step: string; estMins: number; done?: boolean }[];
   onStartFirst?: (stepText: string) => void;
 }) {
-  const [level, setLevel] = useState(3);
+  const [level, setLevel] = useState(2);
   const [steps, setSteps] = useState<{ step: string; estMins: number; done?: boolean }[]>(initialSteps ?? []);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);

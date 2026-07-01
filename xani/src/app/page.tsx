@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady } from '@/lib/storage';
 import { fetchBriefingData, fetchMessageBody, peekData, PATHS } from '@/lib/marvin-data';
-import { fetchInboxTriage, requestDraft } from '@/lib/marvin-client';
+import { fetchInboxTriage, fetchSlackTriage, requestDraft } from '@/lib/marvin-client';
 import { enqueueApproval } from '@/lib/approvals';
-import type { BriefingData, TriagedEmail } from '@/lib/marvin-protocol';
+import type { BriefingData, TriagedEmail, TriagedSlack } from '@/lib/marvin-protocol';
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
 import { FocusSession } from '@/components/home/FocusSession';
@@ -97,6 +97,11 @@ export default function HomePage() {
   const [inboxFiled, setInboxFiled] = useState(0);
   const [inboxErr, setInboxErr] = useState<string | null>(null);
   const [inboxLoading, setInboxLoading] = useState(true);
+  const [slackActs, setSlackActs] = useState<TriagedSlack[] | null>(null);
+  const [slackKnow, setSlackKnow] = useState(0);
+  const [slackFiled, setSlackFiled] = useState(0);
+  const [slackErr, setSlackErr] = useState<string | null>(null);
+  const [slackLoading, setSlackLoading] = useState(true);
   const [flash, setFlash] = useState<string | null>(null);
   const now = useMemo(() => new Date(), []);
 
@@ -126,6 +131,18 @@ export default function HomePage() {
       setInboxActs(t.triaged.filter((m) => m.verdict === 'act'));
       setInboxKnow(t.triaged.filter((m) => m.verdict === 'know').length);
       setInboxFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
+    });
+    fetchSlackTriage().then((t) => {
+      setSlackLoading(false);
+      if (!t) {
+        setSlackErr('runtime unreachable — is it running? (npm run dev:all)');
+        return;
+      }
+      if (t.error) setSlackErr(t.error);
+      if (!t.connected) { setSlackActs([]); return; }
+      setSlackActs(t.triaged.filter((m) => m.verdict === 'act'));
+      setSlackKnow(t.triaged.filter((m) => m.verdict === 'know').length);
+      setSlackFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
     });
     window.addEventListener('xani:loops-changed', reloadLoops);
     return () => window.removeEventListener('xani:loops-changed', reloadLoops);
@@ -168,6 +185,21 @@ export default function HomePage() {
     setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
   };
   const dismissEmail = (m: TriagedEmail) => setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
+
+  const trackSlack = (m: TriagedSlack) => {
+    const where = m.dm ? `${m.workspaceName} · Slack DM` : `${m.workspaceName} · #${m.channel}`;
+    captureLoop({
+      source: 'slack',
+      channel: m.emergency ? `${where} · URGENT` : where,
+      from: m.from,
+      task: m.text.length > 180 ? `${m.text.slice(0, 177)}…` : m.text,
+      ref: m.id,
+      slack: { workspace: m.workspace, channelId: m.channelId, channel: m.channel, from: m.from, text: m.text },
+    });
+    flashMsg('Tracked — MARVIN is holding it for you.');
+    setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
+  };
+  const dismissSlack = (m: TriagedSlack) => setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
 
   // the next step after tracking: MARVIN drafts the reply → Approvals (nothing sends without a tap).
   // Works for both email and Slack loops; "Prepare, I approve" — nothing leaves without Rebaz's tap.
@@ -293,6 +325,46 @@ export default function HomePage() {
 
             {!inboxLoading && !inboxErr && inboxActs && inboxActs.length > 0 && (inboxKnow > 0 || inboxFiled > 0) && (
               <p className="mt-4 px-1 text-[12.5px] text-muted">{inboxKnow} good to know · {inboxFiled} filed away as noise.</p>
+            )}
+          </section>
+
+          {/* from Slack — MARVIN triage of DMs, @mentions & emergencies (the "I said ok and forgot" fix) */}
+          <section className="mt-10">
+            <div className="mb-4 flex items-baseline gap-3 px-1">
+              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted">From Slack — needs you</h2>
+              {slackActs && (
+                <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-2">{slackActs.length}</span>
+              )}
+            </div>
+
+            {slackLoading && <p className="px-1 text-[13.5px] text-muted">Reading your Slack…</p>}
+            {!slackLoading && slackErr && <p className="px-1 text-[13.5px] text-muted">Couldn’t read Slack: {slackErr}</p>}
+            {!slackLoading && !slackErr && slackActs && slackActs.length === 0 && (
+              <p className="px-1 text-[13.5px] text-text-2">
+                Nothing on Slack needs you right now.
+                {(slackKnow > 0 || slackFiled > 0) && ` ${slackKnow} good to know · ${slackFiled} filed as noise.`}
+              </p>
+            )}
+
+            {slackActs?.map((m) => (
+              <div key={m.id} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className={`text-[11px] font-bold uppercase tracking-[0.05em] ${m.emergency ? 'text-lead' : 'text-slack'}`}>
+                    {m.emergency ? 'Slack · URGENT' : `Slack · ${m.dm ? 'DM' : `#${m.channel}`}`} · {m.workspaceName}
+                  </span>
+                  <span className="text-[13px] text-text-2">{m.from}</span>
+                </div>
+                <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.text.length > 200 ? `${m.text.slice(0, 197)}…` : m.text}</p>
+                {m.reason && <p className="mt-1 text-[12.5px] text-muted">{m.reason}</p>}
+                <div className="mt-4 flex flex-wrap gap-2.5">
+                  <button type="button" onClick={() => trackSlack(m)} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">+ Track it</button>
+                  <button type="button" onClick={() => dismissSlack(m)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Not for me</button>
+                </div>
+              </div>
+            ))}
+
+            {!slackLoading && !slackErr && slackActs && slackActs.length > 0 && (slackKnow > 0 || slackFiled > 0) && (
+              <p className="mt-4 px-1 text-[12.5px] text-muted">{slackKnow} good to know · {slackFiled} filed away as noise.</p>
             )}
           </section>
 

@@ -22,7 +22,7 @@ import {
   getGithub,
   executeAction,
 } from './connectors.ts';
-import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload, InboxTriage } from '../src/lib/marvin-protocol.ts';
+import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload, InboxTriage, SlackTriage, TriagedSlack, SlackHistory } from '../src/lib/marvin-protocol.ts';
 
 /**
  * MARVIN sidecar HTTP server.
@@ -98,6 +98,98 @@ const TRIAGE_SYSTEM =
   `When unsure between know and ignore, prefer "know".\n` +
   `Reply with ONLY a JSON array, no prose: [{"id":"<id>","verdict":"act|know|ignore","reason":"<max 8 words>"}]`;
 
+const SLACK_TRIAGE_SYSTEM =
+  `You are MARVIN, triaging Rebaz's Slack messages. Rebaz has ADHD and forgets tasks people ` +
+  `send him on Slack — surface what needs him, file the noise. Each item is a message someone ` +
+  `sent (never Rebaz himself). For EACH choose ONE verdict:\n` +
+  `- "act": someone is asking Rebaz to do/reply/decide something, assigning a task, or it's a ` +
+  `direct DM that expects a response, or an emergency. DMs are usually "act".\n` +
+  `- "know": genuine info worth being aware of but no action needed (an FYI, a status update).\n` +
+  `- "ignore": bots, automated posts, reactions-only, chit-chat, or noise not aimed at Rebaz.\n` +
+  `Judge by content + intent. A person DMing him or naming "Rebaz" is almost never "ignore". ` +
+  `When unsure between act and know for a DM, prefer "act".\n` +
+  `Reply with ONLY a JSON array, no prose: [{"id":"<id>","verdict":"act|know|ignore","reason":"<max 8 words>"}]`;
+
+/** Cache Slack triage briefly — Home mounts call this on every load and conversations.history
+ *  is rate-limited. 90s keeps it fresh without hammering Slack. */
+let slackTriageCache: { at: number; data: SlackTriage } | null = null;
+
+async function triageSlack(): Promise<SlackTriage> {
+  if (!anthropic) return { connected: false, triaged: [], error: 'No API key.' };
+  if (slackTriageCache && Date.now() - slackTriageCache.at < 90_000) return slackTriageCache.data;
+
+  const slack = await getSlack();
+  if (!slack.connected) return { connected: false, triaged: [], error: slack.error };
+
+  const selfIds = new Set(slack.workspaces.map((w) => w.selfId).filter(Boolean) as string[]);
+  const wsName = new Map(slack.workspaces.map((w) => [w.role, w.name]));
+
+  // Prioritise DMs & group DMs (direct asks), then unread channels. Cap hard for rate safety.
+  const dms = slack.channels.filter((c) => c.kind === 'dm' || c.kind === 'group');
+  const unread = slack.channels.filter((c) => c.kind === 'channel' && c.hasUnread);
+  const scan = [...dms, ...unread].slice(0, 12);
+
+  const cache = (data: SlackTriage) => { slackTriageCache = { at: Date.now(), data }; return data; };
+  if (scan.length === 0) return cache({ connected: true, triaged: [] });
+
+  const histories = await Promise.all(
+    scan.map((c) =>
+      getSlackHistory({ workspace: c.workspace, channel: c.id, limit: 12 })
+        .then((h) => ({ c, h }))
+        .catch(() => ({ c, h: null as SlackHistory | null })),
+    ),
+  );
+
+  type Cand = { id: string; workspace: string; workspaceName: string; channelId: string; channel: string; dm: boolean; from: string; text: string; ts: string; emergency: boolean };
+  const candidates: Cand[] = [];
+  const seen = new Set<string>();
+  for (const { c, h } of histories) {
+    if (!h || !h.ok) continue;
+    const isDM = c.kind === 'dm' || c.kind === 'group';
+    for (const m of h.messages) {
+      const text = (m.text ?? '').trim();
+      if (!text) continue;
+      if (m.userId && selfIds.has(m.userId)) continue; // Rebaz's own message — not a task for him
+      const nameMention = /\brebaz\b/i.test(text);
+      if (!(isDM || nameMention || m.emergency)) continue; // the flag rules (triage-rules.md §2)
+      const id = `${c.id}:${m.ts}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      candidates.push({
+        id, workspace: c.workspace, workspaceName: wsName.get(c.workspace) ?? c.workspace,
+        channelId: c.id, channel: c.name, dm: isDM, from: m.user, text, ts: m.ts, emergency: m.emergency,
+      });
+    }
+  }
+  candidates.sort((a, b) => Number(b.ts) - Number(a.ts)); // newest first
+  const capped = candidates.slice(0, 40);
+  if (capped.length === 0) return cache({ connected: true, triaged: [] });
+
+  const list = capped.map((m) => ({ id: m.id, from: m.from, where: m.dm ? 'DM' : `#${m.channel}`, dm: m.dm, emergency: m.emergency, text: m.text.slice(0, 240) }));
+  try {
+    const resp = await anthropic.messages.create({
+      model: 'claude-haiku-4-5',
+      max_tokens: 2000,
+      system: SLACK_TRIAGE_SYSTEM,
+      messages: [{ role: 'user', content: JSON.stringify(list) }],
+    });
+    const t = resp.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+    const s = t.indexOf('['); const e = t.lastIndexOf(']');
+    const parsed = s >= 0 && e > s ? (JSON.parse(t.slice(s, e + 1)) as { id: string; verdict: string; reason?: string }[]) : [];
+    const byId = new Map(parsed.map((p) => [p.id, p]));
+    const triaged: TriagedSlack[] = capped.map((m) => {
+      const v = byId.get(m.id);
+      const verdict = v?.verdict === 'act' || v?.verdict === 'know' || v?.verdict === 'ignore'
+        ? v.verdict
+        : (m.dm || m.emergency ? 'act' : 'know');
+      return { id: m.id, workspace: m.workspace, workspaceName: m.workspaceName, channelId: m.channelId, channel: m.channel, dm: m.dm, from: m.from, text: m.text, ts: m.ts, emergency: m.emergency, verdict, reason: v?.reason ?? '' };
+    });
+    return cache({ connected: true, triaged });
+  } catch (err) {
+    return { connected: true, triaged: [], error: (err as Error).message };
+  }
+}
+
 async function triageInbox(): Promise<InboxTriage> {
   if (!anthropic) return { connected: false, triaged: [], error: 'No API key.' };
   const inbox = await getInbox('inbox', '');
@@ -167,6 +259,14 @@ const server = createServer(async (req, res) => {
   if (req.method === 'GET' && req.url?.startsWith('/triage/inbox')) {
     try {
       return json(res, 200, await triageInbox());
+    } catch (err) {
+      return json(res, 200, { connected: false, triaged: [], error: (err as Error).message });
+    }
+  }
+
+  if (req.method === 'GET' && req.url?.startsWith('/triage/slack')) {
+    try {
+      return json(res, 200, await triageSlack());
     } catch (err) {
       return json(res, 200, { connected: false, triaged: [], error: (err as Error).message });
     }

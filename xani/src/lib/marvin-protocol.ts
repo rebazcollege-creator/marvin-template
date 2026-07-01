@@ -116,8 +116,9 @@ export interface CalendarData {
 export interface SlackData {
   connected: boolean;
   error?: string;
-  /** Workspaces the runtime can see, with which token type is in use and any auth error. */
-  workspaces: { role: string; name: string; avBg: string; tokenKind?: 'user' | 'bot'; error?: string }[];
+  /** Workspaces the runtime can see, with which token type is in use and any auth error.
+   *  selfId = the authed user's Slack id (user tokens), so triage can drop Rebaz's own messages. */
+  workspaces: { role: string; name: string; avBg: string; tokenKind?: 'user' | 'bot'; selfId?: string; error?: string }[];
   /** Channels, private groups and DMs the token can see. Unread is best-effort (user tokens only). */
   channels: {
     workspace: string;
@@ -143,6 +144,31 @@ export interface SlackData {
     reactions?: { emoji: string; count: number }[];
     replies?: number;
   }[];
+}
+/** Slack triage — mirror of email triage, but over recent DM/group/channel history so a
+ *  request someone sent yesterday (that Rebaz forgot) still surfaces. Same verdict scheme. */
+export type SlackVerdict = 'act' | 'know' | 'ignore';
+export interface TriagedSlack {
+  /** channelId:ts — stable ref for the Open Loops upsert. */
+  id: string;
+  workspace: string;
+  workspaceName: string;
+  channelId: string;
+  channel: string;
+  /** True for DMs and group DMs (a direct ask). */
+  dm: boolean;
+  from: string;
+  text: string;
+  ts: string;
+  emergency: boolean;
+  verdict: SlackVerdict;
+  /** MARVIN's short reason for the verdict (≤ ~8 words). */
+  reason: string;
+}
+export interface SlackTriage {
+  connected: boolean;
+  triaged: TriagedSlack[];
+  error?: string;
 }
 /** A page of full channel history (on-demand; isolates the rate-limited conversations.history). */
 export interface SlackHistory {

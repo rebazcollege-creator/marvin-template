@@ -5,6 +5,7 @@ import type {
   ChatRequest,
   InboxTriage,
   ProposedMemory,
+  SlackTriage,
   StreamEvent,
 } from '@/lib/marvin-protocol';
 
@@ -197,6 +198,21 @@ export async function fetchInboxTriage(): Promise<InboxTriage | null> {
     const resp = await fetch(`${SIDECAR_URL}/triage/inbox`, { cache: 'no-store' });
     if (!resp.ok) return null;
     return (await resp.json()) as InboxTriage;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * MARVIN Slack triage — the runtime reads recent DM/group/channel history and classifies
+ * each message someone sent Rebaz as act / know / ignore. Returns null when the runtime is
+ * unreachable so the UI can show an honest "start the runtime" state.
+ */
+export async function fetchSlackTriage(): Promise<SlackTriage | null> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/triage/slack`, { cache: 'no-store' });
+    if (!resp.ok) return null;
+    return (await resp.json()) as SlackTriage;
   } catch {
     return null;
   }

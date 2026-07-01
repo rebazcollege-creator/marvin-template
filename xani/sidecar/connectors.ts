@@ -511,7 +511,8 @@ export async function getSlack(): Promise<SlackData> {
       workspaces.push(wsRec);
       const client = new WebClient(slackReadToken(w));
       try {
-        await client.auth.test(); // fail fast with a precise error (invalid_auth, token_revoked…)
+        const auth = await client.auth.test(); // fail fast with a precise error (invalid_auth, token_revoked…)
+        wsRec.selfId = (auth as { user_id?: string }).user_id; // so triage can drop Rebaz's own messages
         const names = await slackNames(w.role, client);
         // DMs only exist for user tokens (a bot can't see your DMs).
         const types = kind === 'user' ? 'public_channel,private_channel,im,mpim' : 'public_channel,private_channel';

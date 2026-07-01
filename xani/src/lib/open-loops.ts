@@ -46,6 +46,10 @@ export type OpenLoop = {
   email?: { account: string; id: string; from: string; subject: string };
   /** For Slack loops: enough context to draft a reply. */
   slack?: { workspace: string; channelId: string; channel: string; from: string; text: string };
+  /** Time-visibility: rough total estimate in minutes (from breakdown or manual). */
+  estMins?: number;
+  /** ADHD "break it down": tiny concrete steps, first one startable in <2 min. */
+  steps?: { step: string; estMins: number; done?: boolean }[];
 };
 
 const KEY = 'xani.openloops.v1';
@@ -111,6 +115,23 @@ export function completeLoop(id: string): void {
 export function snoozeLoop(id: string, until: string): void {
   save(
     listLoops().map((l) => (l.id === id ? { ...l, status: 'snoozed' as const, snoozedUntil: until } : l)),
+  );
+}
+
+/** Persist a break-it-down onto a loop (steps + summed estimate) — survives reloads. */
+export function setLoopBreakdown(id: string, steps: { step: string; estMins: number; done?: boolean }[]): void {
+  const estMins = steps.reduce((a, s) => a + (s.estMins || 0), 0);
+  save(listLoops().map((l) => (l.id === id ? { ...l, steps, estMins } : l)));
+}
+
+/** Toggle a single breakdown step done (the tiny-win dopamine tick). */
+export function toggleLoopStep(id: string, index: number): void {
+  save(
+    listLoops().map((l) => {
+      if (l.id !== id || !l.steps) return l;
+      const steps = l.steps.map((s, i) => (i === index ? { ...s, done: !s.done } : s));
+      return { ...l, steps };
+    }),
   );
 }
 

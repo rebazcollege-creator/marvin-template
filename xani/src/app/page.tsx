@@ -13,6 +13,9 @@ import { syncOpenLoops } from '@/lib/loops-monitor';
 import { recordTriageCorrection, triageLearnings, learnedCount } from '@/lib/triage-learning';
 import { voicePromptFor, voiceKeyFor } from '@/lib/voice';
 import { FocusSession } from '@/components/home/FocusSession';
+import { BreakItDown } from '@/components/home/BreakItDown';
+import { Timeline } from '@/components/home/Timeline';
+import { whyThisOne, dueLabel, estLabel } from '@/lib/tone';
 
 /**
  * Home — the ADHD command surface (foundations.md). Optimised for Rebaz's top
@@ -55,7 +58,7 @@ const SOURCE: Record<string, { label: string; cls: string }> = {
 
 function LoopCard({ loop, now, onDone, onSnooze, onDraft }: { loop: OpenLoop; now: Date; onDone: () => void; onSnooze: () => void; onDraft?: () => void }) {
   const src = SOURCE[loop.source] ?? SOURCE.manual;
-  const due = loop.dueAt ? minsUntil(loop.dueAt, now) : null;
+  const due = dueLabel(loop.dueAt, now);
   return (
     <div className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex flex-wrap items-center gap-2.5">
@@ -63,9 +66,9 @@ function LoopCard({ loop, now, onDone, onSnooze, onDraft }: { loop: OpenLoop; no
           {loop.channel ?? src.label}
         </span>
         {loop.from && <span className="text-[13px] text-text-2">{loop.from}</span>}
-        {due !== null && (
-          <span className="ml-auto text-[12px] font-medium text-text-2">
-            {due < 0 ? 'overdue' : `due in ${humanMins(due)}`}
+        {(due || loop.estMins) && (
+          <span className="ml-auto text-[12px] font-medium text-muted">
+            {[loop.estMins ? estLabel(loop.estMins) : null, due].filter(Boolean).join(' · ')}
           </span>
         )}
       </div>
@@ -106,6 +109,7 @@ export default function HomePage() {
   const [slackLoading, setSlackLoading] = useState(true);
   const [flash, setFlash] = useState<string | null>(null);
   const [learned, setLearned] = useState(0);
+  const [overwhelmed, setOverwhelmed] = useState(false);
   const now = useMemo(() => new Date(), []);
 
   const flashMsg = (s: string) => {
@@ -287,21 +291,42 @@ export default function HomePage() {
           {oneThing ? (
             <section className="mt-9 rounded-2xl border border-border p-6 shadow-sm"
               style={{ borderLeftWidth: 4, borderLeftColor: 'var(--accent)', background: 'color-mix(in srgb, var(--accent) 6%, var(--surface))' }}>
-              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent">Right now — one thing</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent">Right now — just this one</div>
+                {rest.length > 0 && (
+                  <button type="button" onClick={() => setOverwhelmed((v) => !v)} className="text-[11.5px] font-medium text-muted transition hover:text-text-2">
+                    {overwhelmed ? 'show the rest' : 'I’m overwhelmed'}
+                  </button>
+                )}
+              </div>
               <p className="mt-2 font-display text-[24px] font-semibold leading-snug text-text">{oneThing.task}</p>
               <p className="mt-1.5 text-[13.5px] text-text-2">
                 {oneThing.channel ?? SOURCE[oneThing.source].label}
                 {oneThing.from ? ` · ${oneThing.from}` : ''}
-                {oneThing.dueAt ? ` · due in ${humanMins(minsUntil(oneThing.dueAt, now))}` : ''}
+                {oneThing.estMins ? ` · ${estLabel(oneThing.estMins)}` : ''}
+                {dueLabel(oneThing.dueAt, now) ? ` · ${dueLabel(oneThing.dueAt, now)}` : ''}
               </p>
+              <p className="mt-1 text-[12.5px] italic text-muted">{whyThisOne(oneThing, now)}</p>
               <div className="mt-4 flex flex-wrap gap-2.5">
                 <button type="button" onClick={() => setFocus({ task: oneThing.task, loopId: oneThing.id })} className="rounded-xl bg-accent px-5 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">▶ Focus with me</button>
                 {(oneThing.email || oneThing.slack) && (
                   <button type="button" onClick={() => void draftLoopReply(oneThing)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✍️ Draft reply</button>
                 )}
                 <button type="button" onClick={() => completeLoop(oneThing.id)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✓ Done</button>
-                <button type="button" onClick={() => snoozeLoop(oneThing.id, new Date(now.getTime() + 3 * 3600_000).toISOString())} className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-muted transition hover:text-text-2">Later</button>
+                <button type="button" onClick={() => snoozeLoop(oneThing.id, new Date(now.getTime() + 3 * 3600_000).toISOString())} className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-muted transition hover:text-text-2">Not now</button>
               </div>
+              {/* break the wall into a tiny first step */}
+              <BreakItDown
+                task={oneThing.task}
+                loopId={oneThing.id}
+                initialSteps={oneThing.steps}
+                onStartFirst={(step) => setFocus({ task: step, loopId: oneThing.id })}
+              />
+              {overwhelmed && (
+                <p className="mt-4 rounded-xl bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] px-4 py-3 text-[13px] text-text-2">
+                  🌿 Everything else is hidden. Just this one. Breathe — you don’t have to hold the rest, I’ve got it.
+                </p>
+              )}
             </section>
           ) : (
             <section className="mt-9 rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
@@ -311,6 +336,8 @@ export default function HomePage() {
             </section>
           )}
 
+          {!overwhelmed && (
+          <>
           {/* capture — brain-dump, never lose it */}
           <div className="mt-5 flex items-center gap-2.5 rounded-2xl border border-border-2 bg-surface p-1.5 pl-5 shadow-sm focus-within:border-accent">
             <input
@@ -322,6 +349,9 @@ export default function HomePage() {
             />
             <button type="button" onClick={onCapture} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">Hold it</button>
           </div>
+
+          {/* today, as blocks — make time visible for time-blindness */}
+          {data?.connected.calendar && <Timeline events={data.calendar} tz={tz} now={now} />}
 
           {/* from your inbox — MARVIN triage (always shows its state) */}
           <section className="mt-10">
@@ -438,6 +468,8 @@ export default function HomePage() {
                 <>Connect Slack &amp; Trello in <Link href="/connections" className="font-medium text-accent hover:underline">Connections</Link> and every “ok” you give lands here on its own.</>
               )}
           </p>
+          </>
+          )}
         </>
       )}
       {focus && (

@@ -302,6 +302,22 @@ export async function fetchWritingSamples(p: {
   }
 }
 
+/** Break a task into tiny, concrete first steps with time estimates. level 1..5 = coarse..fine. */
+export interface TaskStep { step: string; estMins: number }
+export async function breakdownTask(task: string, level = 3): Promise<{ ok: boolean; steps?: TaskStep[]; error?: string }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/breakdown`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ task, level }),
+    });
+    if (!resp.ok) return { ok: false, error: `runtime responded ${resp.status}` };
+    return (await resp.json()) as { ok: boolean; steps?: TaskStep[]; error?: string };
+  } catch {
+    return { ok: false, error: 'runtime unreachable — is it running? (npm run dev:all)' };
+  }
+}
+
 /** Voice corpus — deep harvest of Rebaz's own writing + patterns analysis (Train mode). */
 export interface VoiceAnalysis {
   voiceNotes: Record<string, string[]>;

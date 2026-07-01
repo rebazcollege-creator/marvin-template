@@ -344,8 +344,15 @@ const server = createServer(async (req, res) => {
         const content = (final as { content?: { type?: string; text?: string }[] }).content ?? [];
         draft = content.filter((c) => c.type === 'text').map((c) => c.text ?? '').join('');
       }
-      return json(res, 200, { ok: true, draft: draft.trim() });
+      const out = draft.trim();
+      if (!out) {
+        console.warn('[draft-reply] the model returned an EMPTY draft');
+        return json(res, 200, { ok: false, error: 'the model returned an empty draft' });
+      }
+      console.log(`[draft-reply] ok — ${out.length} chars`);
+      return json(res, 200, { ok: true, draft: out });
     } catch (err) {
+      console.error('[draft-reply] FAILED:', (err as Error).message);
       return json(res, 400, { ok: false, error: (err as Error).message });
     }
   }

@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Xanî — voice orb</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   XANÎ — VOICE ORB. A living aurora particle orb that is awake,
+   on alert, and reacts to your voice (Web Audio mic → real-time
+   amplitude/bands drive the particles, glow, rings & voice bars).
+   Graceful fallback: if the mic is blocked, a simulated speech
+   envelope shows the reaction. THREE.Points only, no shaders.
+   ============================================================ */
+:root{--teal:#8df7e6;--blue:#5aa9ff;--violet:#b088ff;--terra:#ff7a52;--ink:#f2eee6;--ink2:#a7adbb;}
+*{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;}
+body{background:radial-gradient(1200px 800px at 50% 32%,#12151d,#07080c 70%);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow:hidden;}
+#gl{position:fixed;inset:0;z-index:0;display:block;}
+#fallback{position:fixed;inset:0;display:none;place-items:center;color:#8aa;z-index:0;font-family:'Space Grotesk';text-align:center;padding:24px;}
+.vig{position:fixed;inset:0;z-index:1;pointer-events:none;background:radial-gradient(120% 90% at 50% 42%,transparent 46%,rgba(3,4,7,.66));}
+
+.brand{position:fixed;top:22px;left:26px;z-index:20;display:flex;align-items:center;gap:10px;font-family:'Fraunces';font-weight:600;font-size:20px;}
+.brand .o{width:20px;height:20px;border-radius:50%;background:conic-gradient(from 200deg,var(--teal),var(--blue),var(--violet),var(--terra),var(--teal));box-shadow:0 0 14px rgba(120,160,255,.6);}
+
+/* centered UI stack over the orb */
+.ui{position:fixed;inset:0;z-index:15;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;padding-bottom:12vh;pointer-events:none;}
+.status{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk';font-size:14px;letter-spacing:.02em;color:var(--ink2);margin-bottom:16px;transition:color .3s;}
+.status .lp{position:relative;width:9px;height:9px;border-radius:50%;background:var(--teal);box-shadow:0 0 12px var(--teal);}
+.status .lp::after{content:"";position:absolute;inset:0;border-radius:50%;background:var(--teal);animation:radar 2s ease-out infinite;}
+.status.hearing{color:var(--teal);}
+.status.hearing .lp{background:var(--terra);box-shadow:0 0 14px var(--terra);}
+.status.hearing .lp::after{background:var(--terra);animation-duration:1s;}
+@keyframes radar{0%{transform:scale(1);opacity:.7;}100%{transform:scale(3.4);opacity:0;}}
+
+/* voice bars */
+.bars{display:flex;align-items:flex-end;gap:3px;height:34px;margin-bottom:20px;}
+.bars i{width:3px;height:5px;border-radius:2px;background:linear-gradient(to top,var(--blue),var(--teal));transition:height .06s linear;opacity:.9;}
+
+/* transcript */
+.transcript{min-height:26px;max-width:min(560px,86vw);text-align:center;font-family:'Fraunces';font-size:clamp(17px,2.6vw,23px);line-height:1.35;color:var(--ink);margin-bottom:22px;opacity:.96;}
+.transcript .interim{color:var(--ink2);}
+.transcript .ph{color:var(--ink2);font-style:italic;}
+
+/* talk control */
+.talk{pointer-events:auto;display:inline-flex;align-items:center;gap:10px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(10px);color:var(--ink);border-radius:40px;padding:13px 22px;font-family:'Space Grotesk';font-weight:600;font-size:14px;cursor:pointer;transition:.2s;}
+.talk:hover{border-color:rgba(255,255,255,.36);transform:translateY(-1px);}
+.talk.live{background:linear-gradient(120deg,var(--teal),var(--blue));color:#04120f;border-color:transparent;box-shadow:0 14px 34px -14px var(--blue);}
+.talk .mic{width:16px;height:16px;}
+.hint{margin-top:12px;font-size:12px;color:#6a7280;font-family:'Space Grotesk';letter-spacing:.02em;pointer-events:none;}
+.hint b{color:var(--ink2);font-weight:600;}
+
+@media (prefers-reduced-motion:reduce){.status .lp::after{animation:none;}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="fallback">Xanî’s orb needs WebGL — try a modern browser.</div>
+<div class="vig"></div>
+<div class="brand"><span class="o"></span>Xanî</div>
+
+<div class="ui">
+  <div class="status" id="status"><span class="lp"></span><span id="statusText">On alert — say “Hey Xanî”</span></div>
+  <div class="bars" id="bars"></div>
+  <div class="transcript" id="transcript"><span class="ph">Waiting for your voice…</span></div>
+  <button class="talk" id="talk">
+    <svg class="mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v4"/></svg>
+    <span id="talkLabel">Talk to Xanî</span>
+  </button>
+  <div class="hint" id="hint">Tap the orb or the button. <b>Allow the mic</b> and speak — the orb listens.</div>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* ---------------- audio engine (mic → level + bands, with sim fallback) ---------------- */
+const Audio = {
+  ctx:null, analyser:null, freq:null, stream:null,
+  micOn:false, sim:false, simUntil:0,
+  level:0, bands:new Array(28).fill(0),
+  async startMic(){
+    try{
+      this.ctx = this.ctx || new (window.AudioContext||window.webkitAudioContext)();
+      await this.ctx.resume();
+      this.stream = await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+      const src=this.ctx.createMediaStreamSource(this.stream);
+      this.analyser=this.ctx.createAnalyser(); this.analyser.fftSize=256; this.analyser.smoothingTimeConstant=0.72;
+      this.freq=new Uint8Array(this.analyser.frequencyBinCount);
+      src.connect(this.analyser);
+      this.micOn=true; return true;
+    }catch(e){ this.micOn=false; return false; }
+  },
+  stopMic(){ if(this.stream){this.stream.getTracks().forEach(t=>t.stop());this.stream=null;} this.micOn=false; },
+  simSpeak(ms=3200){ this.sim=true; this.simUntil=performance.now()+ms; },
+  sample(t){
+    let lvl=0.05 + Math.sin(t*1.3)*0.012 + 0.012; // idle "alert" breathing floor
+    if(this.micOn && this.analyser){
+      this.analyser.getByteFrequencyData(this.freq);
+      const n=this.freq.length; let sum=0;
+      for(let b=0;b<this.bands.length;b++){ const idx=Math.floor(b/this.bands.length*n*0.7); const v=this.freq[idx]/255; this.bands[b]+= (v-this.bands[b])*0.5; sum+=v; }
+      lvl=Math.min(1, sum/this.bands.length*1.9);
+    } else if(this.sim){
+      if(performance.now()>this.simUntil){ this.sim=false; }
+      // speech-like envelope: syllable bursts
+      const env=Math.max(0,(Math.sin(t*7)*0.5+0.5)*(Math.sin(t*2.3)*0.5+0.5))*(0.6+Math.random()*0.4);
+      lvl=0.12+env*0.8;
+      for(let b=0;b<this.bands.length;b++){ const v=lvl*(0.4+Math.random()*0.9)*(1-Math.abs(b/this.bands.length-0.35)); this.bands[b]+=(Math.max(0,v)-this.bands[b])*0.5; }
+    } else {
+      for(let b=0;b<this.bands.length;b++){ const v=lvl*(0.5+0.5*Math.sin(t*2+b*0.5)); this.bands[b]+=(v-this.bands[b])*0.15; }
+    }
+    this.level += (lvl-this.level)*0.25; // smooth
+    return this.level;
+  }
+};
+
+/* ---------------- speech recognition (optional, for live transcript) ---------------- */
+const SR = window.SpeechRecognition||window.webkitSpeechRecognition;
+let recog=null, transcriptFinal='';
+function startRecog(){
+  if(!SR) return false;
+  try{
+    recog=new SR(); recog.continuous=true; recog.interimResults=true; recog.lang='en-US';
+    recog.onresult=(e)=>{ let interim='';
+      for(let i=e.resultIndex;i<e.results.length;i++){ const r=e.results[i]; if(r.isFinal) transcriptFinal+=r[0].transcript; else interim+=r[0].transcript; }
+      setTranscript(transcriptFinal, interim);
+    };
+    recog.onerror=()=>{}; recog.onend=()=>{ if(Audio.micOn){ try{recog.start();}catch(_){} } };
+    recog.start(); return true;
+  }catch(e){ return false; }
+}
+function stopRecog(){ if(recog){ recog.onend=null; try{recog.stop();}catch(_){} recog=null; } }
+
+/* ---------------- UI ---------------- */
+const statusEl=document.getElementById('status'), statusText=document.getElementById('statusText');
+const transcriptEl=document.getElementById('transcript'), talk=document.getElementById('talk'), talkLabel=document.getElementById('talkLabel'), hint=document.getElementById('hint');
+const barsWrap=document.getElementById('bars'); const BARS=28;
+for(let i=0;i<BARS;i++){ barsWrap.appendChild(document.createElement('i')); }
+const barEls=[...barsWrap.children];
+
+function setTranscript(final,interim){
+  if(!final && !interim){ transcriptEl.innerHTML='<span class="ph">Waiting for your voice…</span>'; return; }
+  transcriptEl.innerHTML = (final||'') + (interim?`<span class="interim"> ${interim}</span>`:'');
+}
+function setStatus(mode){ // 'alert' | 'listening' | 'hearing'
+  if(mode==='hearing'){ statusEl.classList.add('hearing'); statusText.textContent='Hearing you…'; }
+  else { statusEl.classList.remove('hearing'); statusText.textContent = mode==='listening' ? 'Listening… go ahead' : 'On alert — say “Hey Xanî”'; }
+}
+
+let live=false;
+async function toggleTalk(){
+  if(live){ // stop
+    live=false; Audio.stopMic(); stopRecog();
+    talk.classList.remove('live'); talkLabel.textContent='Talk to Xanî'; setStatus('alert');
+    return;
+  }
+  live=true; talk.classList.add('live'); talkLabel.textContent='Stop';
+  const ok=await Audio.startMic();
+  if(ok){
+    setStatus('listening');
+    const gotSR=startRecog();
+    hint.innerHTML = gotSR ? 'Speak — I’m transcribing live. <b>Say something.</b>' : 'Mic live — the orb reacts to your voice. <b>Speak.</b>';
+  } else {
+    // graceful fallback: simulate so the reactive design is still visible
+    setStatus('listening');
+    hint.innerHTML='Mic blocked in this view — <b>showing a live reaction preview.</b>';
+    talkLabel.textContent='Preview';
+    Audio.simSpeak(3400);
+    setTranscript('Hey Xanî, what’s my one thing today?','');
+    setTimeout(()=>{ if(!Audio.micOn){ setTranscript('','' ); setStatus('alert'); live=false; talk.classList.remove('live'); talkLabel.textContent='Talk to Xanî'; } }, 3800);
+  }
+}
+talk.addEventListener('click',toggleTalk);
+
+/* ---------------- THREE: the orb ---------------- */
+const canvas=document.getElementById('gl');
+let renderer;
+try{ renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true,powerPreference:'high-performance'}); }
+catch(e){ document.getElementById('fallback').style.display='grid'; }
+
+if(renderer){
+  const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const mobile=matchMedia('(max-width: 820px)').matches;
+  const scene=new THREE.Scene();
+  const camera=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,0.1,100); camera.position.set(0,0,6);
+  function size(){ renderer.setPixelRatio(Math.min(devicePixelRatio,mobile?1.5:2)); renderer.setSize(innerWidth,innerHeight); camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); }
+  size(); addEventListener('resize',size);
+
+  function glow(soft){ const c=document.createElement('canvas');c.width=c.height=64;const x=c.getContext('2d');const g=x.createRadialGradient(32,32,0,32,32,32);
+    if(soft){g.addColorStop(0,'rgba(255,255,255,.9)');g.addColorStop(.4,'rgba(255,255,255,.26)');g.addColorStop(1,'rgba(255,255,255,0)');}
+    else{g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.3,'rgba(255,255,255,.7)');g.addColorStop(.62,'rgba(255,255,255,.18)');g.addColorStop(1,'rgba(255,255,255,0)');}
+    x.fillStyle=g;x.fillRect(0,0,64,64);return new THREE.CanvasTexture(c); }
+  const spr=glow(false), sprSoft=glow(true);
+
+  const grp=new THREE.Group(); scene.add(grp);
+
+  // aurora sphere of points
+  const N=mobile?3600:6000, R=1.6;
+  const base=new Float32Array(N*3), pos=new Float32Array(N*3), col=new Float32Array(N*3), seed=new Float32Array(N);
+  const RAMP=[new THREE.Color('#8df7e6'),new THREE.Color('#5aa9ff'),new THREE.Color('#b088ff'),new THREE.Color('#ff7a52')];
+  function ramp(t){t=Math.max(0,Math.min(1,t));const f=t*(RAMP.length-1),i=Math.floor(f);const c=RAMP[i].clone();if(i<RAMP.length-1)c.lerp(RAMP[i+1],f-i);return c;}
+  const gold=Math.PI*(3-Math.sqrt(5));
+  for(let i=0;i<N;i++){ const y=1-(i/(N-1))*2, r=Math.sqrt(1-y*y), th=gold*i, j=.93+Math.random()*.12;
+    const x=Math.cos(th)*r*R*j, yy=y*R*j, z=Math.sin(th)*r*R*j;
+    base[i*3]=x;base[i*3+1]=yy;base[i*3+2]=z; pos[i*3]=x;pos[i*3+1]=yy;pos[i*3+2]=z;
+    const c=ramp((y+1)/2+(Math.random()-.5)*.14); col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b; seed[i]=Math.random()*6.28; }
+  const geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
+  geo.setAttribute('color',new THREE.BufferAttribute(col,3));
+  const coreMat=new THREE.PointsMaterial({size:0.05,map:spr,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.95});
+  const bloomMat=new THREE.PointsMaterial({size:0.15,map:sprSoft,vertexColors:true,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.3});
+  grp.add(new THREE.Points(geo,bloomMat)); grp.add(new THREE.Points(geo,coreMat));
+
+  // central core sprite (brightens with voice)
+  const core=new THREE.Sprite(new THREE.SpriteMaterial({map:sprSoft,color:0xbfeaff,transparent:true,opacity:.5,blending:THREE.AdditiveBlending,depthWrite:false}));
+  core.scale.setScalar(2.4); grp.add(core);
+  // outer halo
+  const halo=new THREE.Sprite(new THREE.SpriteMaterial({map:sprSoft,color:0x7aa8ff,transparent:true,opacity:.4,blending:THREE.AdditiveBlending,depthWrite:false}));
+  halo.scale.setScalar(6); halo.position.z=-1; grp.add(halo);
+
+  // tilted orbit rings (alert signal)
+  function ring(rad,tilt,color,op){ const pts=[];for(let a=0;a<=90;a++){const t=a/90*Math.PI*2;pts.push(new THREE.Vector3(Math.cos(t)*rad,0,Math.sin(t)*rad));}
+    const g=new THREE.BufferGeometry().setFromPoints(pts); const l=new THREE.Line(g,new THREE.LineBasicMaterial({color,transparent:true,opacity:op})); l.rotation.x=Math.PI/2+tilt; l.rotation.z=tilt*0.6; grp.add(l); return l; }
+  const ringA=ring(2.05,0.4,new THREE.Color('#9fe9ff'),0.35), ringB=ring(2.25,-0.5,new THREE.Color('#c3b4ff'),0.28);
+
+  // orbiting sparks
+  const sparks=[]; for(let i=0;i<5;i++){ const s=new THREE.Sprite(new THREE.SpriteMaterial({map:spr,color:new THREE.Color(['#8df7e6','#5aa9ff','#b088ff','#ff7a52','#ffffff'][i]),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false})); s.scale.setScalar(.28); grp.add(s); sparks.push({s,rad:2.0+Math.random()*.5,sp:.3+Math.random()*.3,ph:Math.random()*6.28,tilt:(Math.random()-.5)}); }
+
+  // starfield
+  const SN=mobile?200:380, spf=new Float32Array(SN*3); for(let i=0;i<SN;i++){spf[i*3]=(Math.random()-.5)*22;spf[i*3+1]=(Math.random()-.5)*14;spf[i*3+2]=(Math.random()-.5)*10-3;}
+  const sgeo=new THREE.BufferGeometry(); sgeo.setAttribute('position',new THREE.BufferAttribute(spf,3));
+  scene.add(new THREE.Points(sgeo,new THREE.PointsMaterial({size:0.02,map:spr,color:0x9fb4d0,transparent:true,opacity:.45,blending:THREE.AdditiveBlending,depthWrite:false})));
+
+  // interaction: cursor parallax + click orb to talk
+  let mx=0,my=0,tx=0,ty=0;
+  addEventListener('pointermove',e=>{tx=e.clientX/innerWidth-.5;ty=e.clientY/innerHeight-.5;});
+  canvas.addEventListener('click',toggleTalk);
+
+  const clock=new THREE.Clock();
+  function loop(){
+    const t=clock.getElapsedTime();
+    const lvl=Audio.sample(t);                 // 0..1 voice level (mic/sim/idle)
+    const hearing = lvl>0.16;
+    // reflect state in UI
+    if(live){ setStatus(hearing?'hearing':'listening'); }
+    // voice bars
+    for(let b=0;b<BARS;b++){ const h=4 + Audio.bands[b]*44; barEls[b].style.height=h.toFixed(1)+'px'; barEls[b].style.opacity=(0.6+Audio.bands[b]*0.5).toFixed(2); }
+
+    mx+=(tx-mx)*.05; my+=(ty-my)*.05;
+    const energy = reduce?0:lvl;
+
+    // particles: breathe + expand/shimmer with voice
+    const p=geo.attributes.position.array;
+    const expand=1+energy*0.34;
+    for(let i=0;i<N;i++){ const sh=1+Math.sin(t*2.2+seed[i])*(0.01+energy*0.06);
+      p[i*3]=base[i*3]*expand*sh; p[i*3+1]=base[i*3+1]*expand*sh; p[i*3+2]=base[i*3+2]*expand*sh; }
+    geo.attributes.position.needsUpdate=true;
+
+    // sizes / glow respond to voice
+    coreMat.size=0.05+energy*0.05; coreMat.opacity=0.9+energy*0.1;
+    bloomMat.size=0.15+energy*0.22; bloomMat.opacity=0.28+energy*0.4;
+    core.material.opacity=0.4+energy*0.6; core.scale.setScalar(2.2+energy*1.8);
+    core.material.color.setRGB(0.75+energy*0.25, 0.92, 1.0);
+    halo.material.opacity=0.32+energy*0.4; halo.scale.setScalar(5.6+energy*2.6+Math.sin(t*0.8)*0.3);
+
+    // breathing scale + rotation (faster when speaking)
+    const breathe=1+Math.sin(t*1.1)*0.03+energy*0.06;
+    grp.scale.setScalar(breathe);
+    grp.rotation.y=t*(0.06+energy*0.25)+mx*0.5;
+    grp.rotation.x=my*0.3+Math.sin(t*0.3)*0.03;
+
+    // rings pulse with voice + steady alert shimmer
+    const rp=0.22+energy*0.6+Math.abs(Math.sin(t*1.6))*0.12;
+    ringA.material.opacity=rp; ringB.material.opacity=rp*0.85;
+    ringA.rotation.y=t*0.3; ringB.rotation.y=-t*0.24;
+    const rs=1+energy*0.5; ringA.scale.setScalar(rs); ringB.scale.setScalar(rs);
+
+    // sparks orbit, energize
+    sparks.forEach(o=>{ const a=t*o.sp+o.ph; o.s.position.set(Math.cos(a)*o.rad,(Math.sin(a)*o.rad)*o.tilt,Math.sin(a)*o.rad); o.s.scale.setScalar(0.22+energy*0.5+Math.sin(t*3+o.ph)*0.05); o.s.material.opacity=0.5+energy*0.5; });
+
+    renderer.render(scene,camera);
+    requestAnimationFrame(loop);
+  }
+  loop();
+}
+</script>
+</body>
+</html>

@@ -38,6 +38,18 @@ map to a challenge below, it's decoration — cut it.
 8. **Meet the energy.** The app flexes between a focused/low-stim mode and a fuller mode.
 9. **It learns him.** Every correction makes it fit *his* brain better (see `self-development.md`) — because ADHD support is deeply individual.
 
+## Rebaz's priorities (build order)
+
+Confirmed by Rebaz — build for these **first**:
+
+1. **Forgetting / dropped commitments** (working memory) → Open Loops is the heart of Home.
+2. **Time blindness** → make time visible on *every* surface (countdowns, day-shape, "how long").
+3. **Overwhelm / paralysis** → pre-decide hard; default to *one thing*; raw feeds are opt-in only.
+
+**Tone: warm & no-guilt.** When something slips, Xanî states it neutrally and just handles it
+— never makes Rebaz feel behind. Closing a loop should feel good, not like relief from blame.
+(Dopamine, initiation, follow-through still matter — they're next after the top three.)
+
 ## What this changes going forward
 
 - **Home = the executive-function surface** (Open Loops + one thing + gentle triage), not a "briefing dashboard."

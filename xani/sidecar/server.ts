@@ -8,6 +8,7 @@ import { loadDotenv } from './env.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
+import { usingGemini, geminiGenerate } from './llm.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
 import {
   getBriefingData,
@@ -68,6 +69,14 @@ function toApiSystem(system: unknown): Anthropic.MessageCreateParams['system'] {
 }
 
 const createMessage: CreateMessage = async (params, onText) => {
+  // Gemini testing path: text-only (tools are ignored), streamed as one chunk.
+  if (usingGemini()) {
+    const text = await geminiGenerate(
+      { system: params.system, messages: params.messages as { role: string; content: unknown }[], max_tokens: params.max_tokens },
+      onText,
+    );
+    return { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text }] } as unknown as LLMResponse;
+  }
   if (!anthropic) throw new Error('ANTHROPIC_API_KEY is not set in the sidecar environment.');
   const stream = anthropic.messages.stream({
     model: params.model,
@@ -80,6 +89,27 @@ const createMessage: CreateMessage = async (params, onText) => {
   const final = await stream.finalMessage();
   return final as unknown as LLMResponse;
 };
+
+/** True when SOME model provider is available (Anthropic or Gemini). */
+function modelAvailable(): boolean {
+  return Boolean(anthropic) || usingGemini();
+}
+
+/** One non-streaming completion (system + a single user string) via whichever provider
+ *  is configured — used by triage/summaries. Returns the text. */
+async function oneShot(system: string, user: string, maxTokens: number): Promise<string> {
+  if (usingGemini()) {
+    return geminiGenerate({ system, messages: [{ role: 'user', content: user }], max_tokens: maxTokens });
+  }
+  if (!anthropic) return '';
+  const resp = await anthropic.messages.create({
+    model: 'claude-haiku-4-5',
+    max_tokens: maxTokens,
+    system,
+    messages: [{ role: 'user', content: user }],
+  });
+  return resp.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+}
 
 const EXTRACTION_SYSTEM =
   'You are reviewing a finished conversation. Call propose_memory (0-5 times) for ' +
@@ -133,7 +163,7 @@ function withLearnings(base: string, learned: string[]): string {
 let slackTriageCache: { at: number; key: string; data: SlackTriage } | null = null;
 
 async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
-  if (!anthropic) return { connected: false, triaged: [], error: 'No API key.' };
+  if (!modelAvailable()) return { connected: false, triaged: [], error: 'No API key.' };
   // Cache is keyed on the learned-corrections set, so a fresh correction re-triages at once.
   const learnKey = (learned ?? []).join('');
   if (slackTriageCache && slackTriageCache.key === learnKey && Date.now() - slackTriageCache.at < 90_000) return slackTriageCache.data;
@@ -191,13 +221,7 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
 
   const list = capped.map((m) => ({ id: m.id, from: m.from, where: m.dm ? 'DM' : `#${m.channel}`, dm: m.dm, emergency: m.emergency, text: m.text.slice(0, 240) }));
   try {
-    const resp = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 2000,
-      system: withLearnings(SLACK_TRIAGE_SYSTEM, learned),
-      messages: [{ role: 'user', content: JSON.stringify(list) }],
-    });
-    const t = resp.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+    const t = await oneShot(withLearnings(SLACK_TRIAGE_SYSTEM, learned), JSON.stringify(list), 2000);
     const s = t.indexOf('['); const e = t.lastIndexOf(']');
     const parsed = s >= 0 && e > s ? (JSON.parse(t.slice(s, e + 1)) as { id: string; verdict: string; reason?: string }[]) : [];
     const byId = new Map(parsed.map((p) => [p.id, p]));
@@ -215,20 +239,14 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
 }
 
 async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
-  if (!anthropic) return { connected: false, triaged: [], error: 'No API key.' };
+  if (!modelAvailable()) return { connected: false, triaged: [], error: 'No API key.' };
   const inbox = await getInbox('inbox', '');
   if (!inbox.connected) return { connected: false, triaged: [], error: inbox.error };
   const msgs = inbox.messages.slice(0, 40);
   if (msgs.length === 0) return { connected: true, triaged: [] };
   const list = msgs.map((m) => ({ id: m.id, from: m.from, subject: m.subject, snippet: (m.snippet ?? '').slice(0, 160) }));
   try {
-    const resp = await anthropic.messages.create({
-      model: 'claude-haiku-4-5',
-      max_tokens: 2000,
-      system: withLearnings(TRIAGE_SYSTEM, learned),
-      messages: [{ role: 'user', content: JSON.stringify(list) }],
-    });
-    const text = resp.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+    const text = await oneShot(withLearnings(TRIAGE_SYSTEM, learned), JSON.stringify(list), 2000);
     const s = text.indexOf('[');
     const e = text.lastIndexOf(']');
     const parsed = s >= 0 && e > s ? (JSON.parse(text.slice(s, e + 1)) as { id: string; verdict: string; reason?: string }[]) : [];
@@ -286,7 +304,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/health') {
-    json(res, 200, { ok: true, hasKey: Boolean(apiKey) });
+    json(res, 200, { ok: true, hasKey: modelAvailable(), provider: usingGemini() ? 'gemini' : anthropic ? 'anthropic' : 'none' });
     return;
   }
 
@@ -461,7 +479,7 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'POST' && req.url === '/extract') {
     try {
-      if (!apiKey) return json(res, 200, { proposals: [], note: 'No API key.' });
+      if (!modelAvailable()) return json(res, 200, { proposals: [], note: 'No API key.' });
       const body = JSON.parse(await readBody(req)) as { messages: ChatRequest['messages']; model?: string };
       const proposals: ProposedMemory[] = [];
       const proposeOnly: Record<string, ToolDef> = Object.fromEntries(
@@ -486,7 +504,7 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'POST' && req.url === '/draft-reply') {
     try {
-      if (!apiKey) return json(res, 200, { ok: false, error: 'No Anthropic API key in the sidecar.' });
+      if (!modelAvailable()) return json(res, 200, { ok: false, error: 'No model API key in the sidecar (set ANTHROPIC_API_KEY or GOOGLE_AI_API_KEY).' });
       const b = JSON.parse(await readBody(req)) as { from?: string; subject?: string; body?: string; account?: string; medium?: 'email' | 'slack'; voice?: string };
       const incoming = (b.body ?? '').slice(0, 6000);
       const slack = b.medium === 'slack';
@@ -543,7 +561,7 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'POST' && req.url === '/summarize') {
     try {
-      if (!apiKey) return json(res, 200, { ok: false, error: 'No Anthropic API key in the sidecar.' });
+      if (!modelAvailable()) return json(res, 200, { ok: false, error: 'No model API key in the sidecar (set ANTHROPIC_API_KEY or GOOGLE_AI_API_KEY).' });
       const b = JSON.parse(await readBody(req)) as { title?: string; text?: string };
       const system = [
         {
@@ -586,8 +604,8 @@ const server = createServer(async (req, res) => {
 
     try {
       const body = JSON.parse(await readBody(req)) as ChatRequest;
-      if (!apiKey) {
-        send({ type: 'error', message: 'No Anthropic API key in the sidecar. Set ANTHROPIC_API_KEY (or add it to xani/.env.local).' });
+      if (!modelAvailable()) {
+        send({ type: 'error', message: 'No model API key in the sidecar. Set ANTHROPIC_API_KEY or GOOGLE_AI_API_KEY (in xani/.env.local).' });
       } else {
         await runAgentTurn(body, { createMessage, requestApproval }, send);
       }
@@ -603,5 +621,5 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`MARVIN sidecar on http://localhost:${PORT} (key ${apiKey ? 'present' : 'MISSING'})`);
+  console.log(`MARVIN sidecar on http://localhost:${PORT} (model: ${usingGemini() ? 'Gemini (Google AI)' : apiKey ? 'Claude (Anthropic)' : 'NONE — set ANTHROPIC_API_KEY or GOOGLE_AI_API_KEY'})`);
 });

@@ -202,13 +202,15 @@ if(renderer){
   // aurora sphere of points
   const N=mobile?3600:6000, R=1.6;
   const base=new Float32Array(N*3), pos=new Float32Array(N*3), col=new Float32Array(N*3), seed=new Float32Array(N);
+  const jd=new Float32Array(N*3), jf=new Float32Array(N); // per-particle chaotic-shake direction + frequency
   const RAMP=[new THREE.Color('#8df7e6'),new THREE.Color('#5aa9ff'),new THREE.Color('#b088ff'),new THREE.Color('#ff7a52')];
   function ramp(t){t=Math.max(0,Math.min(1,t));const f=t*(RAMP.length-1),i=Math.floor(f);const c=RAMP[i].clone();if(i<RAMP.length-1)c.lerp(RAMP[i+1],f-i);return c;}
   const gold=Math.PI*(3-Math.sqrt(5));
   for(let i=0;i<N;i++){ const y=1-(i/(N-1))*2, r=Math.sqrt(1-y*y), th=gold*i, j=.93+Math.random()*.12;
     const x=Math.cos(th)*r*R*j, yy=y*R*j, z=Math.sin(th)*r*R*j;
     base[i*3]=x;base[i*3+1]=yy;base[i*3+2]=z; pos[i*3]=x;pos[i*3+1]=yy;pos[i*3+2]=z;
-    const c=ramp((y+1)/2+(Math.random()-.5)*.14); col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b; seed[i]=Math.random()*6.28; }
+    const c=ramp((y+1)/2+(Math.random()-.5)*.14); col[i*3]=c.r;col[i*3+1]=c.g;col[i*3+2]=c.b; seed[i]=Math.random()*6.28;
+    jd[i*3]=Math.random()*2-1; jd[i*3+1]=Math.random()*2-1; jd[i*3+2]=Math.random()*2-1; jf[i]=14+Math.random()*24; }
   const geo=new THREE.BufferGeometry();
   geo.setAttribute('position',new THREE.BufferAttribute(pos,3));
   geo.setAttribute('color',new THREE.BufferAttribute(col,3));
@@ -254,11 +256,20 @@ if(renderer){
     mx+=(tx-mx)*.05; my+=(ty-my)*.05;
     const energy = reduce?0:lvl;
 
-    // particles: breathe + expand/shimmer with voice
+    // particles: smooth breathe + expand, PLUS chaotic shake when hearing voice
     const p=geo.attributes.position.array;
-    const expand=1+energy*0.34;
-    for(let i=0;i<N;i++){ const sh=1+Math.sin(t*2.2+seed[i])*(0.01+energy*0.06);
-      p[i*3]=base[i*3]*expand*sh; p[i*3+1]=base[i*3+1]*expand*sh; p[i*3+2]=base[i*3+2]*expand*sh; }
+    const expand=1+energy*0.30;
+    const chaos=energy*energy;            // ramps up hard only when actually speaking
+    const amp=chaos*0.6;                  // shake amplitude — each particle jitters in its own random dir/freq
+    for(let i=0;i<N;i++){
+      const sh=1+Math.sin(t*2.2+seed[i])*(0.01+energy*0.05);
+      const jx=jd[i*3]  *Math.sin(t*jf[i]      +seed[i]    )*amp;
+      const jy=jd[i*3+1]*Math.sin(t*jf[i]*1.13 +seed[i]*1.7)*amp;
+      const jz=jd[i*3+2]*Math.sin(t*jf[i]*0.87 +seed[i]*2.3)*amp;
+      p[i*3]  =base[i*3]  *expand*sh + jx;
+      p[i*3+1]=base[i*3+1]*expand*sh + jy;
+      p[i*3+2]=base[i*3+2]*expand*sh + jz;
+    }
     geo.attributes.position.needsUpdate=true;
 
     // sizes / glow respond to voice
@@ -271,8 +282,11 @@ if(renderer){
     // breathing scale + rotation (faster when speaking)
     const breathe=1+Math.sin(t*1.1)*0.03+energy*0.06;
     grp.scale.setScalar(breathe);
-    grp.rotation.y=t*(0.06+energy*0.25)+mx*0.5;
+    grp.rotation.y=t*(0.06+energy*0.28)+mx*0.5;
     grp.rotation.x=my*0.3+Math.sin(t*0.3)*0.03;
+    // smooth floating movement — gentle at rest, more alive while listening
+    grp.position.x=Math.sin(t*0.6)*0.05 + Math.sin(t*3.2)*energy*0.12 + mx*0.15;
+    grp.position.y=Math.cos(t*0.5)*0.045 + Math.cos(t*2.7)*energy*0.12 - my*0.12;
 
     // rings pulse with voice + steady alert shimmer
     const rp=0.22+energy*0.6+Math.abs(Math.sin(t*1.6))*0.12;

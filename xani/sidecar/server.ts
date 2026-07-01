@@ -274,12 +274,17 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   type Cand = { id: string; workspace: string; workspaceName: string; channelId: string; channel: string; dm: boolean; from: string; text: string; ts: string; emergency: boolean };
   const candidates: Cand[] = [];
   const seen = new Set<string>();
+  // Only surface genuinely recent messages. Without this, the LATEST message in a quiet
+  // DM (e.g. an old "Saturday shift" note) keeps showing up as if it's new. 4-day window.
+  const nowSec = Date.now() / 1000;
+  const MAX_AGE_SEC = 4 * 86_400;
   for (const { c, h } of histories) {
     if (!h || !h.ok) continue;
     const isDM = c.kind === 'dm' || c.kind === 'group';
     for (const m of h.messages) {
       const text = (m.text ?? '').trim();
       if (!text) continue;
+      if (m.ts && nowSec - Number(m.ts) > MAX_AGE_SEC) continue; // stale — not new, don't surface
       if (m.userId && selfIds.has(m.userId)) continue; // Rebaz's own message — not a task for him
       const nameMention = /\brebaz\b/i.test(text);
       if (!(isDM || nameMention || m.emergency)) continue; // the flag rules (triage-rules.md §2)

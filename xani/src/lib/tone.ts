@@ -15,6 +15,33 @@ export function minsUntil(iso: string, now: Date = new Date()): number {
   return Math.round((Date.parse(iso) - now.getTime()) / 60000);
 }
 
+/** "When" — a compact relative time from an epoch-ms instant ("just now", "12m ago",
+ *  "3h ago", "yesterday", "4d ago", then an absolute date). So nothing looks new when it's not. */
+export function timeAgo(ms: number, now: Date = new Date()): string {
+  if (!ms || Number.isNaN(ms)) return '';
+  const diff = now.getTime() - ms;
+  const min = Math.round(diff / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min}m ago`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  if (d === 1) return 'yesterday';
+  if (d < 7) return `${d}d ago`;
+  return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+/** Slack ts ("1690000000.0001") → epoch ms. */
+export function slackTsMs(ts: string): number {
+  const n = Number(ts);
+  return Number.isFinite(n) ? Math.round(n * 1000) : 0;
+}
+
+/** True when an instant is within the last `days` — used to stop stale items looking new. */
+export function isRecent(ms: number, days = 4, now: Date = new Date()): boolean {
+  return ms > 0 && now.getTime() - ms <= days * 86_400_000;
+}
+
 /** Human duration for an estimate ("~4 min", "~1h 20m"). */
 export function estLabel(mins: number): string {
   const m = Math.max(1, Math.round(mins));

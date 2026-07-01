@@ -19,7 +19,7 @@ import { Momentum } from '@/components/home/Momentum';
 import { MicButton } from '@/components/home/MicButton';
 import { SourceBadge } from '@/components/home/SourceBadge';
 import { DayRitual } from '@/components/home/DayRitual';
-import { whyThisOne, dueLabel, estLabel } from '@/lib/tone';
+import { whyThisOne, dueLabel, estLabel, timeAgo, slackTsMs } from '@/lib/tone';
 
 /**
  * Home — the ADHD command surface (foundations.md). Optimised for Rebaz's top
@@ -398,6 +398,7 @@ export default function HomePage() {
                 <div className="flex flex-wrap items-center gap-2.5">
                   <SourceBadge source="email" label={m.account} />
                   <span className="text-[13px] text-text-2">{m.from}</span>
+                  {m.receivedAt && <span className="ml-auto text-[12px] text-muted">{timeAgo(Date.parse(m.receivedAt))}</span>}
                 </div>
                 <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.subject}</p>
                 {m.reason && <p className="mt-1 text-[12.5px] text-muted">{m.reason}</p>}
@@ -436,6 +437,7 @@ export default function HomePage() {
                 <div className="flex flex-wrap items-center gap-2.5">
                   <SourceBadge source="slack" urgent={m.emergency} label={`${m.emergency ? 'URGENT · ' : ''}${m.dm ? 'DM' : `#${m.channel}`} · ${m.workspaceName}`} />
                   <span className="text-[13px] text-text-2">{m.from}</span>
+                  {m.ts && <span className="ml-auto text-[12px] text-muted">{timeAgo(slackTsMs(m.ts))}</span>}
                 </div>
                 <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.text.length > 200 ? `${m.text.slice(0, 197)}…` : m.text}</p>
                 {m.reason && <p className="mt-1 text-[12.5px] text-muted">{m.reason}</p>}

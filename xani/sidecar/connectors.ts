@@ -540,6 +540,10 @@ const slackPostToken = (w: SlackWs) => process.env[w.env] || process.env[w.userE
 
 const EMERGENCY_RE = /\b(emergency|urgent|asap|breaking|trend drop)\b/i;
 const MAX_SLACK_CONVOS = 60;
+// Reject rate-limited calls immediately instead of retrying every 10s forever — a 429
+// then just throws, we catch it and move on. This is what prevents a retry-storm from
+// ever building up, no matter how many callers or how strict Slack's tier is.
+const SLACK_WC_OPTS = { rejectRateLimitedCalls: true } as const;
 
 /** Inject display names into bare user mentions (<@U123> → <@U123|Name>) so the
  *  renderer can show "@Name" without shipping the whole user directory. */
@@ -612,7 +616,7 @@ async function computeSlack(): Promise<SlackData> {
       const kind = slackTokenKind(w);
       const wsRec = { role: w.role, name: w.name, avBg: w.avBg, tokenKind: kind } as SlackData['workspaces'][number];
       workspaces.push(wsRec);
-      const client = new WebClient(slackReadToken(w));
+      const client = new WebClient(slackReadToken(w), SLACK_WC_OPTS);
       try {
         const auth = await client.auth.test(); // fail fast with a precise error (invalid_auth, token_revoked…)
         wsRec.selfId = (auth as { user_id?: string }).user_id; // so triage can drop Rebaz's own messages
@@ -712,7 +716,7 @@ export async function getSlackHistory(p: { workspace: string; channel: string; c
   const base = { workspace: p.workspace, channelId: p.channel };
   if (!w || !token) return { ...base, ok: false, error: 'not_connected', messages: [] };
   try {
-    const client = new WebClient(token);
+    const client = new WebClient(token, SLACK_WC_OPTS);
     const names = await slackNames(w.role, client);
     const res = await client.conversations.history({
       channel: p.channel,
@@ -960,7 +964,7 @@ async function postSlack(p: { channel: string; text: string; workspace?: string;
   const token = w ? slackPostToken(w) : undefined;
   if (!token) return { ok: false, note: 'Slack not connected — add a workspace token on Connections.' };
   try {
-    const client = new WebClient(token);
+    const client = new WebClient(token, SLACK_WC_OPTS);
     const name = p.channel.replace(/^#/, '');
     // A channel/DM id is passed straight through; a #name is resolved to its id.
     let ch = p.channel;
@@ -986,7 +990,7 @@ function slackClientFor(role?: string, preferUser = false): WebClient | null {
   const w = (role ? SLACK_WORKSPACES.find((x) => x.role === role) : undefined) ?? SLACK_WORKSPACES.find((x) => slackReadToken(x));
   if (!w) return null;
   const token = preferUser ? (slackReadToken(w) ?? slackPostToken(w)) : (slackPostToken(w) ?? slackReadToken(w));
-  return token ? new WebClient(token) : null;
+  return token ? new WebClient(token, SLACK_WC_OPTS) : null;
 }
 
 async function slackReact(workspace: string, channel: string, ts: string, emoji: string): Promise<ActResult> {

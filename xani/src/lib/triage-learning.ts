@@ -46,6 +46,26 @@ export function recordTriageCorrection(input: {
 }
 
 /**
+ * Record a sender-level rule from Train mode ("this sender is important / noise").
+ * Stronger and broader than a single-message correction — it's a standing judgement
+ * about a whole sender. Same write-gate path (trusted → active, visible on /memory).
+ */
+export function recordSenderRule(input: {
+  medium: TriageMedium;
+  from: string;
+  decision: 'important' | 'noise';
+}): string {
+  const where = input.medium === 'email' ? 'Emails' : 'Slack messages';
+  const content =
+    input.decision === 'important'
+      ? `${where} from "${input.from}" are important to Rebaz — always surface them.`
+      : `${where} from "${input.from}" are noise — file them automatically; only surface if the ` +
+        `message names Rebaz directly or clearly asks him to do something.`;
+  ingestMemory({ category: 'correction', source: 'correction', content, importance: 7 });
+  return content;
+}
+
+/**
  * The learnings to inject into the triage prompt: active memories that came from
  * Rebaz's corrections. Capped so the prompt stays small (and cache-friendly).
  */

@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { logActivity } from '@/lib/activity';
+import { recordWin } from '@/lib/momentum';
+import { setFocusActive } from '@/lib/nudge-policy';
 
 /**
  * Focus Session — the body-double for task initiation (foundations.md §2, §9).
@@ -45,6 +47,7 @@ export function FocusSession({
           setRunning(false);
           setDone(true);
           logActivity({ kind: 'note', title: 'Focus session complete', detail: task.slice(0, 80) });
+          recordWin(`Focused: ${task.slice(0, 80)}`, 'focus');
           return 0;
         }
         return s - 1;
@@ -61,6 +64,12 @@ export function FocusSession({
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
+
+  // Silence nudges while a focus session is open — never break deep work.
+  useEffect(() => {
+    setFocusActive(true);
+    return () => setFocusActive(false);
+  }, []);
 
   const total = minutes * 60;
   const progress = total > 0 ? 1 - left / total : 0;

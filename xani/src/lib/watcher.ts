@@ -1,6 +1,7 @@
 import { fetchSlack, fetchInboxFolder } from '@/lib/marvin-data';
 import { readJson, writeJson } from '@/lib/storage';
 import { pushNotify, notifyEnabled } from '@/lib/notify';
+import { canNudge, markNudged } from '@/lib/nudge-policy';
 
 /**
  * The watcher — background freshness so you don't have to keep opening Gmail/Slack.
@@ -79,10 +80,14 @@ export async function runWatch(): Promise<void> {
   saveSeen(s);
 
   if (first || pings.length === 0 || !notifyEnabled()) return;
-  if (pings.length <= 4) {
+  // Single gate: quiet by default, batched (≥90 min apart), no days off, no quiet hours,
+  // never during a focus session. New items are still recorded above — they wait quietly.
+  if (!canNudge()) return;
+  if (pings.length <= 3) {
     for (const p of pings) pushNotify(p.title, p.body, { tag: p.tag });
   } else {
-    // Avoid a notification storm — one summary instead.
-    pushNotify(`${pings.length} new things need you`, 'Open Xanî to go through them.', { tag: 'xani-batch' });
+    // One calm summary instead of a storm.
+    pushNotify(`${pings.length} things for when you surface`, 'They’re in Xanî whenever you’re ready — no rush.', { tag: 'xani-batch' });
   }
+  markNudged();
 }

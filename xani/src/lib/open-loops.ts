@@ -1,5 +1,6 @@
 import { readJson, writeJson, newId } from '@/lib/storage';
 import { logActivity } from '@/lib/activity';
+import { recordWin } from '@/lib/momentum';
 
 /**
  * Open Loops — the working-memory store (the ADHD core, foundations.md §1).
@@ -107,15 +108,22 @@ export function captureLoop(input: {
 }
 
 export function completeLoop(id: string): void {
+  const done = listLoops().find((l) => l.id === id);
   save(
     listLoops().map((l) => (l.id === id ? { ...l, status: 'done' as const } : l)),
   );
+  if (done && done.status !== 'done') recordWin(done.task, 'loop'); // a real, celebrated win
 }
 
 export function snoozeLoop(id: string, until: string): void {
   save(
     listLoops().map((l) => (l.id === id ? { ...l, status: 'snoozed' as const, snoozedUntil: until } : l)),
   );
+}
+
+/** Refine a loop in place (AI brain-dump sort: cleaned title / estimate / kind). */
+export function refineLoop(id: string, patch: Partial<Pick<OpenLoop, 'task' | 'estMins' | 'channel'>>): void {
+  save(listLoops().map((l) => (l.id === id ? { ...l, ...patch } : l)));
 }
 
 /** Persist a break-it-down onto a loop (steps + summed estimate) — survives reloads. */

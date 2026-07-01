@@ -318,6 +318,21 @@ export async function breakdownTask(task: string, level = 3): Promise<{ ok: bool
   }
 }
 
+/** Sort a raw brain-dump into a clean, classified, estimated item (P1.3). */
+export async function sortDump(text: string): Promise<{ ok: boolean; task?: string; kind?: 'task' | 'note' | 'someday'; estMins?: number; error?: string }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/sort-dump`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!resp.ok) return { ok: false, error: `runtime responded ${resp.status}` };
+    return (await resp.json()) as { ok: boolean; task?: string; kind?: 'task' | 'note' | 'someday'; estMins?: number; error?: string };
+  } catch {
+    return { ok: false, error: 'runtime unreachable' };
+  }
+}
+
 /** Voice corpus — deep harvest of Rebaz's own writing + patterns analysis (Train mode). */
 export interface VoiceAnalysis {
   voiceNotes: Record<string, string[]>;

@@ -36,6 +36,32 @@ export function useLiveData<T>(path: string, fetcher: () => Promise<T | null>) {
     };
   }, [path, fetcher]);
 
+  // Auto-refresh: when the tab regains focus/visibility, silently revalidate so the
+  // view is current when you look at it (throttled so quick tab-switches don't hammer).
+  useEffect(() => {
+    let last = Date.now();
+    let alive = true;
+    const revalidate = () => {
+      if (document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - last < 15_000) return;
+      last = now;
+      invalidate(path);
+      fetcher().then((d) => {
+        if (!alive || !d) return;
+        setData(d);
+        setState('loaded');
+      });
+    };
+    window.addEventListener('focus', revalidate);
+    document.addEventListener('visibilitychange', revalidate);
+    return () => {
+      alive = false;
+      window.removeEventListener('focus', revalidate);
+      document.removeEventListener('visibilitychange', revalidate);
+    };
+  }, [path, fetcher]);
+
   /** Manual refresh: bust the cache for this path and re-fetch, keeping current data on screen. */
   const refresh = useCallback(async () => {
     setRefreshing(true);

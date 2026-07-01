@@ -3,6 +3,7 @@ import { Fraunces, Inter } from 'next/font/google';
 import './globals.css';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { CommandPalette } from '@/components/ui/CommandPalette';
+import { Watcher } from '@/components/system/Watcher';
 
 // Quiet Stone identity: Fraunces is the display serif (kept under the
 // --font-playfair variable name so globals.css / tailwind need no change).
@@ -38,6 +39,7 @@ export default function RootLayout({
           }}
         />
         <CommandPalette />
+        <Watcher />
         <div className="flex h-screen overflow-hidden">
           <Sidebar />
           <main className="flex-1 overflow-y-auto">{children}</main>

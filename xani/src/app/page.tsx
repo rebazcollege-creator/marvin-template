@@ -10,6 +10,7 @@ import { enqueueApproval } from '@/lib/approvals';
 import type { BriefingData, TriagedEmail, TriagedSlack } from '@/lib/marvin-protocol';
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
+import { recordTriageCorrection, triageLearnings, learnedCount } from '@/lib/triage-learning';
 import { FocusSession } from '@/components/home/FocusSession';
 
 /**
@@ -103,6 +104,7 @@ export default function HomePage() {
   const [slackErr, setSlackErr] = useState<string | null>(null);
   const [slackLoading, setSlackLoading] = useState(true);
   const [flash, setFlash] = useState<string | null>(null);
+  const [learned, setLearned] = useState(0);
   const now = useMemo(() => new Date(), []);
 
   const flashMsg = (s: string) => {
@@ -116,34 +118,31 @@ export default function HomePage() {
     ensureStorageReady().then(() => {
       setSettings(getSettings());
       reloadLoops();
+      setLearned(learnedCount());
+      const learnings = triageLearnings();
       const cached = peekData<BriefingData>(PATHS.briefing);
       if (cached) setData(cached);
       void syncOpenLoops().then(reloadLoops); // pull live Trello commitments into Open Loops
+      // Triage reads Rebaz's corrections so it gets sharper each time (self-development.md).
+      fetchInboxTriage(learnings).then((t) => {
+        setInboxLoading(false);
+        if (!t) { setInboxErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        if (t.error) setInboxErr(t.error);
+        setInboxActs(t.triaged.filter((m) => m.verdict === 'act'));
+        setInboxKnow(t.triaged.filter((m) => m.verdict === 'know').length);
+        setInboxFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
+      });
+      fetchSlackTriage(learnings).then((t) => {
+        setSlackLoading(false);
+        if (!t) { setSlackErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        if (t.error) setSlackErr(t.error);
+        if (!t.connected) { setSlackActs([]); return; }
+        setSlackActs(t.triaged.filter((m) => m.verdict === 'act'));
+        setSlackKnow(t.triaged.filter((m) => m.verdict === 'know').length);
+        setSlackFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
+      });
     });
     fetchBriefingData().then((d) => d && setData(d));
-    fetchInboxTriage().then((t) => {
-      setInboxLoading(false);
-      if (!t) {
-        setInboxErr('runtime unreachable — is it running? (npm run dev:all)');
-        return;
-      }
-      if (t.error) setInboxErr(t.error);
-      setInboxActs(t.triaged.filter((m) => m.verdict === 'act'));
-      setInboxKnow(t.triaged.filter((m) => m.verdict === 'know').length);
-      setInboxFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
-    });
-    fetchSlackTriage().then((t) => {
-      setSlackLoading(false);
-      if (!t) {
-        setSlackErr('runtime unreachable — is it running? (npm run dev:all)');
-        return;
-      }
-      if (t.error) setSlackErr(t.error);
-      if (!t.connected) { setSlackActs([]); return; }
-      setSlackActs(t.triaged.filter((m) => m.verdict === 'act'));
-      setSlackKnow(t.triaged.filter((m) => m.verdict === 'know').length);
-      setSlackFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
-    });
     window.addEventListener('xani:loops-changed', reloadLoops);
     return () => window.removeEventListener('xani:loops-changed', reloadLoops);
   }, [reloadLoops]);
@@ -181,10 +180,17 @@ export default function HomePage() {
       task: m.subject,
       email: { account: m.account, id: m.id, from: m.from, subject: m.subject },
     });
+    recordTriageCorrection({ medium: 'email', from: m.from, subject: m.subject, decision: 'act' });
+    setLearned(learnedCount());
     flashMsg('Tracked — MARVIN is holding it for you.');
     setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
   };
-  const dismissEmail = (m: TriagedEmail) => setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
+  const dismissEmail = (m: TriagedEmail) => {
+    recordTriageCorrection({ medium: 'email', from: m.from, subject: m.subject, decision: 'ignore' });
+    setLearned(learnedCount());
+    flashMsg('Learned — I’ll file messages like that next time.');
+    setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
+  };
 
   const trackSlack = (m: TriagedSlack) => {
     const where = m.dm ? `${m.workspaceName} · Slack DM` : `${m.workspaceName} · #${m.channel}`;
@@ -196,10 +202,17 @@ export default function HomePage() {
       ref: m.id,
       slack: { workspace: m.workspace, channelId: m.channelId, channel: m.channel, from: m.from, text: m.text },
     });
+    recordTriageCorrection({ medium: 'slack', from: m.from, subject: m.dm ? m.text : `#${m.channel}: ${m.text}`, decision: 'act' });
+    setLearned(learnedCount());
     flashMsg('Tracked — MARVIN is holding it for you.');
     setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
   };
-  const dismissSlack = (m: TriagedSlack) => setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
+  const dismissSlack = (m: TriagedSlack) => {
+    recordTriageCorrection({ medium: 'slack', from: m.from, subject: m.dm ? m.text : `#${m.channel}: ${m.text}`, decision: 'ignore' });
+    setLearned(learnedCount());
+    flashMsg('Learned — I’ll file messages like that next time.');
+    setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
+  };
 
   // the next step after tracking: MARVIN drafts the reply → Approvals (nothing sends without a tap).
   // Works for both email and Slack loops; "Prepare, I approve" — nothing leaves without Rebaz's tap.
@@ -388,8 +401,17 @@ export default function HomePage() {
             </section>
           )}
 
+          {/* self-development: MARVIN gets sharper from every correction */}
+          {learned > 0 && (
+            <p className="mt-10 border-t border-border pt-5 text-[12.5px] text-text-2">
+              🌱 MARVIN has learned <span className="font-semibold text-text">{learned}</span>{' '}
+              {learned === 1 ? 'thing' : 'things'} from your corrections.{' '}
+              <Link href="/memory" className="font-medium text-accent hover:underline">Review what it knows</Link>.
+            </p>
+          )}
+
           {/* honest note about auto-capture */}
-          <p className="mt-10 border-t border-border pt-5 text-[12.5px] text-muted">
+          <p className={`${learned > 0 ? 'mt-3' : 'mt-10 border-t border-border pt-5'} text-[12.5px] text-muted`}>
             {data?.connected.slack || data?.connected.trello
               ? 'Xanî is watching Slack & Trello — new commitments land here automatically.'
               : (

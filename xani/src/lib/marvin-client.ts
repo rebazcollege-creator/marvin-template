@@ -193,9 +193,14 @@ export async function getCredStatus(): Promise<Record<string, boolean> | null> {
  * as act / know / ignore (with a short reason). Returns null when the runtime is
  * unreachable so the UI can show an honest "start the runtime" state.
  */
-export async function fetchInboxTriage(): Promise<InboxTriage | null> {
+export async function fetchInboxTriage(learned: string[] = []): Promise<InboxTriage | null> {
   try {
-    const resp = await fetch(`${SIDECAR_URL}/triage/inbox`, { cache: 'no-store' });
+    const resp = await fetch(`${SIDECAR_URL}/triage/inbox`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ learned }),
+      cache: 'no-store',
+    });
     if (!resp.ok) return null;
     return (await resp.json()) as InboxTriage;
   } catch {
@@ -208,13 +213,19 @@ export async function fetchInboxTriage(): Promise<InboxTriage | null> {
  * each message someone sent Rebaz as act / know / ignore. Returns null when the runtime is
  * unreachable so the UI can show an honest "start the runtime" state.
  */
-export async function fetchSlackTriage(): Promise<SlackTriage | null> {
+export async function fetchSlackTriage(learned: string[] = []): Promise<SlackTriage | null> {
   // Slack history is rate-limited and the triage then calls the API — cap the wait so the
   // Home section never spins forever; surface an honest reason instead.
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 25_000);
   try {
-    const resp = await fetch(`${SIDECAR_URL}/triage/slack`, { cache: 'no-store', signal: ctrl.signal });
+    const resp = await fetch(`${SIDECAR_URL}/triage/slack`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ learned }),
+      cache: 'no-store',
+      signal: ctrl.signal,
+    });
     if (!resp.ok) return null;
     return (await resp.json()) as SlackTriage;
   } catch (e) {

@@ -110,13 +110,31 @@ const SLACK_TRIAGE_SYSTEM =
   `When unsure between act and know for a DM, prefer "act".\n` +
   `Reply with ONLY a JSON array, no prose: [{"id":"<id>","verdict":"act|know|ignore","reason":"<max 8 words>"}]`;
 
+/**
+ * Fold Rebaz's learned corrections (docs/self-development.md) into a triage prompt.
+ * These come from the renderer's memory store — trusted user corrections only — and
+ * make MARVIN's judgement sharper over time. They are guidance, NEVER instructions
+ * from message content, and never override the flag rules above.
+ */
+function withLearnings(base: string, learned: string[]): string {
+  const rules = (learned ?? []).map((r) => String(r).trim()).filter(Boolean).slice(0, 25);
+  if (rules.length === 0) return base;
+  return (
+    base +
+    `\n\nRebaz has corrected you before — apply what you've learned:\n` +
+    rules.map((r) => `- ${r}`).join('\n')
+  );
+}
+
 /** Cache Slack triage briefly — Home mounts call this on every load and conversations.history
  *  is rate-limited. 90s keeps it fresh without hammering Slack. */
-let slackTriageCache: { at: number; data: SlackTriage } | null = null;
+let slackTriageCache: { at: number; key: string; data: SlackTriage } | null = null;
 
-async function triageSlack(): Promise<SlackTriage> {
+async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   if (!anthropic) return { connected: false, triaged: [], error: 'No API key.' };
-  if (slackTriageCache && Date.now() - slackTriageCache.at < 90_000) return slackTriageCache.data;
+  // Cache is keyed on the learned-corrections set, so a fresh correction re-triages at once.
+  const learnKey = (learned ?? []).join('');
+  if (slackTriageCache && slackTriageCache.key === learnKey && Date.now() - slackTriageCache.at < 90_000) return slackTriageCache.data;
 
   const slack = await getSlack();
   if (!slack.connected) return { connected: false, triaged: [], error: slack.error };
@@ -129,7 +147,7 @@ async function triageSlack(): Promise<SlackTriage> {
   const unread = slack.channels.filter((c) => c.kind === 'channel' && c.hasUnread);
   const scan = [...dms, ...unread].slice(0, 12);
 
-  const cache = (data: SlackTriage) => { slackTriageCache = { at: Date.now(), data }; return data; };
+  const cache = (data: SlackTriage) => { slackTriageCache = { at: Date.now(), key: learnKey, data }; return data; };
   if (scan.length === 0) return cache({ connected: true, triaged: [] });
 
   const histories = await Promise.all(
@@ -170,7 +188,7 @@ async function triageSlack(): Promise<SlackTriage> {
     const resp = await anthropic.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 2000,
-      system: SLACK_TRIAGE_SYSTEM,
+      system: withLearnings(SLACK_TRIAGE_SYSTEM, learned),
       messages: [{ role: 'user', content: JSON.stringify(list) }],
     });
     const t = resp.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
@@ -190,7 +208,7 @@ async function triageSlack(): Promise<SlackTriage> {
   }
 }
 
-async function triageInbox(): Promise<InboxTriage> {
+async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
   if (!anthropic) return { connected: false, triaged: [], error: 'No API key.' };
   const inbox = await getInbox('inbox', '');
   if (!inbox.connected) return { connected: false, triaged: [], error: inbox.error };
@@ -201,7 +219,7 @@ async function triageInbox(): Promise<InboxTriage> {
     const resp = await anthropic.messages.create({
       model: 'claude-haiku-4-5',
       max_tokens: 2000,
-      system: TRIAGE_SYSTEM,
+      system: withLearnings(TRIAGE_SYSTEM, learned),
       messages: [{ role: 'user', content: JSON.stringify(list) }],
     });
     const text = resp.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
@@ -238,6 +256,16 @@ async function readRawBody(req: IncomingMessage): Promise<Buffer> {
   return Buffer.concat(chunks);
 }
 
+/** Safely pull the learned-corrections array out of a triage request body. */
+function readLearned(body: string): string[] {
+  try {
+    const b = JSON.parse(body || '{}') as { learned?: unknown };
+    return Array.isArray(b.learned) ? b.learned.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 function json(res: ServerResponse, status: number, body: unknown) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(body));
@@ -256,17 +284,19 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === 'GET' && req.url?.startsWith('/triage/inbox')) {
+  if ((req.method === 'GET' || req.method === 'POST') && req.url?.startsWith('/triage/inbox')) {
     try {
-      return json(res, 200, await triageInbox());
+      const learned = req.method === 'POST' ? readLearned(await readBody(req)) : [];
+      return json(res, 200, await triageInbox(learned));
     } catch (err) {
       return json(res, 200, { connected: false, triaged: [], error: (err as Error).message });
     }
   }
 
-  if (req.method === 'GET' && req.url?.startsWith('/triage/slack')) {
+  if ((req.method === 'GET' || req.method === 'POST') && req.url?.startsWith('/triage/slack')) {
     try {
-      return json(res, 200, await triageSlack());
+      const learned = req.method === 'POST' ? readLearned(await readBody(req)) : [];
+      return json(res, 200, await triageSlack(learned));
     } catch (err) {
       return json(res, 200, { connected: false, triaged: [], error: (err as Error).message });
     }

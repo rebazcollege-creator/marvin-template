@@ -4,8 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady } from '@/lib/storage';
-import { fetchBriefingData, peekData, PATHS } from '@/lib/marvin-data';
+import { fetchBriefingData, fetchMessageBody, draftReply, peekData, PATHS } from '@/lib/marvin-data';
 import { fetchInboxTriage } from '@/lib/marvin-client';
+import { enqueueApproval } from '@/lib/approvals';
 import type { BriefingData, TriagedEmail } from '@/lib/marvin-protocol';
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
@@ -50,7 +51,7 @@ const SOURCE: Record<string, { label: string; cls: string }> = {
   manual: { label: 'Captured', cls: 'text-accent' },
 };
 
-function LoopCard({ loop, now, onDone, onSnooze }: { loop: OpenLoop; now: Date; onDone: () => void; onSnooze: () => void }) {
+function LoopCard({ loop, now, onDone, onSnooze, onDraft }: { loop: OpenLoop; now: Date; onDone: () => void; onSnooze: () => void; onDraft?: () => void }) {
   const src = SOURCE[loop.source] ?? SOURCE.manual;
   const due = loop.dueAt ? minsUntil(loop.dueAt, now) : null;
   return (
@@ -73,8 +74,11 @@ function LoopCard({ loop, now, onDone, onSnooze }: { loop: OpenLoop; now: Date; 
         </span>
       )}
       <div className="mt-4 flex flex-wrap gap-2.5">
-        <button type="button" onClick={onDone} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">✓ Done</button>
-        <button type="button" onClick={onSnooze} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Snooze</button>
+        {loop.email && onDraft && (
+          <button type="button" onClick={onDraft} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">✍️ Draft reply</button>
+        )}
+        <button type="button" onClick={onDone} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✓ Done</button>
+        <button type="button" onClick={onSnooze} className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-muted transition hover:text-text-2">Snooze</button>
       </div>
     </div>
   );
@@ -93,7 +97,13 @@ export default function HomePage() {
   const [inboxFiled, setInboxFiled] = useState(0);
   const [inboxErr, setInboxErr] = useState<string | null>(null);
   const [inboxLoading, setInboxLoading] = useState(true);
+  const [flash, setFlash] = useState<string | null>(null);
   const now = useMemo(() => new Date(), []);
+
+  const flashMsg = (s: string) => {
+    setFlash(s);
+    window.setTimeout(() => setFlash(null), 2800);
+  };
 
   const reloadLoops = useCallback(() => setLoops(activeLoops()), []);
 
@@ -147,10 +157,32 @@ export default function HomePage() {
   };
 
   const trackEmail = (m: TriagedEmail) => {
-    captureLoop({ source: 'email', channel: `Email · ${m.account}`, from: m.from, task: m.subject });
+    captureLoop({
+      source: 'email',
+      channel: `Email · ${m.account}`,
+      from: m.from,
+      task: m.subject,
+      email: { account: m.account, id: m.id, from: m.from, subject: m.subject },
+    });
+    flashMsg('Tracked — MARVIN is holding it for you.');
     setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
   };
   const dismissEmail = (m: TriagedEmail) => setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
+
+  // the next step after tracking: MARVIN drafts the reply → Approvals (nothing sends without a tap)
+  const draftEmailReply = async (loop: OpenLoop) => {
+    if (!loop.email) return;
+    flashMsg('MARVIN is drafting a reply…');
+    const mb = await fetchMessageBody(loop.email.account, loop.email.id);
+    const bodyText = mb?.text || mb?.body || loop.email.subject;
+    const draft = await draftReply({ account: loop.email.account, from: loop.email.from, subject: loop.email.subject, body: bodyText, medium: 'email' });
+    if (!draft) {
+      flashMsg('Couldn’t draft — is the runtime running?');
+      return;
+    }
+    enqueueApproval({ kind: 'email', title: `Reply to ${loop.email.from}`, source: `Email · ${loop.email.account}`, preview: draft, actionLabel: 'Send' });
+    flashMsg('✍️ Draft ready in Approvals — review & send.');
+  };
 
   return (
     <div className="mx-auto max-w-2xl px-8 pb-24 pt-10">
@@ -186,6 +218,9 @@ export default function HomePage() {
               </p>
               <div className="mt-4 flex flex-wrap gap-2.5">
                 <button type="button" onClick={() => setFocus({ task: oneThing.task, loopId: oneThing.id })} className="rounded-xl bg-accent px-5 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">▶ Focus with me</button>
+                {oneThing.email && (
+                  <button type="button" onClick={() => void draftEmailReply(oneThing)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✍️ Draft reply</button>
+                )}
                 <button type="button" onClick={() => completeLoop(oneThing.id)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✓ Done</button>
                 <button type="button" onClick={() => snoozeLoop(oneThing.id, new Date(now.getTime() + 3 * 3600_000).toISOString())} className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-muted transition hover:text-text-2">Later</button>
               </div>
@@ -262,6 +297,7 @@ export default function HomePage() {
                   now={now}
                   onDone={() => completeLoop(l.id)}
                   onSnooze={() => snoozeLoop(l.id, new Date(now.getTime() + 3 * 3600_000).toISOString())}
+                  onDraft={l.email ? () => void draftEmailReply(l) : undefined}
                 />
               ))}
             </section>
@@ -283,6 +319,11 @@ export default function HomePage() {
           onComplete={focus.loopId ? () => completeLoop(focus.loopId!) : undefined}
           onClose={() => setFocus(null)}
         />
+      )}
+      {flash && (
+        <div className="fixed bottom-6 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-ink px-4 py-3 text-[13.5px] font-semibold text-[#f5f2ea] shadow-lg">
+          {flash}
+        </div>
       )}
     </div>
   );

@@ -42,6 +42,8 @@ export type OpenLoop = {
   snoozedUntil?: string;
   /** Back-link to the source (thread ts / card url) for the monitor. */
   ref?: string;
+  /** For email loops: enough context to draft a reply (the next step after tracking). */
+  email?: { account: string; id: string; from: string; subject: string };
 };
 
 const KEY = 'xani.openloops.v1';
@@ -76,6 +78,7 @@ export function captureLoop(input: {
   dueAt?: string;
   ref?: string;
   saidOk?: boolean;
+  email?: { account: string; id: string; from: string; subject: string };
 }): OpenLoop {
   const loop: OpenLoop = {
     id: newId(),
@@ -88,6 +91,7 @@ export function captureLoop(input: {
     createdAt: new Date().toISOString(),
     dueAt: input.dueAt,
     ref: input.ref,
+    email: input.email,
   };
   save([loop, ...listLoops()]);
   logActivity({ kind: 'note', title: 'Open loop captured', detail: loop.task.slice(0, 80) });

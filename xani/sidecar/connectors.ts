@@ -594,7 +594,7 @@ let slackInflight: Promise<SlackData> | null = null;
 const SLACK_TTL_MS = 90_000;
 /** Only enrich this many conversations per workspace with conversations.info (unread/preview).
  *  Bounded + pooled so we never burst past Slack's Tier-3 limit. DMs are prioritised. */
-const SLACK_INFO_CAP = 18;
+const SLACK_INFO_CAP = 32;
 export function bumpSlackCache(): void { slackDataCache = null; }
 
 export async function getSlack(): Promise<SlackData> {

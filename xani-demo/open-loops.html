@@ -9,103 +9,100 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
 /* ============================================================
-   XANÎ — Open Loops home · IDENTITY: Quiet Stone.
-   Calm warm-paper, muji restraint, Fraunces + Inter, one muted
-   green accent, thin lines, generous space. Low-stimulation by
-   design (ADHD-friendly). No 3D. This is the canonical identity.
+   XANÎ — Open Loops · Quiet Stone, tuned for ADHD.
+   Bigger cards + more air. Minimal words. Each source is its
+   own calm colour (instant recognition). One clear action per
+   card. Low-stimulation, high-clarity.
    ============================================================ */
 :root{
-  --bg:#ecebe4; --paper:#f3f1ea; --surface:#fdfcf7; --surface-2:#f6f4ec;
-  --line:#e4e0d4; --line-2:#d8d3c4; --hover:#f0eee6;
-  --ink:#26251f; --ink-2:#615d52; --muted:#9c988c;
-  --accent:#3f6f5c; --accent-2:#356152; --accent-ink:#fbf9f2; --accent-soft:#e5ece6;
-  /* muted domain accents (Quiet Stone family) */
-  --amargi:#a9744f; --trello:#6f8ca0; --lead:#b0925f; --slack:#6f9077; --violet:#8a86a0;
-  --amber-soft:#efe7d4; --amber-ink:#8a6d34;
-  --r:18px; --shadow:0 14px 34px -26px rgba(60,52,36,.5);
+  --bg:#eceae2; --surface:#fbfaf5; --surface-2:#f4f1e8;
+  --line:#e6e2d6; --line-2:#d9d4c6; --hover:#efece3;
+  --ink:#242219; --ink-2:#5e5a4e; --muted:#a19d8f;
+  --accent:#40705c; --accent-2:#365e4d; --accent-ink:#fbfaf3; --accent-soft:#e6ece7;
+  /* source colour families */
+  --amargi:#bd6a4a; --trello:#5f86a8; --lead:#c2963c; --slack:#5f9070; --violet:#9a6f9c;
+  --r:22px; --shadow:0 18px 40px -30px rgba(60,52,36,.55);
   --fd:'Fraunces',Georgia,serif; --fb:'Inter',system-ui,sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
 html{scroll-behavior:smooth;}
 body{font-family:var(--fb);color:var(--ink);-webkit-font-smoothing:antialiased;
-  background:radial-gradient(900px 560px at 78% -10%,rgba(255,253,247,.7),transparent 62%),var(--bg);min-height:100vh;}
-h1,h2,h3,.disp{font-family:var(--fd);}
-::-webkit-scrollbar{width:9px;}::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:6px;}
+  background:radial-gradient(1000px 620px at 80% -12%,rgba(255,253,246,.7),transparent 60%),var(--bg);min-height:100vh;font-size:16px;}
+h1,h2,h3{font-family:var(--fd);}
+::-webkit-scrollbar{width:10px;}::-webkit-scrollbar-thumb{background:var(--line-2);border-radius:6px;}
 
-.wrap{max-width:720px;margin:0 auto;padding:34px 22px 100px;}
+.wrap{max-width:780px;margin:0 auto;padding:44px 26px 120px;}
 
-/* top */
-.top{display:flex;align-items:center;gap:11px;}
-.top .mk{width:26px;height:26px;border-radius:8px;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font-family:var(--fd);font-weight:700;font-size:15px;}
-.top .wm{font-family:var(--fd);font-weight:600;font-size:20px;line-height:1;}
-.top .wm small{display:block;font-family:var(--fb);font-size:10.5px;color:var(--ink-2);font-weight:500;margin-top:3px;letter-spacing:.02em;}
-.top .day{margin-left:auto;font-size:12px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);padding:6px 12px;border-radius:11px;}
+/* top — minimal */
+.top{display:flex;align-items:center;gap:12px;margin-bottom:36px;}
+.top .mk{width:30px;height:30px;border-radius:9px;display:grid;place-items:center;background:var(--accent);color:var(--accent-ink);font-family:var(--fd);font-weight:700;font-size:17px;}
+.top .wm{font-family:var(--fd);font-weight:600;font-size:21px;}
+.top .day{margin-left:auto;font-size:13px;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);padding:8px 14px;border-radius:12px;}
 
-/* greeting */
-.hero{margin-top:30px;}
-.hero .eyebrow{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:600;}
-.hero h1{font-size:clamp(30px,4.6vw,40px);font-weight:600;letter-spacing:-.01em;margin-top:12px;line-height:1.05;}
-.hero .lede{max-width:520px;margin-top:12px;color:var(--ink-2);font-size:15.5px;line-height:1.6;}
+/* greeting — few words */
+.hero h1{font-size:clamp(34px,5vw,46px);font-weight:600;letter-spacing:-.015em;line-height:1.02;}
+.hero .lede{margin-top:14px;color:var(--ink-2);font-size:17px;line-height:1.5;}
 .hero .lede b{color:var(--ink);font-weight:600;}
 
-/* section head */
-.sec{margin-top:34px;}
-.sech{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;padding:0 2px;}
-.sech h2{font-size:11.5px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:700;}
-.sech .ct{font-size:11px;font-weight:600;color:var(--ink-2);border:1px solid var(--line);border-radius:20px;padding:2px 10px;}
+/* section head — short */
+.sec{margin-top:46px;}
+.sech{display:flex;align-items:baseline;gap:12px;margin-bottom:18px;padding:0 4px;}
+.sech h2{font-size:13px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);font-weight:700;}
+.sech .ct{font-size:12px;font-weight:600;color:var(--ink-2);background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:3px 11px;}
 .sech .sp{flex:1;}
 
-/* card */
-.card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px 20px 18px 22px;margin-bottom:13px;box-shadow:var(--shadow);transition:.24s cubic-bezier(.2,.7,.2,1);}
-.card::before{content:"";position:absolute;left:0;top:14px;bottom:14px;width:3px;border-radius:3px;background:var(--c);}
-.card:hover{transform:translateY(-2px);border-color:var(--line-2);}
-.card.done{opacity:.5;}
-.meta{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:9px;}
-.src{display:inline-flex;align-items:center;gap:6px;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--c);}
-.src .g{width:6px;height:6px;border-radius:50%;background:var(--c);}
-.who{font-size:12.5px;color:var(--ink-2);font-weight:500;} .when{font-size:12px;color:var(--muted);}
-.task{font-family:var(--fd);font-size:18px;font-weight:500;line-height:1.35;color:var(--ink);}
+/* card — bigger, colour-coded per source */
+.card{position:relative;border:1px solid var(--cbd);border-radius:var(--r);padding:24px 26px;margin-bottom:16px;
+  background:color-mix(in srgb, var(--c) 5%, var(--surface));box-shadow:var(--shadow);transition:.24s cubic-bezier(.2,.7,.2,1);}
+.card::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:4px;border-radius:4px;background:var(--c);}
+.card:hover{transform:translateY(-2px);}
+.card.done{opacity:.45;}
+.meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.src{display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--c);}
+.src .g{width:7px;height:7px;border-radius:50%;background:var(--c);}
+.who{font-size:13.5px;color:var(--ink-2);font-weight:500;} .when{font-size:12.5px;color:var(--muted);margin-left:auto;}
+.task{font-family:var(--fd);font-size:21px;font-weight:500;line-height:1.4;color:var(--ink);}
 .card.done .task{text-decoration:line-through;color:var(--muted);}
-.state{display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:600;margin-top:11px;padding:5px 11px;border-radius:9px;background:var(--amber-soft);color:var(--amber-ink);}
+.state{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:600;margin-top:14px;padding:6px 13px;border-radius:10px;background:color-mix(in srgb,var(--c) 12%,var(--surface));color:var(--c);}
 .state .d{width:6px;height:6px;border-radius:50%;background:currentColor;}
-.state.prog{background:#e4ebef;color:#4d6b7d;}
-.acts{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;}
-.btn{font-family:var(--fb);font-size:12.5px;font-weight:600;border-radius:11px;padding:9px 14px;cursor:pointer;transition:.15s;border:1px solid var(--line-2);background:var(--surface-2);color:var(--ink-2);}
+.acts{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap;}
+.btn{font-family:var(--fb);font-size:13.5px;font-weight:600;border-radius:12px;padding:11px 18px;cursor:pointer;transition:.15s;border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);}
 .btn:hover{color:var(--ink);background:var(--hover);}
 .btn.p{border-color:transparent;color:var(--accent-ink);background:var(--accent);}
 .btn.p:hover{background:var(--accent-2);color:var(--accent-ink);}
 
-/* incoming */
-.inc{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px dashed var(--line-2);border-radius:15px;padding:14px 16px;margin-bottom:11px;transition:.22s;}
-.inc .b{flex:1;min-width:0;} .inc .b .m{font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;} .inc .b .t{font-size:14px;color:var(--ink);line-height:1.45;}
-.inc .yn{display:flex;gap:7px;flex-shrink:0;}
+/* incoming — bigger, calm */
+.inc{display:flex;align-items:center;gap:18px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px 20px;margin-bottom:13px;transition:.22s;}
+.inc:hover{border-color:var(--line-2);}
+.inc .b{flex:1;min-width:0;} .inc .b .m{font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:500;} .inc .b .t{font-size:15.5px;color:var(--ink);line-height:1.45;}
+.inc .yn{display:flex;gap:9px;flex-shrink:0;}
 
 /* ambiguous */
-.amb{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--violet);border-radius:var(--r);padding:20px;box-shadow:var(--shadow);}
-.amb .h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--violet);}
-.amb .orig{margin-top:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:13px 15px;font-size:15px;color:var(--ink);line-height:1.5;}
-.amb .orig .lang{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;font-weight:600;}
-.amb .read{margin-top:13px;font-size:14px;color:var(--ink-2);line-height:1.6;} .amb .read b{color:var(--ink);font-weight:600;}
-.opts{display:flex;gap:9px;flex-wrap:wrap;margin-top:15px;}
-.opt{font-family:var(--fb);border:1px solid var(--violet);background:transparent;color:var(--violet);border-radius:22px;padding:9px 15px;font-size:12.5px;font-weight:600;cursor:pointer;transition:.15s;}
+.amb{background:color-mix(in srgb,var(--violet) 5%,var(--surface));border:1px solid color-mix(in srgb,var(--violet) 22%,var(--line));border-left:4px solid var(--violet);border-radius:var(--r);padding:26px;box-shadow:var(--shadow);}
+.amb .h{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--violet);}
+.amb .orig{margin-top:15px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;font-size:16px;color:var(--ink);line-height:1.5;}
+.amb .orig .lang{font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px;font-weight:600;}
+.amb .read{margin-top:15px;font-size:15px;color:var(--ink-2);line-height:1.6;} .amb .read b{color:var(--ink);font-weight:600;}
+.opts{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;}
+.opt{font-family:var(--fb);border:1px solid var(--violet);background:transparent;color:var(--violet);border-radius:24px;padding:10px 17px;font-size:13.5px;font-weight:600;cursor:pointer;transition:.15s;}
 .opt:hover{background:var(--violet);color:#fff;}
-.teach{display:none;gap:9px;margin-top:13px;} .teach.on{display:flex;}
-.teach input{flex:1;background:var(--surface-2);border:1px solid var(--line-2);border-radius:12px;padding:11px 14px;color:var(--ink);font-family:inherit;font-size:13.5px;outline:none;} .teach input:focus{border-color:var(--violet);}
-.teach button{font-family:var(--fb);background:var(--violet);color:#fff;border:none;border-radius:12px;padding:11px 16px;font-weight:600;font-size:12.5px;cursor:pointer;}
+.teach{display:none;gap:10px;margin-top:15px;} .teach.on{display:flex;}
+.teach input{flex:1;background:var(--surface);border:1px solid var(--line-2);border-radius:13px;padding:13px 16px;color:var(--ink);font-family:inherit;font-size:14.5px;outline:none;} .teach input:focus{border-color:var(--violet);}
+.teach button{font-family:var(--fb);background:var(--violet);color:#fff;border:none;border-radius:13px;padding:13px 18px;font-weight:600;font-size:13.5px;cursor:pointer;}
 
 /* learning */
-.learn{background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r);padding:20px;box-shadow:var(--shadow);}
-.learn .h{display:flex;align-items:center;gap:10px;} .learn .h .s{font-family:var(--fd);font-size:18px;font-weight:600;flex:1;} .learn .h .stat{font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:20px;padding:3px 11px;}
-.learn p{font-size:14px;color:var(--ink-2);line-height:1.6;margin-top:10px;} .learn p b{color:var(--ink);font-weight:600;}
-.learn .row{display:flex;gap:9px;margin-top:15px;}
-.learn .row .p{font-family:var(--fb);background:var(--accent);color:var(--accent-ink);border:none;border-radius:12px;padding:10px 18px;font-weight:600;font-size:12.5px;cursor:pointer;}
+.learn{background:color-mix(in srgb,var(--accent) 5%,var(--surface));border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--r);padding:26px;box-shadow:var(--shadow);}
+.learn .h{display:flex;align-items:center;gap:11px;} .learn .h .s{font-family:var(--fd);font-size:20px;font-weight:600;flex:1;} .learn .h .stat{font-size:12px;font-weight:600;color:var(--accent);background:var(--accent-soft);border-radius:20px;padding:4px 12px;}
+.learn p{font-size:15px;color:var(--ink-2);line-height:1.6;margin-top:12px;} .learn p b{color:var(--ink);font-weight:600;}
+.learn .row{display:flex;gap:10px;margin-top:18px;}
+.learn .row .p{font-family:var(--fb);background:var(--accent);color:var(--accent-ink);border:none;border-radius:13px;padding:12px 20px;font-weight:600;font-size:13.5px;cursor:pointer;}
 .learn .row .p:hover{background:var(--accent-2);}
-.learn .row .g{font-family:var(--fb);background:var(--surface-2);border:1px solid var(--line-2);color:var(--ink-2);border-radius:12px;padding:10px 15px;font-size:12.5px;cursor:pointer;}
+.learn .row .g{font-family:var(--fb);background:var(--surface);border:1px solid var(--line-2);color:var(--ink-2);border-radius:13px;padding:12px 17px;font-size:13.5px;cursor:pointer;}
 
-.empty{color:var(--muted);font-size:13.5px;padding:10px 2px;display:none;}
+.empty{color:var(--muted);font-size:15px;padding:14px 4px;display:none;}
 .rise{opacity:0;transform:translateY(12px);animation:rise .55s cubic-bezier(.2,.7,.2,1) forwards;}
 @keyframes rise{to{opacity:1;transform:none;}}
-.toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(24px);z-index:80;background:var(--ink);color:#f5f2ea;padding:12px 18px;border-radius:13px;font-size:13.5px;font-weight:600;box-shadow:0 16px 34px -18px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:.3s;}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(24px);z-index:80;background:var(--ink);color:#f5f2ea;padding:14px 20px;border-radius:14px;font-size:14px;font-weight:600;box-shadow:0 18px 38px -20px rgba(0,0,0,.4);opacity:0;pointer-events:none;transition:.3s;}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0);}
 .spark{position:fixed;width:8px;height:8px;border-radius:2px;pointer-events:none;z-index:90;}
 @media (prefers-reduced-motion:reduce){.rise{animation:none;opacity:1;transform:none;}}
@@ -114,67 +111,64 @@ h1,h2,h3,.disp{font-family:var(--fd);}
 <body>
 <div class="wrap">
   <div class="top">
-    <span class="mk">X</span>
-    <span class="wm">Xanî<small>Personal OS · MARVIN</small></span>
+    <span class="mk">X</span><span class="wm">Xanî</span>
     <span class="day">Wed 1 Jul · 08:42</span>
   </div>
 
   <header class="hero rise">
-    <div class="eyebrow">On alert — say “Hey Xanî”</div>
     <h1>Good morning, Rebaz.</h1>
-    <p class="lede">You said yes to <b>4 things</b> — <b id="openCount">2</b> still open. I’m holding them, so nothing you said “ok” to gets lost.</p>
+    <p class="lede"><b>2</b> open loops. I’ve got everything else.</p>
   </header>
 
   <!-- OPEN LOOPS -->
   <section class="sec rise" style="animation-delay:.06s">
-    <div class="sech"><h2>Open loops — you said yes, not done</h2><span class="sp"></span><span class="ct" id="loopCt">2 open</span></div>
+    <div class="sech"><h2>Open loops</h2><span class="sp"></span><span class="ct" id="loopCt">2</span></div>
     <div id="loops">
-      <div class="card" style="--c:var(--amargi)" data-loop>
-        <div class="meta"><span class="src"><span class="g"></span>Slack DM · Amargi</span><span class="who">Aland (designer)</span><span class="when">· 2 days ago</span></div>
-        <div class="task">“Can you review the Newroz carousel before I schedule it?”</div>
-        <span class="state"><span class="d"></span>You said “ok” · still open</span>
-        <div class="acts"><button class="btn p" data-done>✓ Mark done</button><button class="btn" data-toast="✍️ Draft update opened">Draft update</button><button class="btn" data-toast="😴 Snoozed to this afternoon">Snooze</button><button class="btn" data-toast="⏰ Reminder set for 14:00">Remind me</button></div>
+      <div class="card" style="--c:var(--amargi);--cbd:color-mix(in srgb,var(--amargi) 20%,var(--line))" data-loop>
+        <div class="meta"><span class="src"><span class="g"></span>Amargi · Slack DM</span><span class="who">Aland</span><span class="when">2 days ago</span></div>
+        <div class="task">“Review the Newroz carousel before I schedule it?”</div>
+        <span class="state"><span class="d"></span>You said “ok”</span>
+        <div class="acts"><button class="btn p" data-done>✓ Done</button><button class="btn" data-toast="✍️ Draft opened">Draft reply</button><button class="btn" data-toast="😴 Snoozed to 14:00">Snooze</button></div>
       </div>
-      <div class="card" style="--c:var(--trello)" data-loop>
-        <div class="meta"><span class="src"><span class="g"></span>Trello · Review</span><span class="who">@mention in a comment</span><span class="when">· yesterday</span></div>
-        <div class="task">“Kurdistan water crisis explainer” — “@Rebaz can you approve the final cut?”</div>
-        <span class="state prog"><span class="d"></span>Seen, no reply yet</span>
-        <div class="acts"><button class="btn p" data-done>✓ Mark done</button><button class="btn" data-toast="📋 Opening the card">Open card</button><button class="btn" data-toast="✍️ Draft a reply comment">Draft reply</button><button class="btn" data-toast="⏰ Reminder set">Remind me</button></div>
+      <div class="card" style="--c:var(--trello);--cbd:color-mix(in srgb,var(--trello) 20%,var(--line))" data-loop>
+        <div class="meta"><span class="src"><span class="g"></span>Trello · Review</span><span class="who">@mention</span><span class="when">yesterday</span></div>
+        <div class="task">“Kurdistan water crisis explainer — approve the final cut?”</div>
+        <span class="state"><span class="d"></span>Seen, no reply</span>
+        <div class="acts"><button class="btn p" data-done>✓ Done</button><button class="btn" data-toast="📋 Opening card">Open card</button><button class="btn" data-toast="😴 Snoozed">Snooze</button></div>
       </div>
     </div>
-    <div class="empty" id="loopsEmpty">All caught up. Every “yes” is handled.</div>
+    <div class="empty" id="loopsEmpty">All caught up.</div>
   </section>
 
   <!-- INCOMING -->
   <section class="sec rise" style="animation-delay:.12s">
-    <div class="sech"><h2>New requests — is this a task?</h2><span class="sp"></span></div>
+    <div class="sech"><h2>New requests</h2><span class="sp"></span></div>
     <div id="incoming">
       <div class="inc" data-inc>
-        <div class="b"><div class="m">Slack DM · Amargi · Sana (editor)</div><div class="t">“Hey Rebaz, could you pull the engagement stats for the Rojava piece when you get a sec?”</div></div>
-        <div class="yn"><button class="btn p" data-add>+ Open loop</button><button class="btn" data-dismiss data-toast="Filed — not a task">Not a task</button></div>
+        <div class="b"><div class="m">Amargi · Slack DM · Sana</div><div class="t">“Pull the engagement stats for the Rojava piece?”</div></div>
+        <div class="yn"><button class="btn p" data-add>+ Track</button><button class="btn" data-dismiss data-toast="Filed">Ignore</button></div>
       </div>
       <div class="inc" data-inc>
-        <div class="b"><div class="m">Slack DM · LeadStories · Layla</div><div class="t">“Rebaz — urgent TikTok to fact-check before 3pm, sending now.”</div></div>
-        <div class="yn"><button class="btn p" data-add>+ Open loop</button><button class="btn" data-dismiss data-toast="Filed">Not a task</button></div>
+        <div class="b"><div class="m">LeadStories · Slack DM · Layla</div><div class="t">“Urgent TikTok to fact-check before 3pm.”</div></div>
+        <div class="yn"><button class="btn p" data-add>+ Track</button><button class="btn" data-dismiss data-toast="Filed">Ignore</button></div>
       </div>
     </div>
   </section>
 
   <!-- AMBIGUOUS / KURDISH -->
   <section class="sec rise" style="animation-delay:.18s">
-    <div class="sech"><h2>I need your call</h2><span class="sp"></span></div>
+    <div class="sech"><h2>Needs your call</h2><span class="sp"></span></div>
     <div class="amb" id="ambCard">
-      <div class="h">Kurdish · I’m not fully sure what this needs</div>
-      <div class="orig"><div class="lang">Kurmancî — from Aland (Amargi)</div>“Rebaz, ji kerema xwe vê nivîsê ji bo sibê plan bike û wêneyê biguherîne.”</div>
-      <div class="read">My best read: <b>“Please schedule this post for tomorrow and change the image.”</b> I’m ~70% sure on the second part. What should I do?</div>
+      <div class="h">Kurdish — not fully sure</div>
+      <div class="orig"><div class="lang">Kurmancî · Aland</div>“Rebaz, ji kerema xwe vê nivîsê ji bo sibê plan bike û wêneyê biguherîne.”</div>
+      <div class="read">My read: <b>“Schedule this post for tomorrow and change the image.”</b> Which is it?</div>
       <div class="opts">
-        <button class="opt" data-opt="Schedule for tomorrow + flag the image swap to Aland">Schedule + swap image</button>
-        <button class="opt" data-opt="Just schedule it for tomorrow">Just schedule it</button>
-        <button class="opt" data-opt="Hold — you’ll handle it">I’ll handle it</button>
-        <button class="opt" id="explainBtn">Let me explain →</button>
+        <button class="opt" data-opt="Schedule + swap image">Schedule + swap image</button>
+        <button class="opt" data-opt="Just schedule it">Just schedule</button>
+        <button class="opt" id="explainBtn">Explain →</button>
       </div>
       <div class="teach" id="teach">
-        <input id="teachInput" placeholder="Tell me what it means / what to do — I’ll remember for next time" />
+        <input id="teachInput" placeholder="Tell me — I’ll remember" />
         <button id="teachSend">Teach</button>
       </div>
     </div>
@@ -182,11 +176,11 @@ h1,h2,h3,.disp{font-family:var(--fd);}
 
   <!-- SELF-DEVELOPMENT -->
   <section class="sec rise" style="animation-delay:.24s">
-    <div class="sech"><h2>Xanî is learning</h2><span class="sp"></span></div>
+    <div class="sech"><h2>Learning</h2><span class="sp"></span></div>
     <div class="learn" id="learnCard">
-      <div class="h"><span class="s">A rule I’d like to adopt</span><span class="stat" id="learned">4 learned this week</span></div>
-      <p>You’ve dismissed <b>“LinkedIn — you appeared in N searches”</b> emails 3 times this week. Want me to <b>auto-file them</b> from now on, so they never reach you?</p>
-      <div class="row"><button class="p" id="approveRule">Approve — auto-file these</button><button class="g" data-toast="Okay, I’ll keep asking">Not yet</button></div>
+      <div class="h"><span class="s">A rule I’d like to adopt</span><span class="stat" id="learned">4 this week</span></div>
+      <p>Auto-file <b>LinkedIn “you appeared in searches”</b> emails? You’ve dismissed 3 this week.</p>
+      <div class="row"><button class="p" id="approveRule">Approve</button><button class="g" data-toast="Okay, I’ll keep asking">Not yet</button></div>
     </div>
   </section>
 </div>
@@ -195,20 +189,20 @@ h1,h2,h3,.disp{font-family:var(--fd);}
 
 <script>
 let tT;function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');clearTimeout(tT);tT=setTimeout(()=>t.classList.remove('on'),2000);}
-function confetti(x,y){const cs=['#3f6f5c','#a9744f','#6f8ca0','#b0925f','#8a86a0','#6f9077'];for(let i=0;i<16;i++){const s=document.createElement('i');s.className='spark';s.style.left=x+'px';s.style.top=y+'px';s.style.background=cs[i%cs.length];document.body.appendChild(s);const a=Math.random()*6.28,d=45+Math.random()*70;s.animate([{transform:'translate(0,0)',opacity:.9},{transform:`translate(${Math.cos(a)*d}px,${Math.sin(a)*d+50}px) rotate(${Math.random()*300}deg)`,opacity:0}],{duration:720,easing:'cubic-bezier(.2,.7,.3,1)'}).onfinish=()=>s.remove();}}
+function confetti(x,y){const cs=['#40705c','#bd6a4a','#5f86a8','#c2963c','#9a6f9c','#5f9070'];for(let i=0;i<16;i++){const s=document.createElement('i');s.className='spark';s.style.left=x+'px';s.style.top=y+'px';s.style.background=cs[i%cs.length];document.body.appendChild(s);const a=Math.random()*6.28,d=48+Math.random()*72;s.animate([{transform:'translate(0,0)',opacity:.9},{transform:`translate(${Math.cos(a)*d}px,${Math.sin(a)*d+52}px) rotate(${Math.random()*300}deg)`,opacity:0}],{duration:730,easing:'cubic-bezier(.2,.7,.3,1)'}).onfinish=()=>s.remove();}}
 
 let open=2;
-function refresh(){document.getElementById('openCount').textContent=open;document.getElementById('loopCt').textContent=open+' open';document.getElementById('loopsEmpty').style.display=open===0?'block':'none';}
+function refresh(){document.getElementById('loopCt').textContent=open;document.querySelector('.hero .lede b').textContent=open;document.getElementById('loopsEmpty').style.display=open===0?'block':'none';}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-toast]');if(b&&!b.hasAttribute('data-done')&&!b.hasAttribute('data-dismiss')&&!b.hasAttribute('data-add'))toast(b.dataset.toast);});
-document.querySelectorAll('[data-done]').forEach(btn=>btn.addEventListener('click',()=>{const c=btn.closest('[data-loop]');if(c.classList.contains('done'))return;c.classList.add('done');const r=btn.getBoundingClientRect();confetti(r.left+20,r.top);open=Math.max(0,open-1);refresh();toast('✅ Done — one loop closed');setTimeout(()=>{c.style.height=c.offsetHeight+'px';requestAnimationFrame(()=>{c.style.transition='.4s';c.style.height='0';c.style.opacity='0';c.style.margin='0';c.style.padding='0';setTimeout(()=>c.remove(),400);});},650);}));
-document.querySelectorAll('[data-add]').forEach(b=>b.addEventListener('click',()=>{const c=b.closest('[data-inc]');c.style.transition='.3s';c.style.opacity='0';setTimeout(()=>c.remove(),300);open++;refresh();toast('➕ Added to open loops — I’ll track it');}));
+document.querySelectorAll('[data-done]').forEach(btn=>btn.addEventListener('click',()=>{const c=btn.closest('[data-loop]');if(c.classList.contains('done'))return;c.classList.add('done');const r=btn.getBoundingClientRect();confetti(r.left+20,r.top);open=Math.max(0,open-1);refresh();toast('✅ Done');setTimeout(()=>{c.style.height=c.offsetHeight+'px';requestAnimationFrame(()=>{c.style.transition='.4s';c.style.height='0';c.style.opacity='0';c.style.margin='0';c.style.padding='0';setTimeout(()=>c.remove(),400);});},650);}));
+document.querySelectorAll('[data-add]').forEach(b=>b.addEventListener('click',()=>{const c=b.closest('[data-inc]');c.style.transition='.3s';c.style.opacity='0';setTimeout(()=>c.remove(),300);open++;refresh();toast('➕ Tracking it');}));
 document.querySelectorAll('[data-dismiss]').forEach(b=>b.addEventListener('click',()=>{const c=b.closest('[data-inc]');c.style.transition='.3s';c.style.opacity='0';setTimeout(()=>c.remove(),300);toast(b.dataset.toast||'Filed');}));
-document.querySelectorAll('#ambCard .opt').forEach(o=>{if(o.id==='explainBtn')return;o.addEventListener('click',()=>{document.getElementById('ambCard').style.transition='.35s';document.getElementById('ambCard').style.opacity='.5';toast('Got it — '+o.dataset.opt+'. Learned this pattern.');document.getElementById('learned').textContent='5 learned this week';});});
+document.querySelectorAll('#ambCard .opt').forEach(o=>{if(o.id==='explainBtn')return;o.addEventListener('click',()=>{document.getElementById('ambCard').style.transition='.35s';document.getElementById('ambCard').style.opacity='.5';toast('Got it — '+o.dataset.opt);document.getElementById('learned').textContent='5 this week';});});
 document.getElementById('explainBtn').addEventListener('click',()=>{document.getElementById('teach').classList.add('on');document.getElementById('teachInput').focus();});
-function teach(){const v=document.getElementById('teachInput').value.trim()||'schedule requests from Aland in Kurdish';document.getElementById('ambCard').style.opacity='.5';toast('🧠 Learned: “'+v+'”. I’ll handle it myself next time.');document.getElementById('learned').textContent='5 learned this week';}
+function teach(){const v=document.getElementById('teachInput').value.trim()||'that pattern';document.getElementById('ambCard').style.opacity='.5';toast('🧠 Learned: “'+v+'”');document.getElementById('learned').textContent='5 this week';}
 document.getElementById('teachSend').addEventListener('click',teach);
 document.getElementById('teachInput').addEventListener('keydown',e=>{if(e.key==='Enter')teach();});
-document.getElementById('approveRule').addEventListener('click',()=>{const c=document.getElementById('learnCard');c.style.transition='.35s';c.style.opacity='.55';document.getElementById('learned').textContent='6 learned this week';toast('🧠 Learned — LinkedIn notifications auto-filed from now on');});
+document.getElementById('approveRule').addEventListener('click',()=>{const c=document.getElementById('learnCard');c.style.transition='.35s';c.style.opacity='.55';document.getElementById('learned').textContent='6 this week';toast('🧠 Learned — auto-filing from now on');});
 refresh();
 </script>
 </body>

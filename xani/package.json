@@ -1,0 +1,39 @@
+{
+  "name": "xani",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Xanî — a personal AI operating system for Rebaz. MARVIN at the centre.",
+  "scripts": {
+    "dev": "next dev",
+    "dev:all": "node scripts/dev-all.mjs",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "tauri": "tauri",
+    "sidecar": "node sidecar/server.ts",
+    "sidecar:build": "node sidecar/build.mjs",
+    "sidecar:test": "node --test sidecar/agent.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@slack/web-api": "^7.8.0",
+    "@tauri-apps/api": "^2.11.1",
+    "cmdk": "^1.1.1",
+    "next": "^15.1.6",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.2.7",
+    "@types/node": "^22.10.7",
+    "@types/react": "^19.0.7",
+    "@types/react-dom": "^19.0.3",
+    "autoprefixer": "^10.4.20",
+    "eslint": "^9.39.4",
+    "eslint-config-next": "^15.5.19",
+    "playwright": "^1.56.1",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3"
+  }
+}

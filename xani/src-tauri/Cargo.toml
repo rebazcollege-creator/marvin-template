@@ -1,0 +1,27 @@
+[package]
+name = "xani"
+version = "0.1.0"
+description = "Xanî — a personal AI operating system. MARVIN at the centre."
+authors = ["Rebaz"]
+edition = "2021"
+rust-version = "1.77"
+
+[lib]
+name = "xani_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-shell = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Bundled SQLite (compiles its own libsqlite3 — no system dependency).
+rusqlite = { version = "0.32", features = ["bundled"] }
+# OS keychain for the Anthropic API key (Stronghold is deprecated).
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service"] }
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]

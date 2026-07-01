@@ -1,0 +1,194 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Design tokens (light) — IDENTITY: Quiet Stone (calm, ADHD-first) ── */
+:root {
+  --bg: #eceae2;
+  --surface: #fbfaf5;
+  --surface-2: #f4f1e8;
+  --hover: #efece3;
+  --line: #eceae0;
+  --border: #e6e2d6;
+  --border-2: #ece7db;
+  --text: #242219;
+  --text-2: #5e5a4e;
+  --muted: #a19d8f;
+  --on-accent: #fbfaf3;
+  --accent-soft: #e6ece7;
+  --accent-soft-2: #dfe7e0;
+  --accent-soft-border: #d3e0d6;
+  --accent: #40705c;
+  --accent-dim: #365e4d;
+}
+
+/* ── Design tokens (dark) ── */
+:root[data-xtheme='dark'] {
+  --bg: #15171a;
+  --surface: #1e2126;
+  --surface-2: #262a30;
+  --hover: #2a2e35;
+  --line: #23262c;
+  --border: #30343c;
+  --border-2: #272b31;
+  --text: #ecedea;
+  --text-2: #b2b6bc;
+  --muted: #7f838b;
+  --on-accent: #fbf8f2;
+  --accent-soft: #262a30;
+  --accent-soft-2: #2b2f36;
+  --accent-soft-border: #383c44;
+  --accent: #c0613a;
+  --accent-dim: #a8512e;
+}
+
+html,
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+h1,
+h2,
+h3,
+.wordmark {
+  font-family: var(--font-playfair), Georgia, serif;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 116, 108, 0.28);
+  border-radius: 6px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── Entry animations + skeleton (from design) ── */
+@keyframes xpop {
+  from {
+    opacity: 0;
+    transform: translateY(7px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes xfade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes xshimmer {
+  0% {
+    background-position: -360px 0;
+  }
+  100% {
+    background-position: 360px 0;
+  }
+}
+.xpop {
+  animation: xpop 0.3s ease both;
+}
+.xfade {
+  animation: xfade 0.3s ease both;
+}
+.xsk {
+  background: linear-gradient(90deg, var(--border-2) 0%, var(--bg) 50%, var(--border-2) 100%);
+  background-size: 720px 100%;
+  animation: xshimmer 1.4s infinite linear;
+  border-radius: 7px;
+}
+
+/* ── Orb (Home) ── */
+@keyframes orbFloat {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+@keyframes orbBreath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+@keyframes orbSpin {
+  to { transform: rotate(360deg); }
+}
+@keyframes orbSpinR {
+  to { transform: rotate(-360deg); }
+}
+@keyframes orbRing {
+  0% { transform: translate(-50%, -50%) scale(0.52); opacity: 0.5; }
+  70% { opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1.18); opacity: 0; }
+}
+@keyframes orbCap {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
+}
+@keyframes orbBar {
+  0%, 100% { transform: scaleY(0.35); }
+  50% { transform: scaleY(1); }
+}
+@keyframes orbScene {
+  0%, 100% { transform: rotateX(15deg) rotateY(-18deg); }
+  50% { transform: rotateX(-11deg) rotateY(18deg); }
+}
+@keyframes orbZ {
+  to { transform: rotateZ(360deg); }
+}
+@keyframes orbZr {
+  to { transform: rotateZ(-360deg); }
+}
+@keyframes orbCore {
+  0%, 100% { transform: scale(1); filter: brightness(1); }
+  50% { transform: scale(1.05); filter: brightness(1.12); }
+}
+@keyframes orbHalo {
+  0%, 100% { opacity: 0.58; transform: translate(-50%, -50%) scale(1); }
+  50% { opacity: 0.95; transform: translate(-50%, -50%) scale(1.09); }
+}
+
+/* ── Aurora Glass Orb (Home) ── */
+@keyframes auroraOrbBreath {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+@keyframes auroraRibbonA {
+  0%, 100% { transform: translate(-9%, 2%) rotate(-6deg); }
+  50% { transform: translate(9%, -2%) rotate(8deg); }
+}
+@keyframes auroraRibbonB {
+  to { transform: rotate(360deg); }
+}
+@keyframes auroraRibbonC {
+  0%, 100% { opacity: 0.5; transform: translateY(3%) scale(1); }
+  50% { opacity: 0.85; transform: translateY(-3%) scale(1.06); }
+}
+@keyframes auroraOrbitPulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.8; }
+}
+@keyframes auroraSpark {
+  0%, 100% { opacity: 0.25; transform: translateY(0) scale(0.8); }
+  50% { opacity: 1; transform: translateY(-3px) scale(1.1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-xani-orb],
+  [data-xani-orb] * {
+    animation: none !important;
+  }
+}

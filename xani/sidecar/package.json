@@ -1,0 +1,8 @@
+{
+  "name": "xani-sidecar",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Node sidecar that owns the Anthropic API key and runs MARVIN's tool loop. Spawned by Tauri Rust; the renderer talks to it over HTTP (dev) / IPC (prod).",
+  "//": "Runs on Node 22+ native TypeScript (type stripping); no build step. Shares the root node_modules (@anthropic-ai/sdk)."
+}

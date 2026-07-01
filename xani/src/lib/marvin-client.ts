@@ -250,10 +250,11 @@ export async function fetchInboxTriage(learned: string[] = []): Promise<InboxTri
  * unreachable so the UI can show an honest "start the runtime" state.
  */
 export async function fetchSlackTriage(learned: string[] = []): Promise<SlackTriage | null> {
-  // Slack history is rate-limited and the triage then calls the API — cap the wait so the
-  // Home section never spins forever; surface an honest reason instead.
+  // Slack history is rate-limited and the triage then calls the model (a spawned `claude`
+  // process is slower than an API call) — cap the wait generously so the Home section never
+  // spins forever, but allow the first cold read to finish. Subsequent reads hit the cache.
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 25_000);
+  const timer = setTimeout(() => ctrl.abort(), 90_000);
   try {
     const resp = await fetch(`${SIDECAR_URL}/triage/slack`, {
       method: 'POST',
@@ -266,7 +267,7 @@ export async function fetchSlackTriage(learned: string[] = []): Promise<SlackTri
     return (await resp.json()) as SlackTriage;
   } catch (e) {
     if ((e as Error).name === 'AbortError') {
-      return { connected: true, triaged: [], error: 'Slack took too long to read (rate limits or low API credits). Reload in a moment.' };
+      return { connected: true, triaged: [], error: 'Slack took too long to read (Slack rate limits or a slow first AI call). It caches after the first read — reload in a moment.' };
     }
     return null;
   } finally {

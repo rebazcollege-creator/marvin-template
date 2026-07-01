@@ -167,7 +167,9 @@ export async function claudeCliGenerate(
     .filter((l) => l.trim().length > 3)
     .join('\n\n');
   const prompt = [sys, convo].filter(Boolean).join('\n\n---\n\n') || ' ';
-  const args = ['-p', '--output-format', 'json', '--model', cliModel(params.model)];
+  // --strict-mcp-config with no --mcp-config = load NO MCP servers: much faster cold start
+  // and avoids the "1 setup issue: MCP" hang, since triage/drafts never need tools anyway.
+  const args = ['-p', '--output-format', 'json', '--strict-mcp-config', '--model', cliModel(params.model)];
   const text = await runClaude(args, prompt);
   if (onText && text) onText(text);
   return text;

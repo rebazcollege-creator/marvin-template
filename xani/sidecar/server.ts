@@ -47,12 +47,30 @@ const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 /** Pending write-tool confirmations, keyed by tool_use id, resolved by /approve. */
 const pendingApprovals = new Map<string, (approved: boolean) => void>();
 
+/**
+ * Convert the sidecar's internal SystemBlock[] ({type,text,cache}) into the shape the
+ * Anthropic API accepts: a plain string is fine; blocks must drop the `cache` field and
+ * express caching as `cache_control:{type:'ephemeral'}`. Passing `cache` raw is rejected
+ * with "system.0.cache: Extra inputs are not permitted".
+ */
+function toApiSystem(system: unknown): Anthropic.MessageCreateParams['system'] {
+  if (typeof system === 'string') return system;
+  if (Array.isArray(system)) {
+    return system.map((raw) => {
+      const b = raw as { type?: string; text?: string; cache?: boolean };
+      const base = { type: 'text' as const, text: b.text ?? '' };
+      return b.cache ? { ...base, cache_control: { type: 'ephemeral' as const } } : base;
+    }) as Anthropic.MessageCreateParams['system'];
+  }
+  return system as Anthropic.MessageCreateParams['system'];
+}
+
 const createMessage: CreateMessage = async (params, onText) => {
   if (!anthropic) throw new Error('ANTHROPIC_API_KEY is not set in the sidecar environment.');
   const stream = anthropic.messages.stream({
     model: params.model,
     max_tokens: params.max_tokens,
-    system: params.system as Anthropic.MessageCreateParams['system'],
+    system: toApiSystem(params.system),
     tools: params.tools as Anthropic.MessageCreateParams['tools'],
     messages: params.messages as Anthropic.MessageParam[],
   });

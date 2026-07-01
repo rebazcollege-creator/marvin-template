@@ -56,6 +56,8 @@ export default function SettingsPage() {
   const [geminiInput, setGeminiInput] = useState('');
   const [geminiStored, setGeminiStored] = useState<boolean | null>(null);
   const [geminiSaved, setGeminiSaved] = useState(false);
+  const [cliOn, setCliOn] = useState<boolean | null>(null);
+  const [cliBusy, setCliBusy] = useState(false);
 
   useEffect(() => {
     ensureStorageReady().then(() => setSettings(getSettings()));
@@ -65,8 +67,24 @@ export default function SettingsPage() {
         .then(setKeyStored)
         .catch(() => setKeyStored(false));
     }
-    getCredStatus().then((s) => setGeminiStored(Boolean(s?.GOOGLE_AI_API_KEY)));
+    getCredStatus().then((s) => {
+      setGeminiStored(Boolean(s?.GOOGLE_AI_API_KEY));
+      setCliOn(Boolean(s?.XANI_USE_CLAUDE_CLI));
+    });
   }, []);
+
+  const toggleClaudeCli = async (on: boolean) => {
+    setCliBusy(true);
+    const value = on ? '1' : '';
+    if (isTauri()) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('set_integration_cred', { name: 'XANI_USE_CLAUDE_CLI', value });
+    } else {
+      await setRuntimeCred('XANI_USE_CLAUDE_CLI', value);
+    }
+    setCliOn(on);
+    setCliBusy(false);
+  };
 
   const saveGeminiKey = async () => {
     const v = geminiInput.trim();
@@ -258,6 +276,28 @@ export default function SettingsPage() {
             <code className="rounded bg-bg px-1">ANTHROPIC_API_KEY</code> in <code className="rounded bg-bg px-1">xani/.env</code> — it&apos;s read only by the sidecar, never the renderer.
           </p>
         )}
+      </Collapsible>
+
+      {/* Claude Code CLI — run the AI on your existing login, no API key */}
+      <Collapsible title="Model provider — Claude Code (no API key)" summary={cliOn ? 'On · running on your Claude login' : 'Use your Claude subscription — no key, no credits'}>
+        <p className="mb-3 text-[12px] leading-relaxed text-muted">
+          Run MARVIN&apos;s AI through the <code className="rounded bg-bg px-1">claude</code> command line
+          you&apos;re already logged into — no Anthropic API key, no credits, no Gemini key. Triage,
+          drafting, summaries and chat all route through your Claude subscription. This takes priority
+          over any API key while it&apos;s on. Requires the Claude Code CLI installed and logged in
+          (<code className="rounded bg-bg px-1">claude</code> on your PATH). Text-only, so agentic
+          tool-use in chat is limited.
+        </p>
+        <label className="flex items-center gap-3 text-[13px] font-semibold text-text">
+          <input
+            type="checkbox"
+            checked={Boolean(cliOn)}
+            disabled={cliBusy || cliOn === null}
+            onChange={(e) => void toggleClaudeCli(e.target.checked)}
+            className="h-4 w-4 accent-accent"
+          />
+          {cliOn ? 'On — AI runs through Claude Code (no API key)' : 'Run AI through Claude Code (no API key)'}
+        </label>
       </Collapsible>
 
       {/* Gemini (Google AI) — free model provider for testing */}

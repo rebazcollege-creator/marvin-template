@@ -8,7 +8,7 @@ import { loadDotenv } from './env.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
-import { usingGemini, geminiGenerate } from './llm.ts';
+import { geminiGenerate, resolveProvider, claudeCliGenerate } from './llm.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
 import {
   getBriefingData,
@@ -69,15 +69,24 @@ function toApiSystem(system: unknown): Anthropic.MessageCreateParams['system'] {
 }
 
 const createMessage: CreateMessage = async (params, onText) => {
+  const provider = resolveProvider(Boolean(anthropic));
+  // Claude Code CLI path: runs on your logged-in subscription, no API key. Text-only.
+  if (provider === 'cli') {
+    const text = await claudeCliGenerate(
+      { system: params.system, messages: params.messages as { role: string; content: unknown }[], max_tokens: params.max_tokens, model: params.model },
+      onText,
+    );
+    return { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text }] } as unknown as LLMResponse;
+  }
   // Gemini testing path: text-only (tools are ignored), streamed as one chunk.
-  if (usingGemini()) {
+  if (provider === 'gemini') {
     const text = await geminiGenerate(
       { system: params.system, messages: params.messages as { role: string; content: unknown }[], max_tokens: params.max_tokens },
       onText,
     );
     return { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text }] } as unknown as LLMResponse;
   }
-  if (!anthropic) throw new Error('ANTHROPIC_API_KEY is not set in the sidecar environment.');
+  if (!anthropic) throw new Error('No model provider available. Set XANI_USE_CLAUDE_CLI=1, or a Gemini/Anthropic key.');
   const stream = anthropic.messages.stream({
     model: params.model,
     max_tokens: params.max_tokens,
@@ -90,15 +99,19 @@ const createMessage: CreateMessage = async (params, onText) => {
   return final as unknown as LLMResponse;
 };
 
-/** True when SOME model provider is available (Anthropic or Gemini). */
+/** True when SOME model provider is available (Claude Code CLI, Gemini, or Anthropic). */
 function modelAvailable(): boolean {
-  return Boolean(anthropic) || usingGemini();
+  return resolveProvider(Boolean(anthropic)) !== 'none';
 }
 
 /** One non-streaming completion (system + a single user string) via whichever provider
  *  is configured — used by triage/summaries. Returns the text. */
 async function oneShot(system: string, user: string, maxTokens: number): Promise<string> {
-  if (usingGemini()) {
+  const provider = resolveProvider(Boolean(anthropic));
+  if (provider === 'cli') {
+    return claudeCliGenerate({ system, messages: [{ role: 'user', content: user }], max_tokens: maxTokens });
+  }
+  if (provider === 'gemini') {
     return geminiGenerate({ system, messages: [{ role: 'user', content: user }], max_tokens: maxTokens });
   }
   if (!anthropic) return '';
@@ -304,7 +317,7 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/health') {
-    json(res, 200, { ok: true, hasKey: modelAvailable(), provider: usingGemini() ? 'gemini' : anthropic ? 'anthropic' : 'none' });
+    json(res, 200, { ok: true, hasKey: modelAvailable(), provider: resolveProvider(Boolean(anthropic)) });
     return;
   }
 
@@ -621,5 +634,10 @@ const server = createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   // eslint-disable-next-line no-console
-  console.log(`MARVIN sidecar on http://localhost:${PORT} (model: ${usingGemini() ? 'Gemini (Google AI)' : apiKey ? 'Claude (Anthropic)' : 'NONE — set ANTHROPIC_API_KEY or GOOGLE_AI_API_KEY'})`);
+  const prov = resolveProvider(Boolean(anthropic));
+  const label = prov === 'cli' ? 'Claude Code CLI (your login — no API key)'
+    : prov === 'gemini' ? 'Gemini (Google AI)'
+    : prov === 'anthropic' ? 'Claude (Anthropic API)'
+    : 'NONE — set XANI_USE_CLAUDE_CLI=1, or a Gemini/Anthropic key';
+  console.log(`MARVIN sidecar on http://localhost:${PORT} (model: ${label})`);
 });

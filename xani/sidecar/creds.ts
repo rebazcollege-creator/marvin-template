@@ -18,6 +18,7 @@ const ALLOW = new Set([
   'ANTHROPIC_API_KEY',
   'GOOGLE_AI_API_KEY',
   'GEMINI_API_KEY',
+  'XANI_USE_CLAUDE_CLI', // "1" to run the AI through the logged-in `claude` CLI (no API key)
   'TRELLO_API_KEY',
   'TRELLO_TOKEN',
   'TRELLO_BOARD_ID',

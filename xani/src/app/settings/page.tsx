@@ -10,6 +10,7 @@ import {
   type XaniSettings,
 } from '@/lib/settings';
 import { ensureStorageReady, isTauri } from '@/lib/storage';
+import { setRuntimeCred, getCredStatus } from '@/lib/marvin-client';
 import { Collapsible } from '@/components/ui/Collapsible';
 
 /**
@@ -52,6 +53,9 @@ export default function SettingsPage() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState('');
   const [keyStored, setKeyStored] = useState<boolean | null>(null);
+  const [geminiInput, setGeminiInput] = useState('');
+  const [geminiStored, setGeminiStored] = useState<boolean | null>(null);
+  const [geminiSaved, setGeminiSaved] = useState(false);
 
   useEffect(() => {
     ensureStorageReady().then(() => setSettings(getSettings()));
@@ -61,7 +65,27 @@ export default function SettingsPage() {
         .then(setKeyStored)
         .catch(() => setKeyStored(false));
     }
+    getCredStatus().then((s) => setGeminiStored(Boolean(s?.GOOGLE_AI_API_KEY)));
   }, []);
+
+  const saveGeminiKey = async () => {
+    const v = geminiInput.trim();
+    if (!v) return;
+    if (isTauri()) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('set_integration_cred', { name: 'GOOGLE_AI_API_KEY', value: v });
+    } else {
+      await setRuntimeCred('GOOGLE_AI_API_KEY', v);
+    }
+    setGeminiInput('');
+    setGeminiStored(true);
+    setGeminiSaved(true);
+    window.setTimeout(() => setGeminiSaved(false), 3000);
+  };
+  const removeGeminiKey = async () => {
+    if (!isTauri()) await setRuntimeCred('GOOGLE_AI_API_KEY', '');
+    setGeminiStored(false);
+  };
 
   const saveApiKey = async () => {
     if (!keyInput.trim()) return;
@@ -234,6 +258,37 @@ export default function SettingsPage() {
             <code className="rounded bg-bg px-1">ANTHROPIC_API_KEY</code> in <code className="rounded bg-bg px-1">xani/.env</code> — it&apos;s read only by the sidecar, never the renderer.
           </p>
         )}
+      </Collapsible>
+
+      {/* Gemini (Google AI) — free model provider for testing */}
+      <Collapsible title="Model provider — Gemini (Google AI)" summary={geminiStored ? 'Gemini key set · using Gemini' : 'Free testing without Anthropic credits'}>
+        <p className="mb-3 text-[12px] leading-relaxed text-muted">
+          Run MARVIN on Google AI Studio&apos;s free tier instead of Claude — handy while Anthropic
+          credits are unavailable. When a key is set here, triage, drafting, summaries and chat all
+          route to Gemini. Get a free key at{' '}
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer" className="font-semibold text-accent hover:underline">aistudio.google.com/apikey</a>.
+          {geminiStored ? ' A Gemini key is currently set.' : ''}
+        </p>
+        <input type="password" value={geminiInput} onChange={(e) => setGeminiInput(e.target.value)} placeholder="AIza… (Google AI Studio key)" className={monoCls} />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void saveGeminiKey()}
+            disabled={!geminiInput.trim()}
+            className="rounded-[10px] bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent hover:bg-accent-dim disabled:opacity-40"
+          >
+            {geminiSaved ? '✓ Saved — using Gemini' : 'Use this Gemini key'}
+          </button>
+          {geminiStored && (
+            <button type="button" onClick={() => void removeGeminiKey()} className="rounded-[10px] border border-border bg-bg px-4 py-2 text-[13px] font-semibold text-text-2 hover:bg-hover">
+              Remove (switch back to Claude)
+            </button>
+          )}
+        </div>
+        <p className="mt-3 text-[11.5px] leading-relaxed text-muted">
+          Applies immediately — no restart. The key is held by the runtime, never the browser. Remove it
+          to go back to Claude. Note: Gemini mode is text-only, so agentic tool-use in chat is limited.
+        </p>
       </Collapsible>
 
       {/* Prompts */}

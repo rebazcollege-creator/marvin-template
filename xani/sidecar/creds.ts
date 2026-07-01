@@ -15,6 +15,9 @@ import { bumpInboxCache, bumpSlackCache } from './connectors.ts';
 const FILE = join(process.cwd(), '.xani-creds.json');
 
 const ALLOW = new Set([
+  'ANTHROPIC_API_KEY',
+  'GOOGLE_AI_API_KEY',
+  'GEMINI_API_KEY',
   'TRELLO_API_KEY',
   'TRELLO_TOKEN',
   'TRELLO_BOARD_ID',

@@ -104,6 +104,9 @@ export interface InboxTriage {
 }
 export interface TrelloData {
   connected: boolean;
+  /** Set when the fetch failed (vs. genuinely empty), so the UI never shows a
+   *  real error as an innocent empty state. */
+  error?: string;
   /** `list` = the card's list name (Review/Planning/Video feed/Website feed …);
    *  `status` = the card's Status custom-field value (Published / Ready to Publish).
    *  Both drive the Open Loops flagging rules (docs/triage-rules.md §3). */
@@ -111,6 +114,8 @@ export interface TrelloData {
 }
 export interface CalendarData {
   connected: boolean;
+  /** Set when the fetch failed (vs. genuinely empty). */
+  error?: string;
   events: { title: string; start: string; end: string; allDay: boolean }[];
 }
 export interface SlackData {
@@ -181,6 +186,8 @@ export interface SlackHistory {
 }
 export interface BufferData {
   connected: boolean;
+  /** Set when the fetch failed (vs. genuinely empty). */
+  error?: string;
   drafts: number;
   scheduled: number;
   byPlatform: { platform: string; count: number }[];
@@ -188,10 +195,14 @@ export interface BufferData {
 export type DriveKind = 'folder' | 'doc' | 'sheet' | 'slide' | 'pdf' | 'image' | 'file';
 export interface DriveData {
   connected: boolean;
+  /** Set when the fetch failed (vs. genuinely empty). */
+  error?: string;
   files: { id: string; name: string; kind: DriveKind; modified: string; starred: boolean }[];
 }
 export interface GithubData {
   connected: boolean;
+  /** Set when the fetch failed (vs. genuinely empty). */
+  error?: string;
   items: { title: string; repo: string; url: string; isPR: boolean }[];
 }
 
@@ -200,7 +211,7 @@ export interface GithubData {
  * Each is cred-gated; with no credentials the sidecar returns ok:false with a note.
  */
 export type ActPayload =
-  | { kind: 'email'; to: string; subject: string; body: string; account?: string }
+  | { kind: 'email'; to: string; subject: string; body: string; account?: string; threadId?: string; inReplyTo?: string }
   | { kind: 'calendar'; title: string; start?: string; end?: string }
   | { kind: 'slack'; channel: string; text: string; workspace?: string }
   | { kind: 'social'; platform: string; caption: string }

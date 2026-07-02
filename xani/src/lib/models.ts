@@ -3,7 +3,7 @@
  * (Settings page) imports these to display/edit model routing, and must never
  * pull the Anthropic SDK — or any secret — into the browser bundle.
  *
- * The actual Anthropic client lives in the Node sidecar (src/lib/anthropic.ts),
+ * The actual Anthropic client lives in the Node sidecar (sidecar/server.ts),
  * which is never imported by renderer code.
  *
  * Verified current, non-deprecated model IDs (June 2026).

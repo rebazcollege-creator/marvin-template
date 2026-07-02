@@ -37,12 +37,26 @@ export type ApprovalItem = {
 };
 
 const KEY = 'xani.approvals.v1';
+/** Decided (approved/rejected) items kept for reference; older ones are pruned so
+ *  the store can't grow forever. Pending items are NEVER pruned. */
+const KEEP_DECIDED = 200;
 
 export function listApprovals(): ApprovalItem[] {
   return readJson<ApprovalItem[]>(KEY, []);
 }
+function prune(list: ApprovalItem[]): ApprovalItem[] {
+  const decided = list.filter((a) => a.status !== 'pending');
+  if (decided.length <= KEEP_DECIDED) return list;
+  const keep = new Set(
+    decided
+      .sort((a, b) => (b.decidedAt ?? b.createdAt).localeCompare(a.decidedAt ?? a.createdAt))
+      .slice(0, KEEP_DECIDED)
+      .map((a) => a.id),
+  );
+  return list.filter((a) => a.status === 'pending' || keep.has(a.id));
+}
 export function saveApprovals(list: ApprovalItem[]): void {
-  writeJson(KEY, list);
+  writeJson(KEY, prune(list));
 }
 
 export function enqueueApproval(input: {

@@ -8,6 +8,8 @@ import type { SlackData } from '@/lib/marvin-protocol';
 import { enqueueApproval } from '@/lib/approvals';
 import { voicePromptFor } from '@/lib/voice';
 import { SlackText, emojiFor } from '@/lib/slack-mrkdwn';
+import { markSlackRead } from '@/lib/marvin-data';
+import { buildSidebar, defaultConversationId, QUIET_CHANNELS_SHOWN } from '@/lib/slack-view-core';
 
 type Msg = SlackData['messages'][number];
 type Chan = SlackData['channels'][number];
@@ -54,16 +56,43 @@ export default function SlackPage() {
 
   const activeWs = ws ?? workspaces[0]?.role ?? null;
   const activeWsRec = workspaces.find((w) => w.role === activeWs) ?? null;
-  const wsChannels = useMemo(() => allChannels.filter((c) => c.workspace === activeWs && c.kind === 'channel'), [allChannels, activeWs]);
-  const wsGroups = useMemo(() => allChannels.filter((c) => c.workspace === activeWs && c.kind === 'group'), [allChannels, activeWs]);
-  const wsDms = useMemo(() => allChannels.filter((c) => c.workspace === activeWs && c.kind === 'dm'), [allChannels, activeWs]);
-  const sidebarConvos = useMemo(() => [...wsChannels, ...wsGroups], [wsChannels, wsGroups]);
 
-  const activeChan: Chan | null = allChannels.find((c) => c.workspace === activeWs && c.id === chId) ?? null;
+  // Conversations opened this session are treated as read immediately (optimistic),
+  // so an unread clears from the glance list the moment Rebaz reads it.
+  const [locallyRead, setLocallyRead] = useState<Set<string>>(new Set());
+  const [showAllChannels, setShowAllChannels] = useState(false);
 
-  // Default workspace's first conversation; reset channel when workspace changes.
-  useEffect(() => { setChId(null); }, [activeWs]);
-  const effectiveChId = chId ?? sidebarConvos[0]?.id ?? wsDms[0]?.id ?? null;
+  // Slack-faithful sidebar: Unread first (the glance), then DMs, then channels.
+  const sidebar = useMemo(() => {
+    const convos = allChannels
+      .filter((c) => c.workspace === activeWs)
+      .map((c) => (locallyRead.has(c.id) ? { ...c, hasUnread: false, unread: 0 } : c));
+    return buildSidebar(convos);
+  }, [allChannels, activeWs, locallyRead]);
+
+  const hasAnyDm = useMemo(
+    () => allChannels.some((c) => c.workspace === activeWs && (c.kind === 'dm' || c.kind === 'group')),
+    [allChannels, activeWs],
+  );
+
+  // Default-open the most important conversation (top unread → recent DM → recent
+  // channel), never the alphabetically-first one. activeChan is derived from the
+  // SAME id the history loads from, so the header can never say "# —" over a loaded
+  // conversation again.
+  const effectiveChId = chId ?? defaultConversationId(sidebar);
+  const activeChan: Chan | null = allChannels.find((c) => c.workspace === activeWs && c.id === effectiveChId) ?? null;
+
+  // Open a conversation and mark it read (optimistic locally + best-effort in Slack).
+  const openConvo = useCallback((c: Chan) => {
+    setChId(c.id);
+    if (c.hasUnread) {
+      setLocallyRead((s) => new Set(s).add(c.id));
+      void markSlackRead({ workspace: c.workspace, channel: c.id, ts: c.lastTs });
+    }
+  }, []);
+
+  // Reset selection + optimistic-read when the workspace changes.
+  useEffect(() => { setChId(null); setLocallyRead(new Set()); setShowAllChannels(false); }, [activeWs]);
 
   const loadHistory = useCallback(async (workspace: string, channel: string) => {
     setHist({ messages: [], loading: true, loadingMore: false });
@@ -200,20 +229,45 @@ export default function SlackPage() {
             </div>
           )}
 
-          <div className="px-2.5 pb-1 pt-1 text-[13px] font-semibold text-muted">Channels</div>
-          {sidebarConvos.map((c) => <ConvoRow key={c.id} c={c} active={c.id === effectiveChId} onClick={() => setChId(c.id)} />)}
-          {sidebarConvos.length === 0 && <div className="px-2.5 py-2 text-[12.5px] text-muted">No channels — invite the app to a channel in Slack.</div>}
-          <a href="/connections" className="mt-0.5 flex items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-[14px] text-muted transition hover:bg-hover">
-            <span className="grid h-5 w-5 place-items-center rounded-[6px] bg-hover text-[15px] leading-none">+</span> Add channels
-          </a>
+          {/* Unread — the one glance: everything that needs you, most-recent first. */}
+          {sidebar.unread.length > 0 && (
+            <>
+              <div className="flex items-center justify-between px-2.5 pb-1 pt-1">
+                <span className="text-[13px] font-semibold text-muted">Unread</span>
+                <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent px-1 text-[10.5px] font-bold text-on-accent">{sidebar.totalUnread || sidebar.unread.length}</span>
+              </div>
+              {sidebar.unread.map((c) => (
+                <ConvoRow key={c.id} c={c} active={c.id === effectiveChId} dm={c.kind !== 'channel'} onClick={() => openConvo(c)} />
+              ))}
+            </>
+          )}
 
+          {/* Direct messages — always visible, never buried under a wall of channels. */}
           <div className="px-2.5 pb-1 pt-3.5 text-[13px] font-semibold text-muted">Direct messages</div>
-          {wsDms.map((c) => <ConvoRow key={c.id} c={c} active={c.id === effectiveChId} dm onClick={() => setChId(c.id)} />)}
-          {wsDms.length === 0 && (
+          {sidebar.dms.map((c) => <ConvoRow key={c.id} c={c} active={c.id === effectiveChId} dm onClick={() => openConvo(c)} />)}
+          {!hasAnyDm && (
             <div className="px-2.5 py-2 text-[12px] leading-snug text-muted">
               {activeWsRec?.tokenKind === 'user' ? 'No direct messages.' : 'DMs need a user token (xoxp-).'}
             </div>
           )}
+
+          {/* Channels — recent activity first; quiet ones collapse so this isn't noise. */}
+          <div className="px-2.5 pb-1 pt-3.5 text-[13px] font-semibold text-muted">Channels</div>
+          {(showAllChannels ? sidebar.channels : sidebar.channels.slice(0, QUIET_CHANNELS_SHOWN)).map((c) => (
+            <ConvoRow key={c.id} c={c} active={c.id === effectiveChId} onClick={() => openConvo(c)} />
+          ))}
+          {sidebar.channels.length > QUIET_CHANNELS_SHOWN && (
+            <button type="button" onClick={() => setShowAllChannels((v) => !v)} className="mt-0.5 flex w-full items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-[13px] font-medium text-muted transition hover:bg-hover">
+              <span className="grid h-5 w-5 place-items-center rounded-[6px] bg-hover text-[13px] leading-none">{showAllChannels ? '–' : '+'}</span>
+              {showAllChannels ? 'Show fewer' : `${sidebar.channels.length - QUIET_CHANNELS_SHOWN} more channels`}
+            </button>
+          )}
+          {sidebar.unread.length === 0 && sidebar.dms.length === 0 && sidebar.channels.length === 0 && (
+            <div className="px-2.5 py-2 text-[12.5px] text-muted">Nothing here yet — invite the app to a channel in Slack, or add a user token for your DMs.</div>
+          )}
+          <a href="/connections" className="mt-0.5 flex items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-[14px] text-muted transition hover:bg-hover">
+            <span className="grid h-5 w-5 place-items-center rounded-[6px] bg-hover text-[15px] leading-none">+</span> Add channels
+          </a>
 
           <div className="px-2.5 pb-1 pt-3.5 text-[13px] font-semibold text-muted">Apps</div>
           <div className="flex items-center gap-2.5 rounded-[7px] px-2.5 py-1.5 text-[14px] text-text-2">

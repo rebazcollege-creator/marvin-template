@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
-import { ensureStorageReady } from '@/lib/storage';
+import { ensureStorageReady, readJson, writeJson } from '@/lib/storage';
 import { fetchBriefingData, fetchMessageBody, peekData, PATHS } from '@/lib/marvin-data';
 import { fetchInboxTriage, fetchSlackTriage, requestDraft } from '@/lib/marvin-client';
 import { enqueueApproval } from '@/lib/approvals';
@@ -11,6 +11,7 @@ import type { BriefingData, TriagedEmail, TriagedSlack } from '@/lib/marvin-prot
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
 import { recordTriageCorrection, triageLearnings, learnedCount } from '@/lib/triage-learning';
+import { recordTriageOutcome } from '@/lib/learning-metrics';
 import { voicePromptFor, voiceKeyFor } from '@/lib/voice';
 import { FocusSession } from '@/components/home/FocusSession';
 
@@ -46,7 +47,14 @@ function clockAt(iso: string, tz: string): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
 
-const SOURCE: Record<string, { label: string; cls: string }> = {
+// Persisted triage so Home paints last-session results INSTANTLY on open, then
+// revalidates — never a blank "Reading your inbox…" wait that brings nothing.
+const INBOX_TRIAGE_KEY = 'xani.triage.inbox.v1';
+const SLACK_TRIAGE_KEY = 'xani.triage.slack.v1';
+type InboxTriageCache = { acts: TriagedEmail[]; know: number; filed: number };
+type SlackTriageCache = { acts: TriagedSlack[]; know: number; filed: number };
+
+const SOURCE: Record<OpenLoop['source'], { label: string; cls: string }> = {
   slack: { label: 'Slack', cls: 'text-slack' },
   trello: { label: 'Trello', cls: 'text-trello' },
   email: { label: 'Email', cls: 'text-amber' },
@@ -106,7 +114,13 @@ export default function HomePage() {
   const [slackLoading, setSlackLoading] = useState(true);
   const [flash, setFlash] = useState<string | null>(null);
   const [learned, setLearned] = useState(0);
-  const now = useMemo(() => new Date(), []);
+  // Resident tray app — the window stays open for hours, so the clock must tick or
+  // "meeting in 45 min" stays 45 min forever (the exact time-blindness this fights).
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const flashMsg = (s: string) => {
     setFlash(s);
@@ -124,23 +138,34 @@ export default function HomePage() {
       const cached = peekData<BriefingData>(PATHS.briefing);
       if (cached) setData(cached);
       void syncOpenLoops().then(reloadLoops); // pull live Trello commitments into Open Loops
+
+      // Seed triage from the last session so Home is populated on open; then revalidate.
+      const ci = readJson<InboxTriageCache | null>(INBOX_TRIAGE_KEY, null);
+      if (ci) { setInboxActs(ci.acts); setInboxKnow(ci.know); setInboxFiled(ci.filed); setInboxLoading(false); }
+      const cs = readJson<SlackTriageCache | null>(SLACK_TRIAGE_KEY, null);
+      if (cs) { setSlackActs(cs.acts); setSlackKnow(cs.know); setSlackFiled(cs.filed); setSlackLoading(false); }
+
       // Triage reads Rebaz's corrections so it gets sharper each time (self-development.md).
       fetchInboxTriage(learnings).then((t) => {
         setInboxLoading(false);
-        if (!t) { setInboxErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
-        if (t.error) setInboxErr(t.error);
-        setInboxActs(t.triaged.filter((m) => m.verdict === 'act'));
-        setInboxKnow(t.triaged.filter((m) => m.verdict === 'know').length);
-        setInboxFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
+        if (!t) { if (!ci) setInboxErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        if (t.error && t.triaged.length === 0) { if (!ci) setInboxErr(t.error); return; } // keep last-known
+        const acts = t.triaged.filter((m) => m.verdict === 'act');
+        const know = t.triaged.filter((m) => m.verdict === 'know').length;
+        const filed = t.triaged.filter((m) => m.verdict === 'ignore').length;
+        setInboxActs(acts); setInboxKnow(know); setInboxFiled(filed); setInboxErr(null);
+        writeJson(INBOX_TRIAGE_KEY, { acts, know, filed });
       });
       fetchSlackTriage(learnings).then((t) => {
         setSlackLoading(false);
-        if (!t) { setSlackErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
-        if (t.error) setSlackErr(t.error);
+        if (!t) { if (!cs) setSlackErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        if (t.error && t.triaged.length === 0) { if (!cs) setSlackErr(t.error); return; } // keep last-known
         if (!t.connected) { setSlackActs([]); return; }
-        setSlackActs(t.triaged.filter((m) => m.verdict === 'act'));
-        setSlackKnow(t.triaged.filter((m) => m.verdict === 'know').length);
-        setSlackFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
+        const acts = t.triaged.filter((m) => m.verdict === 'act');
+        const know = t.triaged.filter((m) => m.verdict === 'know').length;
+        const filed = t.triaged.filter((m) => m.verdict === 'ignore').length;
+        setSlackActs(acts); setSlackKnow(know); setSlackFiled(filed); setSlackErr(null);
+        writeJson(SLACK_TRIAGE_KEY, { acts, know, filed });
       });
     });
     fetchBriefingData().then((d) => d && setData(d));
@@ -182,12 +207,14 @@ export default function HomePage() {
       email: { account: m.account, id: m.id, from: m.from, subject: m.subject },
     });
     recordTriageCorrection({ medium: 'email', from: m.from, subject: m.subject, decision: 'act' });
+    recordTriageOutcome('confirmed'); // Xanî surfaced it, Rebaz agreed — a hit
     setLearned(learnedCount());
     flashMsg('Tracked — MARVIN is holding it for you.');
     setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
   };
   const dismissEmail = (m: TriagedEmail) => {
     recordTriageCorrection({ medium: 'email', from: m.from, subject: m.subject, decision: 'ignore' });
+    recordTriageOutcome('corrected'); // Xanî surfaced it, Rebaz said no — a wrong call
     setLearned(learnedCount());
     flashMsg('Learned — I’ll file messages like that next time.');
     setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
@@ -204,12 +231,14 @@ export default function HomePage() {
       slack: { workspace: m.workspace, channelId: m.channelId, channel: m.channel, from: m.from, text: m.text },
     });
     recordTriageCorrection({ medium: 'slack', from: m.from, subject: m.dm ? m.text : `#${m.channel}: ${m.text}`, decision: 'act' });
+    recordTriageOutcome('confirmed');
     setLearned(learnedCount());
     flashMsg('Tracked — MARVIN is holding it for you.');
     setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
   };
   const dismissSlack = (m: TriagedSlack) => {
     recordTriageCorrection({ medium: 'slack', from: m.from, subject: m.dm ? m.text : `#${m.channel}: ${m.text}`, decision: 'ignore' });
+    recordTriageOutcome('corrected');
     setLearned(learnedCount());
     flashMsg('Learned — I’ll file messages like that next time.');
     setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
@@ -227,7 +256,26 @@ export default function HomePage() {
         flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
         return;
       }
-      enqueueApproval({ kind: 'email', title: `Reply to ${loop.email.from}`, source: `Email · ${loop.email.account}`, preview: r.draft, actionLabel: 'Send', voiceKey: voiceKeyFor('email', 'all') });
+      // Reply to the real reply-to address, threaded into the original conversation.
+      // The sidecar extracts the bare address and refuses to send if there isn't one.
+      const to = mb?.replyTo || loop.email.from;
+      enqueueApproval({
+        kind: 'email',
+        title: `Reply to ${loop.email.from}`,
+        source: `Email · ${loop.email.account}`,
+        preview: r.draft,
+        actionLabel: 'Send',
+        voiceKey: voiceKeyFor('email', 'all'),
+        payload: {
+          kind: 'email',
+          to,
+          subject: /^re:/i.test(loop.email.subject) ? loop.email.subject : `Re: ${loop.email.subject}`,
+          body: r.draft,
+          account: loop.email.account,
+          threadId: mb?.threadId,
+          inReplyTo: mb?.messageId,
+        },
+      });
       flashMsg('✍️ Draft ready in Approvals — review & send.');
       return;
     }
@@ -238,7 +286,15 @@ export default function HomePage() {
         flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
         return;
       }
-      enqueueApproval({ kind: 'slack', title: `Reply to ${loop.slack.from} (${loop.slack.channel})`, source: `Slack · ${loop.slack.workspace}`, preview: r.draft, actionLabel: 'Send', voiceKey: voiceKeyFor('slack', loop.slack.workspace) });
+      enqueueApproval({
+        kind: 'slack',
+        title: `Reply to ${loop.slack.from} (${loop.slack.channel})`,
+        source: `Slack · ${loop.slack.workspace}`,
+        preview: r.draft,
+        actionLabel: 'Send',
+        voiceKey: voiceKeyFor('slack', loop.slack.workspace),
+        payload: { kind: 'slack', channel: loop.slack.channelId, text: r.draft, workspace: loop.slack.workspace },
+      });
       flashMsg('✍️ Draft ready in Approvals — review & send.');
     }
   };

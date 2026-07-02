@@ -122,7 +122,10 @@ export default function DrivePage() {
         </Note>
       )}
 
-      {state === 'loaded' && data?.connected && files.length === 0 && (
+      {state === 'loaded' && data?.connected && data.error && (
+        <Note>Couldn’t read your Drive just now ({data.error}). This isn’t an empty Drive — try Refresh in a moment.</Note>
+      )}
+      {state === 'loaded' && data?.connected && !data.error && files.length === 0 && (
         <Note>No files found in your Drive.</Note>
       )}
 

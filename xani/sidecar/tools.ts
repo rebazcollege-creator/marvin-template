@@ -11,6 +11,8 @@
  *    by the confirmation flow in agent.ts (never executed without approval).
  */
 
+import { gmailUnreadCounts, getCalendar, getTrello, getBuffer, getSlack } from './connectors.ts';
+
 export type ToolKind = 'read' | 'write';
 
 export interface ToolDef {
@@ -30,18 +32,23 @@ export interface ToolDef {
   execute?: (input: Record<string, unknown>) => Promise<string>;
 }
 
-const notConnected = (what: string) => async () =>
-  JSON.stringify({ connected: false, data: [], note: `${what} is not connected yet.` });
+/** Honest "not connected" result — used only when an integration has no creds. */
+const offline = (note: string) => JSON.stringify({ connected: false, note });
 
 export const TOOLS: ToolDef[] = [
-  // ── Read tools (integration stubs) ──────────────────────────────
+  // ── Read tools (live: delegate to the same connectors the app screens use) ──
   {
     name: 'get_unread_counts',
     description:
       'Get unread email counts across the 5 Gmail accounts (personal, moonshot, leadstories, zoho, amargi).',
     input_schema: { type: 'object', properties: {} },
     kind: 'read',
-    execute: notConnected('Gmail'),
+    execute: async () => {
+      const { connected, accounts } = await gmailUnreadCounts();
+      return connected
+        ? JSON.stringify({ connected, accounts })
+        : offline('Gmail is not connected — add accounts on the Connections screen.');
+    },
   },
   {
     name: 'get_trello_cards',
@@ -49,29 +56,56 @@ export const TOOLS: ToolDef[] = [
       'Get cards on the Amargi Social Media Board assigned to Rebaz, urgent first.',
     input_schema: { type: 'object', properties: {} },
     kind: 'read',
-    execute: notConnected('Trello'),
+    execute: async () => {
+      const t = await getTrello();
+      if (!t.connected) return offline('Trello is not connected — add credentials on the Connections screen.');
+      const cards = t.cards.slice(0, 30).map((c) => ({ name: c.name, list: c.list, due: c.due, urgent: c.urgent, status: c.status }));
+      return JSON.stringify({ connected: true, cards });
+    },
   },
   {
     name: 'get_buffer_status',
-    description: 'Get the Buffer queue status (drafts/scheduled) across the 7 channels.',
+    description: 'Get the Buffer queue status (drafts/scheduled) across the channels.',
     input_schema: { type: 'object', properties: {} },
     kind: 'read',
-    execute: notConnected('Buffer'),
+    execute: async () => {
+      const b = await getBuffer();
+      return b.connected
+        ? JSON.stringify({ connected: true, drafts: b.drafts, scheduled: b.scheduled, byPlatform: b.byPlatform })
+        : offline('Buffer is not connected — add a token on the Connections screen.');
+    },
   },
   {
     name: 'get_slack_mentions',
     description:
-      'Get unread Slack mentions across both workspaces; flags LeadStories emergency trend drops.',
+      'Get unread Slack channels/DMs and any flagged emergencies across both workspaces (Amargi, LeadStories).',
     input_schema: { type: 'object', properties: {} },
     kind: 'read',
-    execute: notConnected('Slack'),
+    execute: async () => {
+      const s = await getSlack();
+      if (!s.connected) return offline('Slack is not connected — add a workspace token on the Connections screen.');
+      const unread = s.channels
+        .filter((c) => c.hasUnread)
+        .slice(0, 40)
+        .map((c) => ({ workspace: c.workspace, channel: c.name, kind: c.kind, unread: c.unread }));
+      const emergencies = s.messages
+        .filter((m) => m.emergency)
+        .slice(0, 20)
+        .map((m) => ({ workspace: m.workspace, channel: m.channel, from: m.user, text: m.text.slice(0, 200) }));
+      return JSON.stringify({ connected: true, unreadChannels: unread, emergencies });
+    },
   },
   {
     name: 'get_calendar_events',
-    description: "Get today's calendar events across all calendars (Europe/Berlin).",
+    description: "Get today's calendar events (Europe/Berlin).",
     input_schema: { type: 'object', properties: {} },
     kind: 'read',
-    execute: notConnected('Calendar'),
+    execute: async () => {
+      const cal = await getCalendar();
+      return cal.connected
+        ? JSON.stringify({ connected: true, events: cal.events.slice(0, 20) })
+        : offline('Calendar is not connected — connect Google Calendar on the Connections screen.');
+    },
   },
 
   // ── Proposal tools (learning / self-modification) ───────────────

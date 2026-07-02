@@ -14,7 +14,8 @@ import { bumpInboxCache } from './connectors.ts';
 
 const FILE = join(process.cwd(), '.xani-creds.json');
 
-const ALLOW = new Set([
+/** Exported so tests can assert parity with the Rust keychain's key list. */
+export const ALLOW = new Set([
   'TRELLO_API_KEY',
   'TRELLO_TOKEN',
   'TRELLO_BOARD_ID',

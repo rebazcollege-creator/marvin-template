@@ -79,7 +79,8 @@ export default function TrelloPage() {
       {state === 'loading' && <div className="xsk h-24 rounded-2xl" />}
       {state === 'offline' && <Note>MARVIN’s runtime isn’t reachable. Start it with <code className="rounded bg-bg px-1">npm run sidecar</code>. You can still draft a card — it waits in Approvals.</Note>}
       {state === 'loaded' && data && !data.connected && <Note>Trello connects via Zapier MCP (pending wiring). Cards will appear here, urgent first. You can still draft a card — it waits in Approvals. Moving a card always needs your confirmation.</Note>}
-      {state === 'loaded' && data?.connected && cards.length === 0 && <Note>No cards awaiting action.</Note>}
+      {state === 'loaded' && data?.connected && data.error && <Note>Couldn’t read Trello just now ({data.error}). This isn’t an empty board — try Refresh in a moment.</Note>}
+      {state === 'loaded' && data?.connected && !data.error && cards.length === 0 && <Note>No cards awaiting action.</Note>}
 
       {state === 'loaded' && data?.connected && cards.length > 0 && (
         <ul className="space-y-2.5">

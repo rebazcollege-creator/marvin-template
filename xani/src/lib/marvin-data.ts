@@ -145,7 +145,7 @@ export const fetchInboxFolder = (folder: string, cursor?: string) =>
 /** Full body of one message, for the reading pane (real HTML + plain-text fallback).
  *  Email bodies are immutable, so a successful fetch is cached for the session — this
  *  makes hover-prefetch effective and reopening a message instant. */
-type MessageBody = { ok: boolean; html?: string; text?: string; body?: string; error?: string };
+type MessageBody = { ok: boolean; html?: string; text?: string; body?: string; from?: string; replyTo?: string; messageId?: string; threadId?: string; error?: string };
 const bodyCache = new Map<string, MessageBody>();
 const bodyInflight = new Map<string, Promise<MessageBody | null>>();
 export async function fetchMessageBody(account: string, id: string): Promise<MessageBody | null> {
@@ -220,3 +220,18 @@ export async function fetchSlackHistory(p: { workspace: string; channel: string;
 }
 export const fetchBuffer = () => get<BufferData>(PATHS.buffer);
 export const fetchGithub = () => get<GithubData>(PATHS.github);
+
+/** Mark a Slack conversation read up to `ts` (best-effort; needs a user token with
+ *  the right scope). Fire-and-forget — the UI already cleared it optimistically. */
+export async function markSlackRead(p: { workspace: string; channel: string; ts?: string }): Promise<void> {
+  if (!p.ts) return;
+  try {
+    await fetch(`${SIDECAR_URL}/slack/mark`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    });
+  } catch {
+    /* best-effort; nothing to do if the runtime is offline */
+  }
+}

@@ -83,7 +83,8 @@ export default function CalendarPage() {
       {state === 'loading' && <div className="xsk h-24 rounded-2xl" />}
       {state === 'offline' && <Note>MARVIN’s runtime isn’t reachable. Start it with <code className="rounded bg-bg px-1">npm run sidecar</code>. You can still protect a focus block — it waits in Approvals.</Note>}
       {state === 'loaded' && data && !data.connected && <Note>Google Calendar isn’t connected. Add it on Connections (or set the GOOGLE_CALENDAR_* keys) to see your day. You can still protect a focus block — it waits in Approvals. Changing events always needs your confirmation.</Note>}
-      {state === 'loaded' && data?.connected && events.length === 0 && <Note>Nothing on the calendar today.</Note>}
+      {state === 'loaded' && data?.connected && data.error && <Note>Couldn’t read your calendar just now ({data.error}). This isn’t an empty day — try Refresh in a moment.</Note>}
+      {state === 'loaded' && data?.connected && !data.error && events.length === 0 && <Note>Nothing on the calendar today.</Note>}
 
       {state === 'loaded' && data?.connected && events.length > 0 && (
         <ul className="space-y-2.5">

@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { sanitizeHeader, encodeSubject, extractEmailAddress, replySubject, sanitizeRecipients } from './mail.ts';
 import { originAllowed } from './security.ts';
 import { evaluateAction } from './guard.ts';
@@ -57,6 +60,29 @@ test('originAllowed: a missing Origin is allowed (non-browser / same-origin)', (
   assert.equal(originAllowed(undefined), true);
   assert.equal(originAllowed(''), true);
   assert.equal(originAllowed(null), true);
+});
+
+test('keychain.rs INTEGRATION_KEYS matches the dev cred store ALLOW list', () => {
+  // The packaged app injects creds from the Rust keychain; dev uses creds.ts. If
+  // the lists drift, an integration silently vanishes in exactly the build that
+  // matters (this happened: three Slack tokens were missing from keychain.rs).
+  // Both files are parsed as text so the test has no import chain / side effects.
+  const here = dirname(fileURLToPath(import.meta.url));
+  const quotedKeys = (text: string, declMarker: string, openMarker: string) => {
+    // Slice from the array literal's opening bracket (after the declaration) to its
+    // close — the Rust type `&[&str]` contains a `]` that would end the slice early.
+    const decl = text.indexOf(declMarker);
+    const open = text.indexOf(openMarker, decl) + openMarker.length;
+    const block = text.slice(open, text.indexOf(']', open));
+    return new Set([...block.matchAll(/["']([A-Z][A-Z0-9_]+)["']/g)].map((m) => m[1]));
+  };
+  const rustKeys = quotedKeys(readFileSync(join(here, '../src-tauri/src/keychain.rs'), 'utf8'), 'INTEGRATION_KEYS', '= &[');
+  const allowKeys = quotedKeys(readFileSync(join(here, 'creds.ts'), 'utf8'), 'ALLOW = new Set', 'Set([');
+  assert.ok(allowKeys.size >= 20, 'sanity: parsed the ALLOW list');
+  const missingInRust = [...allowKeys].filter((k) => !rustKeys.has(k));
+  const missingInAllow = [...rustKeys].filter((k) => !allowKeys.has(k));
+  assert.deepEqual(missingInRust, [], `keys in creds.ts ALLOW but not keychain.rs: ${missingInRust.join(', ')}`);
+  assert.deepEqual(missingInAllow, [], `keys in keychain.rs but not creds.ts ALLOW: ${missingInAllow.join(', ')}`);
 });
 
 test('guard rejects unknown action kinds and allows well-formed known ones', () => {

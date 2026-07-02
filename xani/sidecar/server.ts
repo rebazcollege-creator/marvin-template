@@ -211,12 +211,22 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   }
 }
 
+/** Cache inbox triage briefly, like Slack's: Home mounts call this on every load and
+ *  each call is an LLM pass over 40 messages. Keyed on the newest message + learned
+ *  set, so new mail or a fresh correction re-triages at once. */
+let inboxTriageCache: { at: number; key: string; data: InboxTriage } | null = null;
+
 async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
   if (!anthropic) return { connected: false, triaged: [], error: 'No API key.' };
   const inbox = await getInbox('inbox', '');
   if (!inbox.connected) return { connected: false, triaged: [], error: inbox.error };
   const msgs = inbox.messages.slice(0, 40);
   if (msgs.length === 0) return { connected: true, triaged: [] };
+
+  const cacheKey = `${msgs[0]?.id ?? ''}|${msgs.length}|${(learned ?? []).join('')}`;
+  if (inboxTriageCache && inboxTriageCache.key === cacheKey && Date.now() - inboxTriageCache.at < 90_000) {
+    return inboxTriageCache.data;
+  }
   const list = msgs.map((m) => ({ id: m.id, from: m.from, subject: m.subject, snippet: (m.snippet ?? '').slice(0, 160) }));
   try {
     const resp = await anthropic.messages.create({
@@ -235,8 +245,11 @@ async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
       const verdict = v?.verdict === 'act' || v?.verdict === 'know' || v?.verdict === 'ignore' ? v.verdict : 'know';
       return { id: m.id, account: m.account, from: m.from, subject: m.subject, snippet: m.snippet, receivedAt: m.receivedAt, verdict, reason: v?.reason ?? '' };
     });
-    return { connected: true, triaged };
+    const data: InboxTriage = { connected: true, triaged };
+    inboxTriageCache = { at: Date.now(), key: cacheKey, data };
+    return data;
   } catch (err) {
+    // Errors are not cached — the next load retries at once.
     return { connected: true, triaged: [], error: (err as Error).message };
   }
 }

@@ -47,7 +47,7 @@ function clockAt(iso: string, tz: string): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
 
-const SOURCE: Record<string, { label: string; cls: string }> = {
+const SOURCE: Record<OpenLoop['source'], { label: string; cls: string }> = {
   slack: { label: 'Slack', cls: 'text-slack' },
   trello: { label: 'Trello', cls: 'text-trello' },
   email: { label: 'Email', cls: 'text-amber' },

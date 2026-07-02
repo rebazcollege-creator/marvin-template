@@ -85,7 +85,7 @@ export async function gmailUnreadCounts(): Promise<{ connected: boolean; account
       }
     }),
   );
-  return { connected: connected.length > 0, accounts: results.filter((x): x is { account: string; unread: number } => x != null) };
+  return { connected: connected.length > 0, accounts: results.filter((x): x is NonNullable<typeof x> => x != null) };
 }
 
 /** Gmail search query per Gmail-clone folder. */
@@ -169,7 +169,7 @@ async function gmailBatchGetMetadata(token: string, ids: string[]): Promise<Reco
 export function parseBatchResponse(contentType: string, text: string): Record<string, unknown>[] {
   // Google replies with its own boundary; read it from the response Content-Type.
   const bm = contentType.match(/boundary=([^;]+)/);
-  const respBoundary = bm ? bm[1].trim().replace(/^"|"$/g, '') : null;
+  const respBoundary = bm?.[1]?.trim().replace(/^"|"$/g, '') ?? null;
   const parts = respBoundary ? text.split(`--${respBoundary}`) : [text];
   const out: Record<string, unknown>[] = [];
   for (const part of parts) {
@@ -217,7 +217,7 @@ export async function getInbox(folder = 'inbox', cursorRaw = ''): Promise<InboxD
   const cached = inboxCache.get(cacheKey);
   if (cached && cached.ver === inboxCacheVer && Date.now() - cached.ts < INBOX_TTL_MS) return cached.data;
 
-  const q = FOLDER_QUERY[folder] ?? FOLDER_QUERY.inbox;
+  const q = FOLDER_QUERY[folder] ?? FOLDER_QUERY.inbox ?? 'in:inbox';
   const connectedAccounts = GMAIL_ACCOUNTS.map((a) => ({ a, c: gmailCreds(a.n) })).filter((x) => x.c);
   const errs: string[] = [];
 

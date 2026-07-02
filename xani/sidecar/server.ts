@@ -25,7 +25,7 @@ import {
   getGithub,
   executeAction,
 } from './connectors.ts';
-import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload, InboxTriage, SlackTriage, TriagedSlack, SlackHistory } from '../src/lib/marvin-protocol.ts';
+import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload, InboxTriage, SlackTriage, TriagedSlack, SlackHistory, EmailVerdict } from '../src/lib/marvin-protocol.ts';
 
 /**
  * MARVIN sidecar HTTP server.
@@ -241,9 +241,12 @@ async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
     const parsed = s >= 0 && e > s ? (JSON.parse(text.slice(s, e + 1)) as { id: string; verdict: string; reason?: string }[]) : [];
     const byId = new Map(parsed.map((p) => [p.id, p]));
     const triaged = msgs.map((m) => {
-      const v = byId.get(m.id);
-      const verdict = v?.verdict === 'act' || v?.verdict === 'know' || v?.verdict === 'ignore' ? v.verdict : 'know';
-      return { id: m.id, account: m.account, from: m.from, subject: m.subject, snippet: m.snippet, receivedAt: m.receivedAt, verdict, reason: v?.reason ?? '' };
+      const raw = byId.get(m.id);
+      const verdict: EmailVerdict =
+        raw?.verdict === 'act' ? 'act'
+        : raw?.verdict === 'ignore' ? 'ignore'
+        : 'know';
+      return { id: m.id, account: m.account, from: m.from, subject: m.subject, snippet: m.snippet, receivedAt: m.receivedAt, verdict, reason: raw?.reason ?? '' };
     });
     const data: InboxTriage = { connected: true, triaged };
     inboxTriageCache = { at: Date.now(), key: cacheKey, data };

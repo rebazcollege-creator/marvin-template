@@ -37,9 +37,9 @@ export function encodeSubject(subject: string): string {
 export function extractEmailAddress(value: string): string {
   const clean = sanitizeHeader(value);
   const angled = clean.match(/<([^<>@\s]+@[^<>@\s]+)>/);
-  if (angled) return angled[1];
+  if (angled?.[1]) return angled[1];
   const bare = clean.match(/[^\s<>()[\]:;,"]+@[^\s<>()[\]:;,"]+/);
-  return bare ? bare[0] : '';
+  return bare?.[0] ?? '';
 }
 
 /** Prefix a reply subject with "Re: " unless it already has one. */

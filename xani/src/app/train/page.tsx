@@ -11,8 +11,19 @@ import {
   type VoiceCorpusInfo,
 } from '@/lib/marvin-client';
 import { fetchInboxFolder } from '@/lib/marvin-data';
+import { generateQuestions } from '@/lib/marvin-client';
 import { getVoice, setVoiceSamples, type VoiceMedium } from '@/lib/voice';
 import { recordSenderRule } from '@/lib/triage-learning';
+import {
+  openQuestions,
+  answeredQuestions,
+  questionCounts,
+  addQuestions,
+  answerQuestion,
+  skipQuestion,
+  understandingFacts,
+  type UnderstandingQ,
+} from '@/lib/understanding';
 
 /**
  * Train mode (docs/self-development.md §4b) — give Xanî a head start by teaching it
@@ -212,6 +223,89 @@ function DeepHarvest() {
   );
 }
 
+/**
+ * Understanding (Rebaz: "no room to guess") — Xanî finds the people, references and asks in
+ * his connectors it doesn't understand and asks about them; he answers when he wants, and the
+ * answers feed triage so it stops guessing. Ongoing — there's always more to learn.
+ */
+function Understanding() {
+  const [open, setOpen] = useState<UnderstandingQ[]>([]);
+  const [answered, setAnswered] = useState(0);
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  const reload = () => { setOpen(openQuestions()); setAnswered(questionCounts().answered); };
+  useEffect(() => {
+    reload();
+    window.addEventListener('xani:understanding-changed', reload);
+    return () => window.removeEventListener('xani:understanding-changed', reload);
+  }, []);
+
+  const find = async () => {
+    setBusy(true);
+    setMsg('Reading your Slack & email for things I don’t understand yet…');
+    const asked = [...openQuestions(), ...answeredQuestions()].map((q) => q.question);
+    const r = await generateQuestions(understandingFacts(), asked);
+    setBusy(false);
+    if (!r.ok) { setMsg(r.error ?? 'Couldn’t generate questions.'); return; }
+    const added = addQuestions(r.questions ?? []);
+    setMsg(added > 0 ? `Added ${added} question${added === 1 ? '' : 's'}.` : 'Nothing new to ask right now — I’m caught up.');
+    reload();
+  };
+  const save = (q: UnderstandingQ) => {
+    const a = (drafts[q.id] || '').trim();
+    if (!a) return;
+    answerQuestion(q.id, a);
+    setDrafts((d) => { const n = { ...d }; delete n[q.id]; return n; });
+    reload();
+  };
+
+  return (
+    <div className="mt-8">
+      <div className="mb-3 flex items-baseline justify-between">
+        <h2 className="text-[12px] font-bold uppercase tracking-[0.1em] text-muted">Help me understand your world</h2>
+        {answered > 0 && <span className="text-[11.5px] text-text-2">{answered} answered</span>}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-surface p-[18px]">
+        <p className="text-[13px] leading-relaxed text-text-2">
+          So I never guess: I read your Slack and email and ask about the people, projects and references
+          I don’t understand. Answer whenever you have a minute — every answer helps me read your world
+          the way you do. This never really finishes; there’s always more to learn.
+        </p>
+        <button type="button" onClick={() => void find()} disabled={busy} className="mt-3 rounded-[9px] bg-accent px-3.5 py-1.5 text-[12.5px] font-semibold text-on-accent transition hover:bg-accent-dim disabled:opacity-60">
+          {busy ? 'Looking…' : open.length > 0 ? 'Find more questions' : 'Find questions'}
+        </button>
+        {msg && <p className="mt-2 text-[12.5px] text-muted">{msg}</p>}
+      </div>
+
+      {open.length > 0 && (
+        <div className="mt-3 space-y-2.5">
+          {open.map((q) => (
+            <div key={q.id} className="rounded-2xl border border-border bg-surface p-[18px]">
+              {q.about && <div className="text-[11px] font-bold uppercase tracking-[0.06em] text-accent">{q.about}</div>}
+              <p className="mt-0.5 font-display text-[16px] font-semibold text-text">{q.question}</p>
+              {q.context && <p className="mt-0.5 text-[12px] italic text-muted">“{q.context}”</p>}
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input
+                  value={drafts[q.id] ?? ''}
+                  onChange={(e) => setDrafts((d) => ({ ...d, [q.id]: e.target.value }))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') save(q); }}
+                  placeholder="Your answer…"
+                  className="min-w-[220px] flex-1 rounded-xl border border-border-2 bg-bg px-3.5 py-2.5 text-[14px] text-text outline-none focus:border-accent"
+                />
+                <button type="button" onClick={() => save(q)} disabled={!(drafts[q.id] || '').trim()} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim disabled:opacity-40">Save</button>
+                <button type="button" onClick={() => { skipQuestion(q.id); reload(); }} className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-muted transition hover:text-text-2">Skip</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 type Sender = { email: string; name: string; count: number; subject: string };
 
 function parseSender(from: string): { email: string; name: string } {
@@ -320,7 +414,9 @@ export default function TrainPage() {
         <div className="space-y-2.5">{[0, 1, 2].map((i) => <div key={i} className="xsk h-24 rounded-2xl" />)}</div>
       ) : (
         <>
-          <div className="mb-2 text-[12px] font-bold uppercase tracking-[0.1em] text-muted">Your writing voice</div>
+          <Understanding />
+
+          <div className="mt-10 mb-2 text-[12px] font-bold uppercase tracking-[0.1em] text-muted">Your writing voice</div>
           <div className="space-y-2.5">
             {SCOPES.map((s) => <VoiceCard key={`${s.medium}:${s.scope}`} s={s} />)}
           </div>

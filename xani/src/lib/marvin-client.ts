@@ -333,6 +333,21 @@ export async function toneCheck(text: string, mode: 'check' | 'soften' | 'warm' 
   }
 }
 
+/** Understanding loop — ask the runtime for new clarifying questions about Rebaz's world. */
+export async function generateQuestions(known: string[], asked: string[]): Promise<{ ok: boolean; questions?: { question: string; about?: string; context?: string }[]; error?: string }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/train/generate-questions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ known, asked }),
+    });
+    if (!resp.ok) return { ok: false, error: `runtime responded ${resp.status}` };
+    return (await resp.json()) as { ok: boolean; questions?: { question: string; about?: string; context?: string }[]; error?: string };
+  } catch {
+    return { ok: false, error: 'runtime unreachable — is it running? (npm run dev:all)' };
+  }
+}
+
 /** Sort a raw brain-dump into a clean, classified, estimated item (P1.3). */
 export async function sortDump(text: string): Promise<{ ok: boolean; task?: string; kind?: 'task' | 'note' | 'someday'; estMins?: number; error?: string }> {
   try {

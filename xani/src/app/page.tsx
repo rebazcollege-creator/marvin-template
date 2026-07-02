@@ -11,6 +11,7 @@ import type { BriefingData, TriagedEmail, TriagedSlack } from '@/lib/marvin-prot
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, refineLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
 import { recordTriageCorrection, triageLearnings, learnedCount } from '@/lib/triage-learning';
+import { understandingFacts } from '@/lib/understanding';
 import { voicePromptFor, voiceKeyFor } from '@/lib/voice';
 import { FocusSession } from '@/components/home/FocusSession';
 import { Timeline } from '@/components/home/Timeline';
@@ -138,7 +139,9 @@ export default function HomePage() {
       setSettings(getSettings());
       reloadLoops();
       setLearned(learnedCount());
-      const learnings = triageLearnings();
+      // Triage reads BOTH his corrections and everything he's taught me in Train (understanding),
+      // so headlines/verdicts use what I actually know about his world instead of guessing.
+      const learnings = [...triageLearnings(), ...understandingFacts()];
       const cached = peekData<BriefingData>(PATHS.briefing);
       if (cached) setData(cached);
       void syncOpenLoops().then(reloadLoops); // pull live Trello commitments into Open Loops

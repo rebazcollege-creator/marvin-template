@@ -200,7 +200,7 @@ export interface GithubData {
  * Each is cred-gated; with no credentials the sidecar returns ok:false with a note.
  */
 export type ActPayload =
-  | { kind: 'email'; to: string; subject: string; body: string; account?: string }
+  | { kind: 'email'; to: string; subject: string; body: string; account?: string; threadId?: string; inReplyTo?: string }
   | { kind: 'calendar'; title: string; start?: string; end?: string }
   | { kind: 'slack'; channel: string; text: string; workspace?: string }
   | { kind: 'social'; platform: string; caption: string }

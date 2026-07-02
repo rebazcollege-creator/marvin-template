@@ -227,7 +227,26 @@ export default function HomePage() {
         flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
         return;
       }
-      enqueueApproval({ kind: 'email', title: `Reply to ${loop.email.from}`, source: `Email · ${loop.email.account}`, preview: r.draft, actionLabel: 'Send', voiceKey: voiceKeyFor('email', 'all') });
+      // Reply to the real reply-to address, threaded into the original conversation.
+      // The sidecar extracts the bare address and refuses to send if there isn't one.
+      const to = mb?.replyTo || loop.email.from;
+      enqueueApproval({
+        kind: 'email',
+        title: `Reply to ${loop.email.from}`,
+        source: `Email · ${loop.email.account}`,
+        preview: r.draft,
+        actionLabel: 'Send',
+        voiceKey: voiceKeyFor('email', 'all'),
+        payload: {
+          kind: 'email',
+          to,
+          subject: /^re:/i.test(loop.email.subject) ? loop.email.subject : `Re: ${loop.email.subject}`,
+          body: r.draft,
+          account: loop.email.account,
+          threadId: mb?.threadId,
+          inReplyTo: mb?.messageId,
+        },
+      });
       flashMsg('✍️ Draft ready in Approvals — review & send.');
       return;
     }
@@ -238,7 +257,15 @@ export default function HomePage() {
         flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`);
         return;
       }
-      enqueueApproval({ kind: 'slack', title: `Reply to ${loop.slack.from} (${loop.slack.channel})`, source: `Slack · ${loop.slack.workspace}`, preview: r.draft, actionLabel: 'Send', voiceKey: voiceKeyFor('slack', loop.slack.workspace) });
+      enqueueApproval({
+        kind: 'slack',
+        title: `Reply to ${loop.slack.from} (${loop.slack.channel})`,
+        source: `Slack · ${loop.slack.workspace}`,
+        preview: r.draft,
+        actionLabel: 'Send',
+        voiceKey: voiceKeyFor('slack', loop.slack.workspace),
+        payload: { kind: 'slack', channel: loop.slack.channelId, text: r.draft, workspace: loop.slack.workspace },
+      });
       flashMsg('✍️ Draft ready in Approvals — review & send.');
     }
   };

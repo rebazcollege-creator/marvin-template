@@ -1,5 +1,5 @@
 import { WebClient } from '@slack/web-api';
-import { sanitizeHeader, encodeSubject } from './mail.ts';
+import { sanitizeHeader, encodeSubject, sanitizeRecipients } from './mail.ts';
 import type {
   BriefingData,
   InboxData,
@@ -336,7 +336,7 @@ function extractBody(payload: unknown): { html: string; text: string } {
 export async function getMessageBody(
   accountRole: string,
   id: string,
-): Promise<{ ok: boolean; html?: string; text?: string; body?: string; error?: string }> {
+): Promise<{ ok: boolean; html?: string; text?: string; body?: string; from?: string; replyTo?: string; messageId?: string; threadId?: string; error?: string }> {
   const acct = GMAIL_ACCOUNTS.find((a) => a.role === accountRole);
   const c = acct ? gmailCreds(acct.n) : null;
   if (!c || !id) return { ok: false, error: 'Not connected.' };
@@ -347,11 +347,22 @@ export async function getMessageBody(
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!r.ok) return { ok: false, error: `Gmail API ${r.status}` };
-    const j = (await r.json()) as { payload?: unknown; snippet?: string };
+    const j = (await r.json()) as { payload?: { headers?: { name: string; value: string }[] }; snippet?: string; threadId?: string };
     const { html, text } = extractBody(j.payload);
     const plain = text || (j.snippet ?? '');
+    // Reply metadata so a drafted reply can go to the right address and thread.
+    const header = (name: string) => j.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? '';
     // `body` kept for backward compatibility (plain text).
-    return { ok: true, html, text: plain, body: plain };
+    return {
+      ok: true,
+      html,
+      text: plain,
+      body: plain,
+      from: header('from'),
+      replyTo: header('reply-to') || header('from'),
+      messageId: header('message-id'),
+      threadId: j.threadId,
+    };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
@@ -805,24 +816,30 @@ function base64url(s: string): string {
   return Buffer.from(s).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-async function sendGmail(p: { to: string; subject: string; body: string; account?: string }): Promise<ActResult> {
+async function sendGmail(p: { to: string; subject: string; body: string; account?: string; threadId?: string; inReplyTo?: string }): Promise<ActResult> {
   // Pick the account by role if given, else the first configured one.
   const acct = GMAIL_ACCOUNTS.find((a) => a.role === p.account) ?? GMAIL_ACCOUNTS.find((a) => gmailCreds(a.n));
   const c = acct ? gmailCreds(acct.n) : null;
   if (!c) return { ok: false, note: 'Gmail not connected — add GMAIL_* credentials.' };
   const token = await googleAccessToken(c.id, c.secret, c.refresh);
   if (!token) return { ok: false, error: 'Could not authorise Gmail.' };
+  // Extract bare, valid recipient address(es) — refuse to send if there are none,
+  // rather than mail a malformed/garbage "To". Supports several comma-separated.
+  const to = sanitizeRecipients(p.to);
+  if (!to) return { ok: false, error: `No valid recipient address in "${p.to}".` };
   // Neutralise CR/LF in header values (no injected Bcc/etc.) and RFC 2047-encode a
   // non-ASCII subject so Kurdish/Arabic/German subjects arrive intact. Body is after
   // the blank line, so its newlines are fine.
-  const to = sanitizeHeader(p.to);
   const subject = encodeSubject(p.subject);
-  const raw = base64url(`To: ${to}\r\nSubject: ${subject}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${p.body}`);
+  // Threading headers so a reply lands in the original conversation.
+  const inReplyTo = sanitizeHeader(p.inReplyTo ?? '');
+  const threadHeaders = inReplyTo ? `In-Reply-To: ${inReplyTo}\r\nReferences: ${inReplyTo}\r\n` : '';
+  const raw = base64url(`To: ${to}\r\nSubject: ${subject}\r\n${threadHeaders}Content-Type: text/plain; charset="UTF-8"\r\n\r\n${p.body}`);
   try {
     const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ raw }),
+      body: JSON.stringify(p.threadId ? { raw, threadId: p.threadId } : { raw }),
     });
     if (!r.ok) return { ok: false, error: `Gmail send failed (${r.status}).` };
     const j = (await r.json()) as { id?: string };

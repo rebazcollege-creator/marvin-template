@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { sanitizeHeader, encodeSubject } from './mail.ts';
+import { sanitizeHeader, encodeSubject, extractEmailAddress, replySubject, sanitizeRecipients } from './mail.ts';
 import { originAllowed } from './security.ts';
 
 test('sanitizeHeader strips CR/LF so a header value cannot inject another header', () => {
@@ -21,6 +21,28 @@ test('encodeSubject leaves ASCII alone and RFC 2047-encodes non-ASCII', () => {
 
 test('encodeSubject also neutralises CR/LF before encoding', () => {
   assert.ok(!encodeSubject('Hi\r\nBcc: x@y.com').includes('\n'));
+});
+
+test('extractEmailAddress pulls the bare address from "Name <addr>" or a plain address', () => {
+  assert.equal(extractEmailAddress('Rebaz Majeed <rebaz@leadstories.com>'), 'rebaz@leadstories.com');
+  assert.equal(extractEmailAddress('someone@example.com'), 'someone@example.com');
+  assert.equal(extractEmailAddress('"Doe, John" <john.doe@corp.co>'), 'john.doe@corp.co');
+  assert.equal(extractEmailAddress('no address here'), '');
+  // A CR/LF injection attempt yields at most one clean address, never a second header.
+  assert.ok(!extractEmailAddress('a@b.com\r\nBcc: evil@x.com').includes('\n'));
+});
+
+test('sanitizeRecipients preserves multiple recipients and drops garbage', () => {
+  assert.equal(sanitizeRecipients('a@b.com, Jane <jane@x.co>'), 'a@b.com, jane@x.co');
+  assert.equal(sanitizeRecipients('solo@x.com'), 'solo@x.com');
+  assert.equal(sanitizeRecipients('nonsense, also nonsense'), '');
+  assert.ok(!sanitizeRecipients('a@b.com\r\nBcc: evil@x.com').includes('\n'));
+});
+
+test('replySubject adds Re: once and never doubles it', () => {
+  assert.equal(replySubject('Invoice #42'), 'Re: Invoice #42');
+  assert.equal(replySubject('Re: Invoice #42'), 'Re: Invoice #42');
+  assert.equal(replySubject('RE: hello'), 'RE: hello');
 });
 
 test('originAllowed: app origins pass, unknown web origins are rejected', () => {

@@ -28,3 +28,35 @@ export function encodeSubject(subject: string): string {
   if (/^[\x20-\x7e]*$/.test(clean)) return clean;
   return `=?UTF-8?B?${Buffer.from(clean, 'utf8').toString('base64')}?=`;
 }
+
+/**
+ * Pull the bare address out of a From/Reply-To value that may be
+ * `Name <addr@host>` or just `addr@host`. Returns '' if no plausible address is
+ * found (caller must refuse to send rather than mail a malformed recipient).
+ */
+export function extractEmailAddress(value: string): string {
+  const clean = sanitizeHeader(value);
+  const angled = clean.match(/<([^<>@\s]+@[^<>@\s]+)>/);
+  if (angled) return angled[1];
+  const bare = clean.match(/[^\s<>()[\]:;,"]+@[^\s<>()[\]:;,"]+/);
+  return bare ? bare[0] : '';
+}
+
+/** Prefix a reply subject with "Re: " unless it already has one. */
+export function replySubject(subject: string): string {
+  const s = sanitizeHeader(subject);
+  return /^re:/i.test(s) ? s : `Re: ${s}`;
+}
+
+/**
+ * Sanitize a `To` field that may hold one or several comma-separated recipients
+ * (compose supports multiple; a reply has one). Each is reduced to its bare,
+ * injection-safe address; empties are dropped. Returns '' if none are valid.
+ */
+export function sanitizeRecipients(value: string): string {
+  return sanitizeHeader(value)
+    .split(',')
+    .map((part) => extractEmailAddress(part))
+    .filter(Boolean)
+    .join(', ');
+}

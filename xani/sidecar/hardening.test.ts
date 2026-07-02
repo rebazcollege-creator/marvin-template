@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { sanitizeHeader, encodeSubject, extractEmailAddress, replySubject, sanitizeRecipients } from './mail.ts';
 import { originAllowed } from './security.ts';
+import { evaluateAction } from './guard.ts';
 
 test('sanitizeHeader strips CR/LF so a header value cannot inject another header', () => {
   assert.equal(sanitizeHeader('victim@example.com\r\nBcc: attacker@evil.com'), 'victim@example.com Bcc: attacker@evil.com');
@@ -56,4 +57,28 @@ test('originAllowed: a missing Origin is allowed (non-browser / same-origin)', (
   assert.equal(originAllowed(undefined), true);
   assert.equal(originAllowed(''), true);
   assert.equal(originAllowed(null), true);
+});
+
+test('guard rejects unknown action kinds and allows well-formed known ones', () => {
+  assert.equal(evaluateAction({ kind: 'nope' } as never, 'user_approved').allowed, false);
+  assert.equal(evaluateAction({ kind: 'slack', channel: 'C1', text: 'hi' }, 'user_approved').allowed, true);
+  assert.equal(evaluateAction({ kind: 'email', to: 'a@b.com', subject: 'x', body: 'y' }, 'user_approved').allowed, true);
+});
+
+test('guard: day-off blocks assistant-initiated work but never a user-approved send', () => {
+  const day = new Date('2026-07-05T10:00:00'); // a fixed local date
+  const prev = process.env.XANI_DAYS_OFF;
+  process.env.XANI_DAYS_OFF = String(day.getDay()); // mark that weekday as off
+  const email = { kind: 'email', to: 'a@b.com', subject: 'x', body: 'y' } as const;
+  assert.equal(evaluateAction(email, 'agent_proposed', day).allowed, false); // initiated → blocked
+  assert.equal(evaluateAction(email, 'user_approved', day).allowed, true); // approved → allowed
+  if (prev === undefined) delete process.env.XANI_DAYS_OFF;
+  else process.env.XANI_DAYS_OFF = prev;
+});
+
+test('guard: with days-off disabled (default), initiated actions are allowed', () => {
+  const prev = process.env.XANI_DAYS_OFF;
+  delete process.env.XANI_DAYS_OFF;
+  assert.equal(evaluateAction({ kind: 'slack', channel: 'C1', text: 'hi' }, 'agent_proposed').allowed, true);
+  if (prev !== undefined) process.env.XANI_DAYS_OFF = prev;
 });

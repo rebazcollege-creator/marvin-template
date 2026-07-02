@@ -8,6 +8,7 @@ import { loadDotenv } from './env.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
 import { originAllowed } from './security.ts';
+import { evaluateAction } from './guard.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
 import {
@@ -442,6 +443,10 @@ const server = createServer(async (req, res) => {
     try {
       const { payload } = JSON.parse(await readBody(req)) as { payload: ActPayload };
       if (!payload || !payload.kind) return json(res, 400, { ok: false, error: 'Missing action payload.' });
+      // Server-side policy gate. /act is reached only after the user approved the
+      // item in Approvals, so the actor is 'user_approved'.
+      const verdict = evaluateAction(payload, 'user_approved');
+      if (!verdict.allowed) return json(res, 200, { ok: false, error: verdict.reason });
       const result = await executeAction(payload);
       return json(res, 200, result);
     } catch (err) {

@@ -306,9 +306,18 @@ export default function HomePage() {
   // the headline in full context. Each loop is processed once (triedHeadline guard).
   useEffect(() => {
     if (recovering.current) return; // our own writes re-fire this effect — don't re-enter mid-batch
+    // FIRST: wipe any previously-stored garbage headline immediately, unconditionally — so it
+    // vanishes on load even for a message we can no longer re-fetch (e.g. a Trello do-not-reply
+    // notification). The card falls back to its real subject; a good headline is regenerated below.
+    const garbage = loops.filter((l) => l.headline && BAD_HEADLINE.test(l.headline));
+    if (garbage.length > 0) {
+      garbage.forEach((l) => attachLoopRef(l.id, { headline: undefined }));
+      reloadLoops();
+      return; // re-runs with clean loops; recovery picks up from there
+    }
     const targets = loops.filter(
       (l) => (l.source === 'email' || l.source === 'slack')
-        && (!l.headline || BAD_HEADLINE.test(l.headline)) // missing OR previously-stored garbage → (re)generate
+        && !l.headline // missing interpretation → generate
         && !triedHeadline.current.has(l.id),
     );
     if (targets.length === 0) return;
@@ -348,11 +357,8 @@ export default function HomePage() {
               : null;
           if (!p) continue;
           const r = await summarizeItem(p);
-          if (r.ok && r.headline && !BAD_HEADLINE.test(r.headline)) {
-            refineLoop(l.id, { headline: r.headline });
-          } else if (l.headline && BAD_HEADLINE.test(l.headline)) {
-            attachLoopRef(l.id, { headline: undefined }); // wipe stored garbage → card shows the real subject
-          }
+          // Only store a real interpretation — never a degenerate "no content" line.
+          if (r.ok && r.headline && !BAD_HEADLINE.test(r.headline)) refineLoop(l.id, { headline: r.headline });
         }
       } finally {
         recovering.current = false;

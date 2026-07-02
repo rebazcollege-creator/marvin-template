@@ -234,7 +234,9 @@ const TRIAGE_SYSTEM =
   `a confirmation, a receipt he may want).\n` +
   `- "ignore": marketing, promotions, newsletters, ads, social/platform notifications — noise.\n` +
   `Judge by content + sender intent, NOT just the domain. A human writing directly is almost never "ignore". ` +
-  `When unsure between know and ignore, prefer "know".\n\n` +
+  `When unsure between know and ignore, prefer "know".\n` +
+  `Each email has "when" (how long ago it arrived) — weigh it: an old newsletter or a long-passed ` +
+  `deadline is not something to "act" on now.\n\n` +
   `For EACH message ALSO write a "headline": in ≤16 words, say what it ACTUALLY is and the implied ` +
   `action FOR REBAZ — read the snippet, don't just echo the subject. E.g. not "Hour creep stops now" ` +
   `but "Chelsea flags extra hours that weren't agreed — wants your reply". Plain, specific, no fluff. ` +
@@ -258,7 +260,9 @@ const SLACK_TRIAGE_SYSTEM =
   `CRITICAL — read each item's "recent_conversation" (the last few messages, oldest→newest) and ` +
   `interpret the "message" IN THAT CONTEXT, never in isolation. A bare "thanks", "ok", or "done" ` +
   `usually closes a prior request (verdict "know" or "ignore"), not a new ask — figure out what it's ` +
-  `responding to from the conversation before deciding.\n\n` +
+  `responding to from the conversation before deciding.\n` +
+  `Each item has "when" (how long ago it arrived). Only "act" on what still genuinely needs Rebaz ` +
+  `NOW; if the thread reads as already handled, or it's an old FYI, it's "know"/"ignore", not "act".\n\n` +
   `For EACH message ALSO write a "headline": in ≤16 words, say what it ACTUALLY is and the implied ` +
   `action for Rebaz, using the conversation context — don't just quote the message. E.g. "Jil confirmed ` +
   `the Friday shoot time you asked about — nothing needed". Plain and specific; if too thin to be sure, ` +
@@ -299,6 +303,19 @@ function htmlToText(html: string): string {
     .replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"')
     .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ')
     .trim();
+}
+
+/** Relative age of an instant ("13h ago") — handed to Claude so IT can weigh recency when
+ *  deciding what still needs Rebaz, instead of recency being decided only by code. */
+function ageLabel(ms: number): string {
+  if (!ms || Number.isNaN(ms)) return 'unknown time';
+  const min = Math.round((Date.now() - ms) / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min}m ago`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.round(h / 24);
+  return d === 1 ? 'yesterday' : `${d}d ago`;
 }
 
 /** A closing acknowledgment ("thanks" / "ok" / 🙏 / :pray:) — the other person is wrapping up,
@@ -391,7 +408,7 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   const capped = candidates.slice(0, 40);
   if (capped.length === 0) return cache({ connected: true, triaged: [] });
 
-  const list = capped.map((m) => ({ id: m.id, from: m.from, where: m.dm ? 'DM' : `#${m.channel}`, dm: m.dm, emergency: m.emergency, message: m.text.slice(0, 240), recent_conversation: m.context }));
+  const list = capped.map((m) => ({ id: m.id, from: m.from, where: m.dm ? 'DM' : `#${m.channel}`, dm: m.dm, emergency: m.emergency, when: ageLabel(Number(m.ts) * 1000), message: m.text.slice(0, 240), recent_conversation: m.context }));
   try {
     const t = await oneShot(withLearnings(SLACK_TRIAGE_SYSTEM, learned), JSON.stringify(list), 2000);
     const s = t.indexOf('['); const e = t.lastIndexOf(']');
@@ -416,7 +433,7 @@ async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
   if (!inbox.connected) return { connected: false, triaged: [], error: inbox.error };
   const msgs = inbox.messages.slice(0, 40);
   if (msgs.length === 0) return { connected: true, triaged: [] };
-  const list = msgs.map((m) => ({ id: m.id, from: m.from, to: (m.to ?? '').slice(0, 200), subject: m.subject, snippet: (m.snippet ?? '').slice(0, 220) }));
+  const list = msgs.map((m) => ({ id: m.id, from: m.from, to: (m.to ?? '').slice(0, 200), when: ageLabel(Date.parse(m.receivedAt)), subject: m.subject, snippet: (m.snippet ?? '').slice(0, 220) }));
   try {
     const text = await oneShot(withLearnings(TRIAGE_SYSTEM, learned), JSON.stringify(list), 2400);
     const s = text.indexOf('[');

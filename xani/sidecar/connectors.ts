@@ -131,7 +131,7 @@ export function bumpInboxCache(): void {
   inboxCache.clear();
 }
 
-const META_PARAMS = 'format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date';
+const META_PARAMS = 'format=metadata&metadataHeaders=From&metadataHeaders=Subject&metadataHeaders=Date&metadataHeaders=To';
 const PAGE_SIZE = 30;
 
 /** Fetch metadata for many message ids in ONE HTTP request via Gmail's batch
@@ -197,6 +197,7 @@ function rowFromMessage(dj: unknown, accountRole: string): InboxData['messages']
     snippet: j.snippet ?? '',
     receivedAt: j.internalDate ? new Date(Number(j.internalDate)).toISOString() : '',
     unread: labels.includes('UNREAD'),
+    to: header('to'),
     split: splitFor(labels, subject),
   };
 }

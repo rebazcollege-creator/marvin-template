@@ -204,8 +204,16 @@ const TRIAGE_SYSTEM =
   `a confirmation, a receipt he may want).\n` +
   `- "ignore": marketing, promotions, newsletters, ads, social/platform notifications — noise.\n` +
   `Judge by content + sender intent, NOT just the domain. A human writing directly is almost never "ignore". ` +
-  `When unsure between know and ignore, prefer "know".\n` +
-  `Reply with ONLY a JSON array, no prose: [{"id":"<id>","verdict":"act|know|ignore","reason":"<max 8 words>"}]`;
+  `When unsure between know and ignore, prefer "know".\n\n` +
+  `For EACH message ALSO write a "headline": in ≤16 words, say what it ACTUALLY is and the implied ` +
+  `action FOR REBAZ — read the snippet, don't just echo the subject. E.g. not "Hour creep stops now" ` +
+  `but "Chelsea flags extra hours that weren't agreed — wants your reply". Plain, specific, no fluff. ` +
+  `Only state what the text supports; if the snippet is too thin to be sure, keep the headline factual and ` +
+  `neutral rather than guessing.\n` +
+  `And "audience": "you" if the To line addresses Rebaz directly (he's the main/only recipient), or "team" ` +
+  `if it's to a list / many people / a whole team. Judge from the To field.\n` +
+  `Reply with ONLY a JSON array, no prose: ` +
+  `[{"id":"<id>","verdict":"act|know|ignore","headline":"<≤16 words>","audience":"you|team","reason":"<max 8 words>"}]`;
 
 const SLACK_TRIAGE_SYSTEM =
   `You are MARVIN, triaging Rebaz's Slack messages. Rebaz has ADHD and forgets tasks people ` +
@@ -216,8 +224,12 @@ const SLACK_TRIAGE_SYSTEM =
   `- "know": genuine info worth being aware of but no action needed (an FYI, a status update).\n` +
   `- "ignore": bots, automated posts, reactions-only, chit-chat, or noise not aimed at Rebaz.\n` +
   `Judge by content + intent. A person DMing him or naming "Rebaz" is almost never "ignore". ` +
-  `When unsure between act and know for a DM, prefer "act".\n` +
-  `Reply with ONLY a JSON array, no prose: [{"id":"<id>","verdict":"act|know|ignore","reason":"<max 8 words>"}]`;
+  `When unsure between act and know for a DM, prefer "act".\n\n` +
+  `For EACH message ALSO write a "headline": in ≤16 words, say what it ACTUALLY is and the implied ` +
+  `action for Rebaz — read the message, don't just quote it. E.g. "Jil is asking you to confirm the ` +
+  `Friday shoot time". Plain and specific; if the message is too thin to be sure, stay factual, don't guess.\n` +
+  `Reply with ONLY a JSON array, no prose: ` +
+  `[{"id":"<id>","verdict":"act|know|ignore","headline":"<≤16 words>","reason":"<max 8 words>"}]`;
 
 /**
  * Fold Rebaz's learned corrections (docs/self-development.md) into a triage prompt.
@@ -271,7 +283,7 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
     }
   }
 
-  type Cand = { id: string; workspace: string; workspaceName: string; channelId: string; channel: string; dm: boolean; from: string; text: string; ts: string; emergency: boolean };
+  type Cand = { id: string; workspace: string; workspaceName: string; channelId: string; channel: string; dm: boolean; audience: 'you' | 'group' | 'team'; from: string; text: string; ts: string; emergency: boolean };
   const candidates: Cand[] = [];
   const seen = new Set<string>();
   // Only surface genuinely recent messages. Without this, the LATEST message in a quiet
@@ -291,9 +303,11 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
       const id = `${c.id}:${m.ts}`;
       if (seen.has(id)) continue;
       seen.add(id);
+      // Who it's aimed at: a 1:1 DM or an @mention is "you"; a group DM is "group"; a channel is "team".
+      const audience: 'you' | 'group' | 'team' = c.kind === 'dm' || nameMention ? 'you' : c.kind === 'group' ? 'group' : 'team';
       candidates.push({
         id, workspace: c.workspace, workspaceName: wsName.get(c.workspace) ?? c.workspace,
-        channelId: c.id, channel: c.name, dm: isDM, from: m.user, text, ts: m.ts, emergency: m.emergency,
+        channelId: c.id, channel: c.name, dm: isDM, audience, from: m.user, text, ts: m.ts, emergency: m.emergency,
       });
     }
   }
@@ -305,14 +319,14 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   try {
     const t = await oneShot(withLearnings(SLACK_TRIAGE_SYSTEM, learned), JSON.stringify(list), 2000);
     const s = t.indexOf('['); const e = t.lastIndexOf(']');
-    const parsed = s >= 0 && e > s ? (JSON.parse(t.slice(s, e + 1)) as { id: string; verdict: string; reason?: string }[]) : [];
+    const parsed = s >= 0 && e > s ? (JSON.parse(t.slice(s, e + 1)) as { id: string; verdict: string; reason?: string; headline?: string }[]) : [];
     const byId = new Map(parsed.map((p) => [p.id, p]));
     const triaged: TriagedSlack[] = capped.map((m) => {
       const v = byId.get(m.id);
       const verdict = v?.verdict === 'act' || v?.verdict === 'know' || v?.verdict === 'ignore'
         ? v.verdict
         : (m.dm || m.emergency ? 'act' : 'know');
-      return { id: m.id, workspace: m.workspace, workspaceName: m.workspaceName, channelId: m.channelId, channel: m.channel, dm: m.dm, from: m.from, text: m.text, ts: m.ts, emergency: m.emergency, verdict, reason: v?.reason ?? '' };
+      return { id: m.id, workspace: m.workspace, workspaceName: m.workspaceName, channelId: m.channelId, channel: m.channel, dm: m.dm, from: m.from, text: m.text, ts: m.ts, emergency: m.emergency, verdict, reason: v?.reason ?? '', headline: (v?.headline ?? '').trim() || undefined, audience: m.audience };
     });
     return cache({ connected: true, triaged });
   } catch (err) {
@@ -326,17 +340,18 @@ async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
   if (!inbox.connected) return { connected: false, triaged: [], error: inbox.error };
   const msgs = inbox.messages.slice(0, 40);
   if (msgs.length === 0) return { connected: true, triaged: [] };
-  const list = msgs.map((m) => ({ id: m.id, from: m.from, subject: m.subject, snippet: (m.snippet ?? '').slice(0, 160) }));
+  const list = msgs.map((m) => ({ id: m.id, from: m.from, to: (m.to ?? '').slice(0, 200), subject: m.subject, snippet: (m.snippet ?? '').slice(0, 220) }));
   try {
-    const text = await oneShot(withLearnings(TRIAGE_SYSTEM, learned), JSON.stringify(list), 2000);
+    const text = await oneShot(withLearnings(TRIAGE_SYSTEM, learned), JSON.stringify(list), 2400);
     const s = text.indexOf('[');
     const e = text.lastIndexOf(']');
-    const parsed = s >= 0 && e > s ? (JSON.parse(text.slice(s, e + 1)) as { id: string; verdict: string; reason?: string }[]) : [];
+    const parsed = s >= 0 && e > s ? (JSON.parse(text.slice(s, e + 1)) as { id: string; verdict: string; reason?: string; headline?: string; audience?: string }[]) : [];
     const byId = new Map(parsed.map((p) => [p.id, p]));
     const triaged = msgs.map((m) => {
       const v = byId.get(m.id);
       const verdict = v?.verdict === 'act' || v?.verdict === 'know' || v?.verdict === 'ignore' ? v.verdict : 'know';
-      return { id: m.id, account: m.account, from: m.from, subject: m.subject, snippet: m.snippet, receivedAt: m.receivedAt, verdict, reason: v?.reason ?? '' };
+      const audience = v?.audience === 'you' ? 'you' : v?.audience === 'team' ? 'team' : undefined;
+      return { id: m.id, account: m.account, from: m.from, subject: m.subject, snippet: m.snippet, receivedAt: m.receivedAt, verdict, reason: v?.reason ?? '', headline: (v?.headline ?? '').trim() || undefined, audience };
     });
     return { connected: true, triaged };
   } catch (err) {

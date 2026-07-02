@@ -13,13 +13,12 @@ import { syncOpenLoops } from '@/lib/loops-monitor';
 import { recordTriageCorrection, triageLearnings, learnedCount } from '@/lib/triage-learning';
 import { voicePromptFor, voiceKeyFor } from '@/lib/voice';
 import { FocusSession } from '@/components/home/FocusSession';
-import { BreakItDown } from '@/components/home/BreakItDown';
 import { Timeline } from '@/components/home/Timeline';
 import { Momentum } from '@/components/home/Momentum';
 import { MicButton } from '@/components/home/MicButton';
 import { SourceBadge } from '@/components/home/SourceBadge';
 import { DayRitual } from '@/components/home/DayRitual';
-import { whyThisOne, dueLabel, estLabel, timeAgo, slackTsMs } from '@/lib/tone';
+import { dueLabel, estLabel, timeAgo, slackTsMs } from '@/lib/tone';
 
 /**
  * Home — the ADHD command surface (foundations.md). Optimised for Rebaz's top
@@ -59,6 +58,19 @@ const SOURCE: Record<string, { label: string; cls: string }> = {
   email: { label: 'Email', cls: 'text-amber' },
   manual: { label: 'Captured', cls: 'text-accent' },
 };
+
+/** A small "to you / to the team" chip — so it's instantly clear whether something is aimed
+ *  at Rebaz or just went to a list. "you" reads as important; a broadcast reads as quieter. */
+function Aud({ a }: { a?: 'you' | 'team' | 'group' }) {
+  if (!a) return null;
+  const label = a === 'you' ? 'to you' : a === 'group' ? 'to your group' : 'to the team';
+  const strong = a === 'you';
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${strong ? 'bg-accent-soft text-accent' : 'bg-surface-2 text-muted'}`}>
+      {label}
+    </span>
+  );
+}
 
 function LoopCard({ loop, now, onDone, onSnooze, onDraft }: { loop: OpenLoop; now: Date; onDone: () => void; onSnooze: () => void; onDraft?: () => void }) {
   const src = SOURCE[loop.source] ?? SOURCE.manual;
@@ -200,7 +212,7 @@ export default function HomePage() {
       source: 'email',
       channel: `Email · ${m.account}`,
       from: m.from,
-      task: m.subject,
+      task: m.headline || m.subject,
       email: { account: m.account, id: m.id, from: m.from, subject: m.subject },
     });
     recordTriageCorrection({ medium: 'email', from: m.from, subject: m.subject, decision: 'act' });
@@ -221,7 +233,7 @@ export default function HomePage() {
       source: 'slack',
       channel: m.emergency ? `${where} · URGENT` : where,
       from: m.from,
-      task: m.text.length > 180 ? `${m.text.slice(0, 177)}…` : m.text,
+      task: m.headline || (m.text.length > 180 ? `${m.text.slice(0, 177)}…` : m.text),
       ref: m.id,
       slack: { workspace: m.workspace, channelId: m.channelId, channel: m.channel, from: m.from, text: m.text },
     });
@@ -327,7 +339,6 @@ export default function HomePage() {
                 {oneThing.estMins ? <span>· {estLabel(oneThing.estMins)}</span> : null}
                 {dueLabel(oneThing.dueAt, now) ? <span>· {dueLabel(oneThing.dueAt, now)}</span> : null}
               </div>
-              <p className="mt-1 text-[12.5px] italic text-muted">{whyThisOne(oneThing, now)}</p>
               <div className="mt-4 flex flex-wrap gap-2.5">
                 <button type="button" onClick={() => setFocus({ task: oneThing.task, loopId: oneThing.id })} className="rounded-xl bg-accent px-5 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">▶ Focus with me</button>
                 {(oneThing.email || oneThing.slack) && (
@@ -336,13 +347,6 @@ export default function HomePage() {
                 <button type="button" onClick={() => completeLoop(oneThing.id)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✓ Done</button>
                 <button type="button" onClick={() => snoozeLoop(oneThing.id, new Date(now.getTime() + 3 * 3600_000).toISOString())} className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-muted transition hover:text-text-2">Not now</button>
               </div>
-              {/* break the wall into a tiny first step */}
-              <BreakItDown
-                task={oneThing.task}
-                loopId={oneThing.id}
-                initialSteps={oneThing.steps}
-                onStartFirst={(step) => setFocus({ task: step, loopId: oneThing.id })}
-              />
               {overwhelmed && (
                 <p className="mt-4 rounded-xl bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] px-4 py-3 text-[13px] text-text-2">
                   🌿 Everything else is hidden. Just this one. Breathe — you don’t have to hold the rest, I’ve got it.
@@ -397,11 +401,11 @@ export default function HomePage() {
               <div key={m.id} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <SourceBadge source="email" label={m.account} />
+                  <Aud a={m.audience} />
                   <span className="text-[13px] text-text-2">{m.from}</span>
                   {m.receivedAt && <span className="ml-auto text-[12px] text-muted">{timeAgo(Date.parse(m.receivedAt))}</span>}
                 </div>
-                <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.subject}</p>
-                {m.reason && <p className="mt-1 text-[12.5px] text-muted">{m.reason}</p>}
+                <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.headline || m.subject}</p>
                 <div className="mt-4 flex flex-wrap gap-2.5">
                   <button type="button" onClick={() => trackEmail(m)} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">+ Track it</button>
                   <button type="button" onClick={() => dismissEmail(m)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Not for me</button>
@@ -436,11 +440,11 @@ export default function HomePage() {
               <div key={m.id} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <SourceBadge source="slack" urgent={m.emergency} label={`${m.emergency ? 'URGENT · ' : ''}${m.dm ? 'DM' : `#${m.channel}`} · ${m.workspaceName}`} />
+                  <Aud a={m.audience} />
                   <span className="text-[13px] text-text-2">{m.from}</span>
                   {m.ts && <span className="ml-auto text-[12px] text-muted">{timeAgo(slackTsMs(m.ts))}</span>}
                 </div>
-                <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.text.length > 200 ? `${m.text.slice(0, 197)}…` : m.text}</p>
-                {m.reason && <p className="mt-1 text-[12.5px] text-muted">{m.reason}</p>}
+                <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.headline || (m.text.length > 200 ? `${m.text.slice(0, 197)}…` : m.text)}</p>
                 <div className="mt-4 flex flex-wrap gap-2.5">
                   <button type="button" onClick={() => trackSlack(m)} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">+ Track it</button>
                   <button type="button" onClick={() => dismissSlack(m)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Not for me</button>

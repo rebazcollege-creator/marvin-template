@@ -77,6 +77,8 @@ export interface InboxData {
     snippet: string;
     receivedAt: string;
     unread: boolean;
+    /** Raw To header — lets triage tell "directed at you" vs "to the whole team/list". */
+    to?: string;
     /** Smart-triage bucket derived from Gmail labels (IMPORTANT / categories). */
     split?: 'important' | 'calendar' | 'news' | 'other';
   }[];
@@ -96,6 +98,10 @@ export interface TriagedEmail {
   verdict: EmailVerdict;
   /** MARVIN's short reason for the verdict (≤ ~8 words). */
   reason: string;
+  /** What this actually is + the implied action, in Rebaz's terms (≤ ~16 words). */
+  headline?: string;
+  /** Who it's aimed at: directly at Rebaz, or the whole team/list. */
+  audience?: 'you' | 'team';
 }
 export interface InboxTriage {
   connected: boolean;
@@ -173,6 +179,10 @@ export interface TriagedSlack {
   verdict: SlackVerdict;
   /** MARVIN's short reason for the verdict (≤ ~8 words). */
   reason: string;
+  /** What this actually is + the implied action, in Rebaz's terms (≤ ~16 words). */
+  headline?: string;
+  /** Who it's aimed at: directly at Rebaz (DM / @mention), a small group, or a whole channel. */
+  audience?: 'you' | 'group' | 'team';
 }
 export interface SlackTriage {
   connected: boolean;

@@ -4,11 +4,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady } from '@/lib/storage';
-import { fetchBriefingData, fetchMessageBody, peekData, PATHS } from '@/lib/marvin-data';
+import { fetchBriefingData, fetchInbox, fetchMessageBody, fetchSlack, peekData, PATHS } from '@/lib/marvin-data';
 import { fetchInboxTriage, fetchSlackTriage, requestDraft, sortDump, summarizeItem } from '@/lib/marvin-client';
 import { enqueueApproval } from '@/lib/approvals';
-import type { BriefingData, TriagedEmail, TriagedSlack } from '@/lib/marvin-protocol';
-import { activeLoops, captureLoop, completeLoop, snoozeLoop, refineLoop, type OpenLoop } from '@/lib/open-loops';
+import type { BriefingData, InboxData, SlackData, TriagedEmail, TriagedSlack } from '@/lib/marvin-protocol';
+import { activeLoops, attachLoopRef, captureLoop, completeLoop, snoozeLoop, refineLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
 import { recordTriageCorrection, triageLearnings, learnedCount } from '@/lib/triage-learning';
 import { understandingFacts } from '@/lib/understanding';
@@ -89,26 +89,32 @@ function SeeMore({ open, body, onToggle }: { open: boolean; body?: string; onTog
   );
 }
 
-function LoopCard({ loop, now, onDone, onSnooze, onDraft }: { loop: OpenLoop; now: Date; onDone: () => void; onSnooze: () => void; onDraft?: () => void }) {
+function LoopCard({ loop, now, expanded, body, onExpand, onDone, onSnooze, onDraft }: {
+  loop: OpenLoop; now: Date;
+  expanded: boolean; body?: string; onExpand: () => void;
+  onDone: () => void; onSnooze: () => void; onDraft?: () => void;
+}) {
   const src = SOURCE[loop.source] ?? SOURCE.manual;
   const due = dueLabel(loop.dueAt, now);
+  const when = loop.at ?? loop.createdAt;
   return (
     <div className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex flex-wrap items-center gap-2.5">
         <SourceBadge source={loop.source} label={loop.channel ?? src.label} />
+        {loop.audience && <Aud a={loop.audience} />}
         {loop.from && <span className="text-[13px] text-text-2">{loop.from}</span>}
-        {(due || loop.estMins) && (
-          <span className="ml-auto text-[12px] font-medium text-muted">
-            {[loop.estMins ? estLabel(loop.estMins) : null, due].filter(Boolean).join(' · ')}
-          </span>
-        )}
+        {when && <span className="ml-auto text-[12px] font-medium text-muted">{timeAgo(Date.parse(when))}</span>}
       </div>
-      <p className="mt-2.5 font-display text-[19px] leading-snug text-text">{loop.task}</p>
+      <p className="mt-2.5 font-display text-[18px] leading-snug text-text">{loop.headline || loop.task}</p>
+      {(loop.estMins || due) && (
+        <p className="mt-1.5 text-[12px] font-medium text-muted">{[loop.estMins ? estLabel(loop.estMins) : null, due].filter(Boolean).join(' · ')}</p>
+      )}
       {loop.saidOk && (
         <span className="mt-3 inline-flex items-center gap-2 rounded-[9px] bg-gold-soft px-3 py-1.5 text-[12px] font-semibold text-[#8a6d34]">
           <span className="h-1.5 w-1.5 rounded-full bg-current" />You said “ok”
         </span>
       )}
+      {(loop.email || loop.slack) && <SeeMore open={expanded} body={body} onToggle={onExpand} />}
       <div className="mt-4 flex flex-wrap gap-2.5">
         {(loop.email || loop.slack) && onDraft && (
           <button type="button" onClick={onDraft} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">✍️ Draft reply</button>
@@ -117,6 +123,33 @@ function LoopCard({ loop, now, onDone, onSnooze, onDraft }: { loop: OpenLoop; no
         <button type="button" onClick={onSnooze} className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-muted transition hover:text-text-2">Snooze</button>
       </div>
     </div>
+  );
+}
+
+/** Best-effort re-link of an orphaned loop (captured before source-refs existed) back to a
+ *  live message, so it can show an interpreted headline + a "See full message". By sender first,
+ *  then subject/text, so we never mis-attach a manual note to a random email. */
+function emailAddr(s: string): string {
+  const m = s.match(/<([^>]+)>/);
+  return (m ? m[1] : s).trim().toLowerCase();
+}
+function matchEmail(loop: OpenLoop, msgs: InboxData['messages']): InboxData['messages'][number] | undefined {
+  const subj = (loop.headline ? '' : loop.task).trim().toLowerCase();
+  if (!subj) return undefined;
+  const from = loop.from ? emailAddr(loop.from) : '';
+  return (
+    msgs.find((m) => m.subject.trim().toLowerCase() === subj && (!from || emailAddr(m.from) === from)) ??
+    msgs.find((m) => m.subject.trim().toLowerCase() === subj)
+  );
+}
+function matchSlack(loop: OpenLoop, msgs: SlackData['messages']): SlackData['messages'][number] | undefined {
+  const text = (loop.headline ? '' : loop.task).replace(/…$/, '').trim().toLowerCase();
+  if (!text) return undefined;
+  const head = text.slice(0, 40);
+  const from = (loop.from || '').trim().toLowerCase();
+  return (
+    msgs.find((m) => m.user.trim().toLowerCase() === from && m.text.trim().toLowerCase().startsWith(head)) ??
+    msgs.find((m) => m.text.trim().toLowerCase().startsWith(head))
   );
 }
 
@@ -144,6 +177,7 @@ export default function HomePage() {
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
   const bodyCache = useRef<Record<string, string>>({});
   const triedHeadline = useRef<Set<string>>(new Set());
+  const recovering = useRef(false);
   const now = useMemo(() => new Date(), []);
 
   // Expand / collapse the full message under a card; fetches the body once, then caches it.
@@ -224,23 +258,60 @@ export default function HomePage() {
   );
   const restList = stale ? rest.filter((l) => l.id !== stale.id) : rest;
 
-  // The one thing should read as MARVIN's interpretation, not the raw subject. If the top loop
-  // is an email/Slack item without a headline yet, generate one (in its full context) and store it.
+  // Every email/Slack loop should read as MARVIN's interpretation, not a raw subject — and have a
+  // "See full message". Old loops captured before source-refs existed are orphaned (no link back to
+  // the message), so we first re-link them to the live inbox/Slack by sender+subject, then backfill
+  // the headline in full context. Each loop is processed once (triedHeadline guard).
   useEffect(() => {
-    if (!oneThing || oneThing.headline) return;
-    const id = oneThing.id;
-    if (triedHeadline.current.has(id)) return;
-    const p = oneThing.email
-      ? { kind: 'email' as const, account: oneThing.email.account, id: oneThing.email.id }
-      : oneThing.slack
-        ? { kind: 'slack' as const, workspace: oneThing.slack.workspace, channel: oneThing.slack.channelId }
-        : null;
-    if (!p) return;
-    triedHeadline.current.add(id);
-    void summarizeItem(p).then((r) => {
-      if (r.ok && r.headline) { refineLoop(id, { headline: r.headline, task: r.headline }); reloadLoops(); }
-    });
-  }, [oneThing, reloadLoops]);
+    if (recovering.current) return; // our own writes re-fire this effect — don't re-enter mid-batch
+    const targets = loops.filter(
+      (l) => (l.source === 'email' || l.source === 'slack') && !l.headline && !triedHeadline.current.has(l.id),
+    );
+    if (targets.length === 0) return;
+    recovering.current = true;
+    void (async () => {
+      try {
+        const needEmailRecovery = targets.some((l) => l.source === 'email' && !l.email);
+        const needSlackRecovery = targets.some((l) => l.source === 'slack' && !l.slack);
+        const [inbox, slack] = await Promise.all([
+          needEmailRecovery ? fetchInbox() : Promise.resolve(null),
+          needSlackRecovery ? fetchSlack() : Promise.resolve(null),
+        ]);
+        for (const l of targets) {
+          triedHeadline.current.add(l.id);
+          // 1. Re-link orphaned loops back to the real message.
+          let email = l.email;
+          let slk = l.slack;
+          if (!email && l.source === 'email' && inbox?.messages) {
+            const m = matchEmail(l, inbox.messages);
+            if (m) {
+              email = { account: m.account, id: m.id, from: m.from, subject: m.subject };
+              attachLoopRef(l.id, { email, at: l.at ?? m.receivedAt });
+            }
+          }
+          if (!slk && l.source === 'slack' && slack?.messages) {
+            const m = matchSlack(l, slack.messages);
+            if (m) {
+              slk = { workspace: m.workspace, channelId: m.channelId, channel: m.channel, from: m.user, text: m.text };
+              attachLoopRef(l.id, { slack: slk, ref: `${m.channelId}:${m.ts}`, at: l.at ?? new Date(slackTsMs(m.ts)).toISOString() });
+            }
+          }
+          // 2. Backfill the interpreted headline (needs a live ref to read the message).
+          const p = email
+            ? { kind: 'email' as const, account: email.account, id: email.id }
+            : slk
+              ? { kind: 'slack' as const, workspace: slk.workspace, channel: slk.channelId }
+              : null;
+          if (!p) continue;
+          const r = await summarizeItem(p);
+          if (r.ok && r.headline) refineLoop(l.id, { headline: r.headline });
+        }
+      } finally {
+        recovering.current = false;
+        reloadLoops();
+      }
+    })();
+  }, [loops, reloadLoops]);
 
   const onCapture = (text?: string) => {
     const t = (text ?? capture).trim();
@@ -264,6 +335,9 @@ export default function HomePage() {
       channel: `Email · ${m.account}`,
       from: m.from,
       task: m.headline || m.subject,
+      headline: m.headline,
+      at: m.receivedAt,
+      audience: m.audience,
       email: { account: m.account, id: m.id, from: m.from, subject: m.subject },
     });
     recordTriageCorrection({ medium: 'email', from: m.from, subject: m.subject, decision: 'act' });
@@ -285,6 +359,9 @@ export default function HomePage() {
       channel: m.emergency ? `${where} · URGENT` : where,
       from: m.from,
       task: m.headline || (m.text.length > 180 ? `${m.text.slice(0, 177)}…` : m.text),
+      headline: m.headline,
+      at: m.ts ? new Date(slackTsMs(m.ts)).toISOString() : undefined,
+      audience: m.audience,
       ref: m.id,
       slack: { workspace: m.workspace, channelId: m.channelId, channel: m.channel, from: m.from, text: m.text },
     });
@@ -538,7 +615,7 @@ export default function HomePage() {
                   <div className="min-w-0 flex-1">
                     <p className="font-display text-[17px] font-semibold text-text">Want to pick this back up?</p>
                     <p className="mt-1 text-[13px] text-text-2">
-                      {stale.from ? `${stale.from} — ` : ''}“{stale.task.length > 120 ? `${stale.task.slice(0, 117)}…` : stale.task}”. No pressure — I kept it safe.
+                      {stale.from ? `${stale.from} — ` : ''}“{(() => { const t = stale.headline || stale.task; return t.length > 120 ? `${t.slice(0, 117)}…` : t; })()}”. No pressure — I kept it safe.
                     </p>
                     <div className="mt-3.5 flex flex-wrap gap-2.5">
                       <button type="button" onClick={() => setFocus({ task: stale.task, loopId: stale.id })} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">Do it now</button>
@@ -558,16 +635,28 @@ export default function HomePage() {
                 <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted">Open loops</h2>
                 <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-2">{restList.length}</span>
               </div>
-              {restList.map((l) => (
-                <LoopCard
-                  key={l.id}
-                  loop={l}
-                  now={now}
-                  onDone={() => completeLoop(l.id)}
-                  onSnooze={() => snoozeLoop(l.id, new Date(now.getTime() + 3 * 3600_000).toISOString())}
-                  onDraft={l.email || l.slack ? () => void draftLoopReply(l) : undefined}
-                />
-              ))}
+              {restList.map((l) => {
+                const key = `loop:${l.id}`;
+                return (
+                  <LoopCard
+                    key={l.id}
+                    loop={l}
+                    now={now}
+                    expanded={openKeys.has(key)}
+                    body={bodyCache.current[key]}
+                    onExpand={() => toggleExpand(key, () =>
+                      l.email
+                        ? fetchMessageBody(l.email.account, l.email.id).then((mb) => mb?.text || mb?.body || '')
+                        : l.slack
+                          ? summarizeItem({ kind: 'slack', workspace: l.slack.workspace, channel: l.slack.channelId }).then((r) => r.body || l.slack!.text)
+                          : Promise.resolve(''),
+                    )}
+                    onDone={() => completeLoop(l.id)}
+                    onSnooze={() => snoozeLoop(l.id, new Date(now.getTime() + 3 * 3600_000).toISOString())}
+                    onDraft={l.email || l.slack ? () => void draftLoopReply(l) : undefined}
+                  />
+                );
+              })}
             </section>
           )}
 

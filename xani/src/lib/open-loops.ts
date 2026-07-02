@@ -49,6 +49,10 @@ export type OpenLoop = {
   slack?: { workspace: string; channelId: string; channel: string; from: string; text: string };
   /** MARVIN's interpreted one-line summary (what it is + action) — shown instead of raw subject. */
   headline?: string;
+  /** Original message time (ISO) — the email's receivedAt / Slack ts — for the "how long ago" stamp. */
+  at?: string;
+  /** Who the source message was aimed at (you / your group / the team). */
+  audience?: 'you' | 'team' | 'group';
   /** Time-visibility: rough total estimate in minutes (from breakdown or manual). */
   estMins?: number;
   /** ADHD "break it down": tiny concrete steps, first one startable in <2 min. */
@@ -87,6 +91,9 @@ export function captureLoop(input: {
   dueAt?: string;
   ref?: string;
   saidOk?: boolean;
+  headline?: string;
+  at?: string;
+  audience?: 'you' | 'team' | 'group';
   email?: { account: string; id: string; from: string; subject: string };
   slack?: { workspace: string; channelId: string; channel: string; from: string; text: string };
 }): OpenLoop {
@@ -101,6 +108,9 @@ export function captureLoop(input: {
     createdAt: new Date().toISOString(),
     dueAt: input.dueAt,
     ref: input.ref,
+    headline: input.headline,
+    at: input.at,
+    audience: input.audience,
     email: input.email,
     slack: input.slack,
   };
@@ -125,6 +135,15 @@ export function snoozeLoop(id: string, until: string): void {
 
 /** Refine a loop in place (AI brain-dump sort: cleaned title / estimate / kind). */
 export function refineLoop(id: string, patch: Partial<Pick<OpenLoop, 'task' | 'estMins' | 'channel' | 'headline'>>): void {
+  save(listLoops().map((l) => (l.id === id ? { ...l, ...patch } : l)));
+}
+
+/** Re-link / enrich a loop in place: attach a source ref, message time, audience, or headline.
+ *  Recovers old loops captured before the source-ref / headline / timestamp fields existed. */
+export function attachLoopRef(
+  id: string,
+  patch: Partial<Pick<OpenLoop, 'email' | 'slack' | 'ref' | 'headline' | 'task' | 'at' | 'audience' | 'channel'>>,
+): void {
   save(listLoops().map((l) => (l.id === id ? { ...l, ...patch } : l)));
 }
 

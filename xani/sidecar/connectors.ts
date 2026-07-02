@@ -701,6 +701,25 @@ export async function getSlackHistory(p: { workspace: string; channel: string; c
   }
 }
 
+/**
+ * Mark a conversation read up to `ts` — the real read-state write a Slack client
+ * makes when you open a channel. Needs a user token with the conversation-write
+ * scope; best-effort (a missing scope just leaves the unread as-is). Not an
+ * outward message, so it isn't gated by Approvals.
+ */
+export async function markSlackRead(p: { workspace: string; channel: string; ts: string }): Promise<{ ok: boolean; error?: string }> {
+  const w = SLACK_WORKSPACES.find((x) => x.role === p.workspace);
+  const token = w ? slackReadToken(w) : undefined;
+  if (!token || !p.channel || !p.ts) return { ok: false, error: 'not_connected' };
+  try {
+    const client = new WebClient(token);
+    const res = await client.conversations.mark({ channel: p.channel, ts: p.ts });
+    return { ok: Boolean(res.ok) };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 // ── Trello (REST: API key + token + board) ────────────────────────
 
 function trelloCreds(): { key: string; token: string; board: string } | null {

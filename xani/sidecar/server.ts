@@ -24,6 +24,7 @@ import {
   getBuffer,
   getGithub,
   executeAction,
+  markSlackRead,
 } from './connectors.ts';
 import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload, InboxTriage, SlackTriage, TriagedSlack, SlackHistory, EmailVerdict } from '../src/lib/marvin-protocol.ts';
 
@@ -452,6 +453,15 @@ const server = createServer(async (req, res) => {
       } catch {
         /* ignore */
       }
+    }
+  }
+
+  if (req.method === 'POST' && req.url === '/slack/mark') {
+    try {
+      const b = JSON.parse(await readBody(req)) as { workspace?: string; channel?: string; ts?: string };
+      return json(res, 200, await markSlackRead({ workspace: b.workspace ?? '', channel: b.channel ?? '', ts: b.ts ?? '' }));
+    } catch (err) {
+      return json(res, 200, { ok: false, error: (err as Error).message });
     }
   }
 

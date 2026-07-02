@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
-import { ensureStorageReady } from '@/lib/storage';
+import { ensureStorageReady, readJson, writeJson } from '@/lib/storage';
 import { fetchBriefingData, fetchMessageBody, peekData, PATHS } from '@/lib/marvin-data';
 import { fetchInboxTriage, fetchSlackTriage, requestDraft } from '@/lib/marvin-client';
 import { enqueueApproval } from '@/lib/approvals';
@@ -46,6 +46,13 @@ function humanMins(m: number): string {
 function clockAt(iso: string, tz: string): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
+
+// Persisted triage so Home paints last-session results INSTANTLY on open, then
+// revalidates — never a blank "Reading your inbox…" wait that brings nothing.
+const INBOX_TRIAGE_KEY = 'xani.triage.inbox.v1';
+const SLACK_TRIAGE_KEY = 'xani.triage.slack.v1';
+type InboxTriageCache = { acts: TriagedEmail[]; know: number; filed: number };
+type SlackTriageCache = { acts: TriagedSlack[]; know: number; filed: number };
 
 const SOURCE: Record<OpenLoop['source'], { label: string; cls: string }> = {
   slack: { label: 'Slack', cls: 'text-slack' },
@@ -131,23 +138,34 @@ export default function HomePage() {
       const cached = peekData<BriefingData>(PATHS.briefing);
       if (cached) setData(cached);
       void syncOpenLoops().then(reloadLoops); // pull live Trello commitments into Open Loops
+
+      // Seed triage from the last session so Home is populated on open; then revalidate.
+      const ci = readJson<InboxTriageCache | null>(INBOX_TRIAGE_KEY, null);
+      if (ci) { setInboxActs(ci.acts); setInboxKnow(ci.know); setInboxFiled(ci.filed); setInboxLoading(false); }
+      const cs = readJson<SlackTriageCache | null>(SLACK_TRIAGE_KEY, null);
+      if (cs) { setSlackActs(cs.acts); setSlackKnow(cs.know); setSlackFiled(cs.filed); setSlackLoading(false); }
+
       // Triage reads Rebaz's corrections so it gets sharper each time (self-development.md).
       fetchInboxTriage(learnings).then((t) => {
         setInboxLoading(false);
-        if (!t) { setInboxErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
-        if (t.error) setInboxErr(t.error);
-        setInboxActs(t.triaged.filter((m) => m.verdict === 'act'));
-        setInboxKnow(t.triaged.filter((m) => m.verdict === 'know').length);
-        setInboxFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
+        if (!t) { if (!ci) setInboxErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        if (t.error && t.triaged.length === 0) { if (!ci) setInboxErr(t.error); return; } // keep last-known
+        const acts = t.triaged.filter((m) => m.verdict === 'act');
+        const know = t.triaged.filter((m) => m.verdict === 'know').length;
+        const filed = t.triaged.filter((m) => m.verdict === 'ignore').length;
+        setInboxActs(acts); setInboxKnow(know); setInboxFiled(filed); setInboxErr(null);
+        writeJson(INBOX_TRIAGE_KEY, { acts, know, filed });
       });
       fetchSlackTriage(learnings).then((t) => {
         setSlackLoading(false);
-        if (!t) { setSlackErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
-        if (t.error) setSlackErr(t.error);
+        if (!t) { if (!cs) setSlackErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        if (t.error && t.triaged.length === 0) { if (!cs) setSlackErr(t.error); return; } // keep last-known
         if (!t.connected) { setSlackActs([]); return; }
-        setSlackActs(t.triaged.filter((m) => m.verdict === 'act'));
-        setSlackKnow(t.triaged.filter((m) => m.verdict === 'know').length);
-        setSlackFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
+        const acts = t.triaged.filter((m) => m.verdict === 'act');
+        const know = t.triaged.filter((m) => m.verdict === 'know').length;
+        const filed = t.triaged.filter((m) => m.verdict === 'ignore').length;
+        setSlackActs(acts); setSlackKnow(know); setSlackFiled(filed); setSlackErr(null);
+        writeJson(SLACK_TRIAGE_KEY, { acts, know, filed });
       });
     });
     fetchBriefingData().then((d) => d && setData(d));

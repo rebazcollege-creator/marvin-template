@@ -220,3 +220,18 @@ export async function fetchSlackHistory(p: { workspace: string; channel: string;
 }
 export const fetchBuffer = () => get<BufferData>(PATHS.buffer);
 export const fetchGithub = () => get<GithubData>(PATHS.github);
+
+/** Mark a Slack conversation read up to `ts` (best-effort; needs a user token with
+ *  the right scope). Fire-and-forget — the UI already cleared it optimistically. */
+export async function markSlackRead(p: { workspace: string; channel: string; ts?: string }): Promise<void> {
+  if (!p.ts) return;
+  try {
+    await fetch(`${SIDECAR_URL}/slack/mark`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    });
+  } catch {
+    /* best-effort; nothing to do if the runtime is offline */
+  }
+}

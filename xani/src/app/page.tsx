@@ -11,6 +11,7 @@ import type { BriefingData, TriagedEmail, TriagedSlack } from '@/lib/marvin-prot
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
 import { recordTriageCorrection, triageLearnings, learnedCount } from '@/lib/triage-learning';
+import { recordTriageOutcome } from '@/lib/learning-metrics';
 import { voicePromptFor, voiceKeyFor } from '@/lib/voice';
 import { FocusSession } from '@/components/home/FocusSession';
 
@@ -188,12 +189,14 @@ export default function HomePage() {
       email: { account: m.account, id: m.id, from: m.from, subject: m.subject },
     });
     recordTriageCorrection({ medium: 'email', from: m.from, subject: m.subject, decision: 'act' });
+    recordTriageOutcome('confirmed'); // Xanî surfaced it, Rebaz agreed — a hit
     setLearned(learnedCount());
     flashMsg('Tracked — MARVIN is holding it for you.');
     setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
   };
   const dismissEmail = (m: TriagedEmail) => {
     recordTriageCorrection({ medium: 'email', from: m.from, subject: m.subject, decision: 'ignore' });
+    recordTriageOutcome('corrected'); // Xanî surfaced it, Rebaz said no — a wrong call
     setLearned(learnedCount());
     flashMsg('Learned — I’ll file messages like that next time.');
     setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
@@ -210,12 +213,14 @@ export default function HomePage() {
       slack: { workspace: m.workspace, channelId: m.channelId, channel: m.channel, from: m.from, text: m.text },
     });
     recordTriageCorrection({ medium: 'slack', from: m.from, subject: m.dm ? m.text : `#${m.channel}: ${m.text}`, decision: 'act' });
+    recordTriageOutcome('confirmed');
     setLearned(learnedCount());
     flashMsg('Tracked — MARVIN is holding it for you.');
     setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
   };
   const dismissSlack = (m: TriagedSlack) => {
     recordTriageCorrection({ medium: 'slack', from: m.from, subject: m.dm ? m.text : `#${m.channel}: ${m.text}`, decision: 'ignore' });
+    recordTriageOutcome('corrected');
     setLearned(learnedCount());
     flashMsg('Learned — I’ll file messages like that next time.');
     setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));

@@ -157,28 +157,33 @@ async function gmailBatchGetMetadata(token: string, ids: string[]): Promise<Reco
       body,
     });
     if (!r.ok) return null;
-    // Google replies with its own boundary; read it from the response Content-Type.
-    const ct = r.headers.get('content-type') ?? '';
-    const bm = ct.match(/boundary=([^;]+)/);
-    const respBoundary = bm ? bm[1].trim().replace(/^"|"$/g, '') : null;
-    const text = await r.text();
-    const parts = respBoundary ? text.split(`--${respBoundary}`) : [text];
-    const out: Record<string, unknown>[] = [];
-    for (const part of parts) {
-      // Each part wraps one HTTP response whose body is a single JSON object.
-      const s = part.indexOf('{');
-      const e = part.lastIndexOf('}');
-      if (s === -1 || e <= s) continue;
-      try {
-        out.push(JSON.parse(part.slice(s, e + 1)) as Record<string, unknown>);
-      } catch {
-        /* skip a malformed part */
-      }
-    }
-    return out;
+    return parseBatchResponse(r.headers.get('content-type') ?? '', await r.text());
   } catch {
     return null;
   }
+}
+
+/** Parse a Gmail batch (multipart/mixed) response body into one JSON object per
+ *  part. Exported for tests — this hand-rolled parser is load-bearing for cold
+ *  inbox loads and must not regress silently. */
+export function parseBatchResponse(contentType: string, text: string): Record<string, unknown>[] {
+  // Google replies with its own boundary; read it from the response Content-Type.
+  const bm = contentType.match(/boundary=([^;]+)/);
+  const respBoundary = bm ? bm[1].trim().replace(/^"|"$/g, '') : null;
+  const parts = respBoundary ? text.split(`--${respBoundary}`) : [text];
+  const out: Record<string, unknown>[] = [];
+  for (const part of parts) {
+    // Each part wraps one HTTP response whose body is a single JSON object.
+    const s = part.indexOf('{');
+    const e = part.lastIndexOf('}');
+    if (s === -1 || e <= s) continue;
+    try {
+      out.push(JSON.parse(part.slice(s, e + 1)) as Record<string, unknown>);
+    } catch {
+      /* skip a malformed part */
+    }
+  }
+  return out;
 }
 
 /** Shape one Gmail message JSON (metadata format) into an inbox row. */

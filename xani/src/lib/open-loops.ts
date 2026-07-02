@@ -49,12 +49,27 @@ export type OpenLoop = {
 };
 
 const KEY = 'xani.openloops.v1';
+/** Completed loops kept for reference; older ones are pruned so the store (a
+ *  single JSON blob rewritten on every change) can't grow forever. Open/snoozed
+ *  loops are NEVER pruned — a commitment stays visible until it's genuinely done. */
+const KEEP_DONE = 200;
 
 export function listLoops(): OpenLoop[] {
   return readJson<OpenLoop[]>(KEY, []);
 }
+function prune(list: OpenLoop[]): OpenLoop[] {
+  const done = list.filter((l) => l.status === 'done');
+  if (done.length <= KEEP_DONE) return list;
+  const keep = new Set(
+    done
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, KEEP_DONE)
+      .map((l) => l.id),
+  );
+  return list.filter((l) => l.status !== 'done' || keep.has(l.id));
+}
 function save(list: OpenLoop[]): void {
-  writeJson(KEY, list);
+  writeJson(KEY, prune(list));
   broadcast();
 }
 

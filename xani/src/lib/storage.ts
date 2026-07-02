@@ -92,12 +92,50 @@ export function readJson<T>(key: string, fallback: T): T {
 export function writeJson<T>(key: string, value: T): void {
   const raw = JSON.stringify(value);
   if (cache) cache.set(key, raw);
-  void backendSet(key, raw);
+  // A failed persist must not be silent: the in-memory cache still holds the value,
+  // but it would vanish on restart — surface it so the UI/user can react.
+  backendSet(key, raw).catch((e) => {
+    console.error(`[storage] failed to persist ${key}:`, e);
+    try {
+      window.dispatchEvent(new CustomEvent('xani:storage-error', { detail: { key } }));
+    } catch {
+      /* no window */
+    }
+  });
 }
 
 export function removeKey(key: string): void {
   if (cache) cache.delete(key);
   void backendRemove(key);
+}
+
+/**
+ * Snapshot of everything Xanî knows (settings, memories, loops, approvals, voice,
+ * chats — every `xani.*` key) for a user-held backup file. Reads from the live
+ * backend, not just the cache, so it captures the persisted truth.
+ */
+export async function exportAll(): Promise<Record<string, string>> {
+  await ensureStorageReady();
+  const entries = await backendLoadAll();
+  return Object.fromEntries(entries.filter(([k]) => k.startsWith('xani.')));
+}
+
+/**
+ * Restore a backup produced by exportAll(). Only `xani.*` keys are accepted (a
+ * foreign/corrupt file can't plant arbitrary keys). Existing keys are overwritten;
+ * returns the number of keys restored.
+ */
+export async function importAll(data: Record<string, string>): Promise<number> {
+  await ensureStorageReady();
+  let n = 0;
+  for (const [key, value] of Object.entries(data)) {
+    if (!key.startsWith('xani.') || typeof value !== 'string') continue;
+    JSON.parse(value); // must be valid JSON — throws (and aborts) on a corrupt entry
+    if (cache) cache.set(key, value);
+    await backendSet(key, value);
+    n++;
+  }
+  return n;
 }
 
 /** Stable id generator (Web Crypto in the webview). */

@@ -9,7 +9,7 @@ import {
   saveSettings,
   type XaniSettings,
 } from '@/lib/settings';
-import { ensureStorageReady, isTauri } from '@/lib/storage';
+import { ensureStorageReady, exportAll, importAll, isTauri } from '@/lib/storage';
 import { Collapsible } from '@/components/ui/Collapsible';
 
 /**
@@ -52,6 +52,36 @@ export default function SettingsPage() {
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [keyInput, setKeyInput] = useState('');
   const [keyStored, setKeyStored] = useState<boolean | null>(null);
+  const [backupMsg, setBackupMsg] = useState<string | null>(null);
+
+  const handleExport = async () => {
+    const data = await exportAll();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `xani-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setBackupMsg(`Backup downloaded — ${Object.keys(data).length} entries. Keep it somewhere safe.`);
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // allow re-selecting the same file
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as Record<string, string>;
+      const n = await importAll(parsed);
+      if (n === 0) {
+        setBackupMsg('That file contains no Xanî data — nothing was changed.');
+        return;
+      }
+      setSettings(getSettings());
+      setBackupMsg(`Restored ${n} entries from the backup. Reload the app to see everything.`);
+    } catch {
+      setBackupMsg('Couldn’t read that backup file — nothing was changed.');
+    }
+  };
 
   useEffect(() => {
     ensureStorageReady().then(() => setSettings(getSettings()));
@@ -266,6 +296,29 @@ export default function SettingsPage() {
           );
         })}
       </Collapsible>
+
+      {/* Backup — everything Xanî knows (settings, memories, loops, approvals, voice,
+          chats) as one file the user holds. Restore overwrites matching keys. */}
+      <section className="mt-2 rounded-2xl border border-border bg-surface p-5">
+        <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">Backup</div>
+        <p className="mt-1.5 text-[12.5px] text-text-2">
+          Download everything MARVIN has learned as a file you keep. Restoring a backup overwrites the current data.
+        </p>
+        {backupMsg && <p className="mt-2 text-[12.5px] font-medium text-text">{backupMsg}</p>}
+        <div className="mt-3 flex gap-2.5">
+          <button
+            type="button"
+            onClick={() => void handleExport()}
+            className="rounded-[10px] border border-border bg-surface-2 px-[18px] py-2 text-[13px] font-semibold text-text-2 transition hover:bg-hover"
+          >
+            Export backup
+          </button>
+          <label className="cursor-pointer rounded-[10px] border border-border bg-surface-2 px-[18px] py-2 text-[13px] font-semibold text-text-2 transition hover:bg-hover">
+            Restore backup…
+            <input type="file" accept="application/json" className="hidden" onChange={(e) => void handleImport(e)} />
+          </label>
+        </div>
+      </section>
 
       <div className="flex justify-end gap-2.5 pt-2">
         <button

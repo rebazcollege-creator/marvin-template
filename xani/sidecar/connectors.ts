@@ -446,7 +446,7 @@ export async function getCalendar(): Promise<CalendarData> {
     `?singleEvents=true&orderBy=startTime&timeMin=${start.toISOString()}&timeMax=${end.toISOString()}`;
   try {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!r.ok) return { connected: true, events: [] };
+    if (!r.ok) return { connected: true, events: [], error: `Google Calendar API ${r.status}` };
     const j = (await r.json()) as {
       items?: { summary?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }[];
     };
@@ -457,8 +457,8 @@ export async function getCalendar(): Promise<CalendarData> {
       allDay: Boolean(e.start?.date && !e.start?.dateTime),
     }));
     return { connected: true, events };
-  } catch {
-    return { connected: true, events: [] };
+  } catch (e) {
+    return { connected: true, events: [], error: (e as Error).message };
   }
 }
 
@@ -489,7 +489,7 @@ export async function getDrive(): Promise<DriveData> {
     '&fields=files(id,name,mimeType,modifiedTime,starred)';
   try {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!r.ok) return { connected: true, files: [] };
+    if (!r.ok) return { connected: true, files: [], error: `Google Drive API ${r.status}` };
     const j = (await r.json()) as {
       files?: { id?: string; name?: string; mimeType?: string; modifiedTime?: string; starred?: boolean }[];
     };
@@ -501,8 +501,8 @@ export async function getDrive(): Promise<DriveData> {
       starred: Boolean(f.starred),
     }));
     return { connected: true, files };
-  } catch {
-    return { connected: true, files: [] };
+  } catch (e) {
+    return { connected: true, files: [], error: (e as Error).message };
   }
 }
 
@@ -733,7 +733,7 @@ export async function getTrello(): Promise<TrelloData> {
     const r = await fetch(
       `https://api.trello.com/1/boards/${c.board}/cards?fields=name,url,due,labels&list=true&customFieldItems=true&${auth}`,
     );
-    if (!r.ok) return { connected: true, cards: [] };
+    if (!r.ok) return { connected: true, cards: [], error: `Trello API ${r.status}` };
     const j = (await r.json()) as {
       name?: string;
       url?: string;
@@ -759,8 +759,8 @@ export async function getTrello(): Promise<TrelloData> {
       };
     });
     return { connected: true, cards };
-  } catch {
-    return { connected: true, cards: [] };
+  } catch (e) {
+    return { connected: true, cards: [], error: (e as Error).message };
   }
 }
 
@@ -771,7 +771,7 @@ export async function getBuffer(): Promise<BufferData> {
   if (!token) return { connected: false, drafts: 0, scheduled: 0, byPlatform: [] };
   try {
     const r = await fetch(`https://api.bufferapp.com/1/profiles.json?access_token=${token}`);
-    if (!r.ok) return { connected: true, drafts: 0, scheduled: 0, byPlatform: [] };
+    if (!r.ok) return { connected: true, drafts: 0, scheduled: 0, byPlatform: [], error: `Buffer API ${r.status}` };
     const profiles = (await r.json()) as { service?: string; counts?: { pending?: number; sent?: number } }[];
     let drafts = 0;
     let scheduled = 0;
@@ -782,8 +782,8 @@ export async function getBuffer(): Promise<BufferData> {
       byPlatform.push({ platform: p.service ?? 'channel', count: pending });
     }
     return { connected: true, drafts, scheduled, byPlatform };
-  } catch {
-    return { connected: true, drafts: 0, scheduled: 0, byPlatform: [] };
+  } catch (e) {
+    return { connected: true, drafts: 0, scheduled: 0, byPlatform: [], error: (e as Error).message };
   }
 }
 
@@ -796,7 +796,7 @@ export async function getGithub(): Promise<GithubData> {
     const r = await fetch('https://api.github.com/issues?filter=assigned&state=open&per_page=20', {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'xani' },
     });
-    if (!r.ok) return { connected: true, items: [] };
+    if (!r.ok) return { connected: true, items: [], error: `GitHub API ${r.status}` };
     const j = (await r.json()) as { title?: string; html_url?: string; pull_request?: unknown; repository?: { full_name?: string } }[];
     const items = (Array.isArray(j) ? j : []).map((i) => ({
       title: i.title ?? '(untitled)',
@@ -805,8 +805,8 @@ export async function getGithub(): Promise<GithubData> {
       isPR: Boolean(i.pull_request),
     }));
     return { connected: true, items };
-  } catch {
-    return { connected: true, items: [] };
+  } catch (e) {
+    return { connected: true, items: [], error: (e as Error).message };
   }
 }
 

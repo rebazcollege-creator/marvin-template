@@ -1,4 +1,5 @@
 import { WebClient } from '@slack/web-api';
+import { sanitizeHeader, encodeSubject, sanitizeRecipients } from './mail.ts';
 import type {
   BriefingData,
   InboxData,
@@ -66,7 +67,7 @@ function gmailCreds(n: number): { id: string; secret: string; refresh: string } 
 
 // ── Gmail ─────────────────────────────────────────────────────────
 
-async function gmailUnreadCounts(): Promise<{ connected: boolean; accounts: { account: string; unread: number }[] }> {
+export async function gmailUnreadCounts(): Promise<{ connected: boolean; accounts: { account: string; unread: number }[] }> {
   const connected = GMAIL_ACCOUNTS.map((a) => ({ a, c: gmailCreds(a.n) })).filter((x) => x.c);
   // All accounts in parallel — previously sequential (token + fetch per account).
   const results = await Promise.all(
@@ -85,7 +86,7 @@ async function gmailUnreadCounts(): Promise<{ connected: boolean; accounts: { ac
       }
     }),
   );
-  return { connected: connected.length > 0, accounts: results.filter((x): x is { account: string; unread: number } => x != null) };
+  return { connected: connected.length > 0, accounts: results.filter((x): x is NonNullable<typeof x> => x != null) };
 }
 
 /** Gmail search query per Gmail-clone folder. */
@@ -157,28 +158,33 @@ async function gmailBatchGetMetadata(token: string, ids: string[]): Promise<Reco
       body,
     });
     if (!r.ok) return null;
-    // Google replies with its own boundary; read it from the response Content-Type.
-    const ct = r.headers.get('content-type') ?? '';
-    const bm = ct.match(/boundary=([^;]+)/);
-    const respBoundary = bm ? bm[1].trim().replace(/^"|"$/g, '') : null;
-    const text = await r.text();
-    const parts = respBoundary ? text.split(`--${respBoundary}`) : [text];
-    const out: Record<string, unknown>[] = [];
-    for (const part of parts) {
-      // Each part wraps one HTTP response whose body is a single JSON object.
-      const s = part.indexOf('{');
-      const e = part.lastIndexOf('}');
-      if (s === -1 || e <= s) continue;
-      try {
-        out.push(JSON.parse(part.slice(s, e + 1)) as Record<string, unknown>);
-      } catch {
-        /* skip a malformed part */
-      }
-    }
-    return out;
+    return parseBatchResponse(r.headers.get('content-type') ?? '', await r.text());
   } catch {
     return null;
   }
+}
+
+/** Parse a Gmail batch (multipart/mixed) response body into one JSON object per
+ *  part. Exported for tests — this hand-rolled parser is load-bearing for cold
+ *  inbox loads and must not regress silently. */
+export function parseBatchResponse(contentType: string, text: string): Record<string, unknown>[] {
+  // Google replies with its own boundary; read it from the response Content-Type.
+  const bm = contentType.match(/boundary=([^;]+)/);
+  const respBoundary = bm?.[1]?.trim().replace(/^"|"$/g, '') ?? null;
+  const parts = respBoundary ? text.split(`--${respBoundary}`) : [text];
+  const out: Record<string, unknown>[] = [];
+  for (const part of parts) {
+    // Each part wraps one HTTP response whose body is a single JSON object.
+    const s = part.indexOf('{');
+    const e = part.lastIndexOf('}');
+    if (s === -1 || e <= s) continue;
+    try {
+      out.push(JSON.parse(part.slice(s, e + 1)) as Record<string, unknown>);
+    } catch {
+      /* skip a malformed part */
+    }
+  }
+  return out;
 }
 
 /** Shape one Gmail message JSON (metadata format) into an inbox row. */
@@ -213,7 +219,7 @@ export async function getInbox(folder = 'inbox', cursorRaw = ''): Promise<InboxD
   const cached = inboxCache.get(cacheKey);
   if (cached && cached.ver === inboxCacheVer && Date.now() - cached.ts < INBOX_TTL_MS) return cached.data;
 
-  const q = FOLDER_QUERY[folder] ?? FOLDER_QUERY.inbox;
+  const q = FOLDER_QUERY[folder] ?? FOLDER_QUERY.inbox ?? 'in:inbox';
   const connectedAccounts = GMAIL_ACCOUNTS.map((a) => ({ a, c: gmailCreds(a.n) })).filter((x) => x.c);
   const errs: string[] = [];
 
@@ -350,6 +356,7 @@ export async function getMessageBody(
   subject?: string;
   from?: string;
   to?: string;
+  replyTo?: string;
 }> {
   const acct = GMAIL_ACCOUNTS.find((a) => a.role === accountRole);
   const c = acct ? gmailCreds(acct.n) : null;
@@ -364,6 +371,7 @@ export async function getMessageBody(
     const j = (await r.json()) as { threadId?: string; payload?: { headers?: { name?: string; value?: string }[] }; snippet?: string };
     const { html, text } = extractBody(j.payload);
     const plain = text || (j.snippet ?? '');
+    // Reply metadata so a drafted reply can go to the right address and thread.
     const hdr = (name: string): string | undefined =>
       (j.payload?.headers ?? []).find((h) => (h.name ?? '').toLowerCase() === name.toLowerCase())?.value;
     return {
@@ -377,6 +385,7 @@ export async function getMessageBody(
       subject: hdr('Subject'),
       from: hdr('From'),
       to: hdr('To'),
+      replyTo: hdr('Reply-To') || hdr('From'),
     };
   } catch (e) {
     return { ok: false, error: (e as Error).message };
@@ -461,7 +470,7 @@ export async function getCalendar(): Promise<CalendarData> {
     `?singleEvents=true&orderBy=startTime&timeMin=${start.toISOString()}&timeMax=${end.toISOString()}`;
   try {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!r.ok) return { connected: true, events: [] };
+    if (!r.ok) return { connected: true, events: [], error: `Google Calendar API ${r.status}` };
     const j = (await r.json()) as {
       items?: { summary?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }[];
     };
@@ -472,8 +481,8 @@ export async function getCalendar(): Promise<CalendarData> {
       allDay: Boolean(e.start?.date && !e.start?.dateTime),
     }));
     return { connected: true, events };
-  } catch {
-    return { connected: true, events: [] };
+  } catch (e) {
+    return { connected: true, events: [], error: (e as Error).message };
   }
 }
 
@@ -504,7 +513,7 @@ export async function getDrive(): Promise<DriveData> {
     '&fields=files(id,name,mimeType,modifiedTime,starred)';
   try {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!r.ok) return { connected: true, files: [] };
+    if (!r.ok) return { connected: true, files: [], error: `Google Drive API ${r.status}` };
     const j = (await r.json()) as {
       files?: { id?: string; name?: string; mimeType?: string; modifiedTime?: string; starred?: boolean }[];
     };
@@ -516,8 +525,8 @@ export async function getDrive(): Promise<DriveData> {
       starred: Boolean(f.starred),
     }));
     return { connected: true, files };
-  } catch {
-    return { connected: true, files: [] };
+  } catch (e) {
+    return { connected: true, files: [], error: (e as Error).message };
   }
 }
 
@@ -595,7 +604,7 @@ function mpimDisplayName(rawName: string, role: string, selfId?: string): string
   const m = /^mpdm-(.+?)-1$/.exec(rawName);
   if (!m) return rawName;
   const dir = slackDir(role);
-  const names = m[1]
+  const names = (m[1] ?? '')
     .split('--')
     .map((uname) => {
       const id = dir.byUser.get(uname);
@@ -793,6 +802,25 @@ export async function getSlackHistory(p: { workspace: string; channel: string; c
   }
 }
 
+/**
+ * Mark a conversation read up to `ts` — the real read-state write a Slack client
+ * makes when you open a channel. Needs a user token with the conversation-write
+ * scope; best-effort (a missing scope just leaves the unread as-is). Not an
+ * outward message, so it isn't gated by Approvals.
+ */
+export async function markSlackRead(p: { workspace: string; channel: string; ts: string }): Promise<{ ok: boolean; error?: string }> {
+  const w = SLACK_WORKSPACES.find((x) => x.role === p.workspace);
+  const token = w ? slackReadToken(w) : undefined;
+  if (!token || !p.channel || !p.ts) return { ok: false, error: 'not_connected' };
+  try {
+    const client = new WebClient(token);
+    const res = await client.conversations.mark({ channel: p.channel, ts: p.ts });
+    return { ok: Boolean(res.ok) };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
 // ── Trello (REST: API key + token + board) ────────────────────────
 
 function trelloCreds(): { key: string; token: string; board: string } | null {
@@ -830,7 +858,7 @@ export async function getTrello(): Promise<TrelloData> {
     const r = await fetch(
       `https://api.trello.com/1/boards/${c.board}/cards?fields=name,url,due,labels&list=true&customFieldItems=true&${auth}`,
     );
-    if (!r.ok) return { connected: true, cards: [] };
+    if (!r.ok) return { connected: true, cards: [], error: `Trello API ${r.status}` };
     const j = (await r.json()) as {
       name?: string;
       url?: string;
@@ -856,8 +884,8 @@ export async function getTrello(): Promise<TrelloData> {
       };
     });
     return { connected: true, cards };
-  } catch {
-    return { connected: true, cards: [] };
+  } catch (e) {
+    return { connected: true, cards: [], error: (e as Error).message };
   }
 }
 
@@ -868,7 +896,7 @@ export async function getBuffer(): Promise<BufferData> {
   if (!token) return { connected: false, drafts: 0, scheduled: 0, byPlatform: [] };
   try {
     const r = await fetch(`https://api.bufferapp.com/1/profiles.json?access_token=${token}`);
-    if (!r.ok) return { connected: true, drafts: 0, scheduled: 0, byPlatform: [] };
+    if (!r.ok) return { connected: true, drafts: 0, scheduled: 0, byPlatform: [], error: `Buffer API ${r.status}` };
     const profiles = (await r.json()) as { service?: string; counts?: { pending?: number; sent?: number } }[];
     let drafts = 0;
     let scheduled = 0;
@@ -879,8 +907,8 @@ export async function getBuffer(): Promise<BufferData> {
       byPlatform.push({ platform: p.service ?? 'channel', count: pending });
     }
     return { connected: true, drafts, scheduled, byPlatform };
-  } catch {
-    return { connected: true, drafts: 0, scheduled: 0, byPlatform: [] };
+  } catch (e) {
+    return { connected: true, drafts: 0, scheduled: 0, byPlatform: [], error: (e as Error).message };
   }
 }
 
@@ -893,7 +921,7 @@ export async function getGithub(): Promise<GithubData> {
     const r = await fetch('https://api.github.com/issues?filter=assigned&state=open&per_page=20', {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'xani' },
     });
-    if (!r.ok) return { connected: true, items: [] };
+    if (!r.ok) return { connected: true, items: [], error: `GitHub API ${r.status}` };
     const j = (await r.json()) as { title?: string; html_url?: string; pull_request?: unknown; repository?: { full_name?: string } }[];
     const items = (Array.isArray(j) ? j : []).map((i) => ({
       title: i.title ?? '(untitled)',
@@ -902,8 +930,8 @@ export async function getGithub(): Promise<GithubData> {
       isPR: Boolean(i.pull_request),
     }));
     return { connected: true, items };
-  } catch {
-    return { connected: true, items: [] };
+  } catch (e) {
+    return { connected: true, items: [], error: (e as Error).message };
   }
 }
 
@@ -920,13 +948,21 @@ async function sendGmail(p: { to: string; subject: string; body: string; account
   if (!c) return { ok: false, note: 'Gmail not connected — add GMAIL_* credentials.' };
   const token = await googleAccessToken(c.id, c.secret, c.refresh);
   if (!token) return { ok: false, error: 'Could not authorise Gmail.' };
-  // Threading headers make the reply land in the original conversation (Gmail + other clients).
-  const refs = [p.references, p.inReplyTo].filter(Boolean).join(' ').trim();
+  // Extract bare, valid recipient address(es) — refuse to send rather than mail a
+  // malformed "To". Supports several comma-separated recipients.
+  const to = sanitizeRecipients(p.to);
+  if (!to) return { ok: false, error: `No valid recipient address in "${p.to}".` };
+  // Neutralise CR/LF in header values (no injected Bcc/etc.) and RFC 2047-encode a
+  // non-ASCII subject so Kurdish/Arabic/German subjects arrive intact.
+  const subject = encodeSubject(p.subject);
+  // Threading headers make the reply land in the original conversation.
+  const inReplyTo = sanitizeHeader(p.inReplyTo ?? '');
+  const references = sanitizeHeader([p.references, p.inReplyTo].filter(Boolean).join(' ').trim());
   const headers = [
-    `To: ${p.to}`,
-    `Subject: ${p.subject}`,
-    p.inReplyTo ? `In-Reply-To: ${p.inReplyTo}` : '',
-    refs ? `References: ${refs}` : '',
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    inReplyTo ? `In-Reply-To: ${inReplyTo}` : '',
+    references ? `References: ${references}` : '',
     'Content-Type: text/plain; charset="UTF-8"',
   ].filter(Boolean).join('\r\n');
   const raw = base64url(`${headers}\r\n\r\n${p.body}`);

@@ -40,8 +40,9 @@ const VERDICT_STYLE: Record<string, string> = {
 
 function parseVerdict(out: string): string {
   const m = out.match(/VERDICT:\s*(True|False|Misleading|Unverified)/i);
-  if (!m) return '';
-  return m[1][0].toUpperCase() + m[1].slice(1).toLowerCase();
+  const g = m?.[1];
+  if (!g) return '';
+  return g.charAt(0).toUpperCase() + g.slice(1).toLowerCase();
 }
 
 /** Rebaz's LeadStories shift: ~13:00–17:00 Berlin, Mon/Wed/Thu/Fri/Sat. */

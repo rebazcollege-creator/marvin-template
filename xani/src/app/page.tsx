@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
-import { ensureStorageReady } from '@/lib/storage';
+import { ensureStorageReady, readJson, writeJson } from '@/lib/storage';
 import { fetchBriefingData, fetchInbox, fetchMessageBody, fetchSlack, peekData, PATHS } from '@/lib/marvin-data';
 import { fetchInboxTriage, fetchSlackTriage, requestDraft, sortDump, summarizeItem } from '@/lib/marvin-client';
 import { enqueueApproval } from '@/lib/approvals';
@@ -12,6 +12,7 @@ import { activeLoops, attachLoopRef, captureLoop, completeLoop, snoozeLoop, refi
 import { syncOpenLoops } from '@/lib/loops-monitor';
 import { recordTriageCorrection, triageLearnings, learnedCount } from '@/lib/triage-learning';
 import { understandingFacts } from '@/lib/understanding';
+import { recordTriageOutcome } from '@/lib/learning-metrics';
 import { voicePromptFor, voiceKeyFor } from '@/lib/voice';
 import { FocusSession } from '@/components/home/FocusSession';
 import { Timeline } from '@/components/home/Timeline';
@@ -53,7 +54,14 @@ function clockAt(iso: string, tz: string): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
 
-const SOURCE: Record<string, { label: string; cls: string }> = {
+// Persisted triage so Home paints last-session results INSTANTLY on open, then
+// revalidates — never a blank "Reading your inbox…" wait that brings nothing.
+const INBOX_TRIAGE_KEY = 'xani.triage.inbox.v1';
+const SLACK_TRIAGE_KEY = 'xani.triage.slack.v1';
+type InboxTriageCache = { acts: TriagedEmail[]; know: number; filed: number };
+type SlackTriageCache = { acts: TriagedSlack[]; know: number; filed: number };
+
+const SOURCE: Record<OpenLoop['source'], { label: string; cls: string }> = {
   slack: { label: 'Slack', cls: 'text-slack' },
   trello: { label: 'Trello', cls: 'text-trello' },
   email: { label: 'Email', cls: 'text-amber' },
@@ -143,7 +151,7 @@ function LoopCard({ loop, now, tz, expanded, body, onExpand, onDone, onSnooze, o
  *  then subject/text, so we never mis-attach a manual note to a random email. */
 function emailAddr(s: string): string {
   const m = s.match(/<([^>]+)>/);
-  return (m ? m[1] : s).trim().toLowerCase();
+  return (m?.[1] ?? s).trim().toLowerCase();
 }
 function matchEmail(loop: OpenLoop, msgs: InboxData['messages']): InboxData['messages'][number] | undefined {
   const subj = (loop.headline ? '' : loop.task).trim().toLowerCase();
@@ -220,7 +228,13 @@ export default function HomePage() {
   const bodyCache = useRef<Record<string, string>>({});
   const triedHeadline = useRef<Set<string>>(new Set());
   const recovering = useRef(false);
-  const now = useMemo(() => new Date(), []);
+  // Resident tray app — the window stays open for hours, so the clock must tick or
+  // "meeting in 45 min" stays 45 min forever (the exact time-blindness this fights).
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   // Expand / collapse the full message under a card; fetches the body once, then caches it.
   const toggleExpand = async (key: string, fetcher: () => Promise<string>) => {
@@ -251,25 +265,36 @@ export default function HomePage() {
       const cached = peekData<BriefingData>(PATHS.briefing);
       if (cached) setData(cached);
       void syncOpenLoops().then(reloadLoops); // pull live Trello commitments into Open Loops
+
+      // Seed triage from the last session so Home is populated on open; then revalidate.
+      const ci = readJson<InboxTriageCache | null>(INBOX_TRIAGE_KEY, null);
+      if (ci) { setInboxActs(ci.acts); setInboxKnow(ci.know); setInboxFiled(ci.filed); setInboxLoading(false); }
+      const cs = readJson<SlackTriageCache | null>(SLACK_TRIAGE_KEY, null);
+      if (cs) { setSlackActs(cs.acts); setSlackKnow(cs.know); setSlackFiled(cs.filed); setSlackLoading(false); }
+
       // Triage reads Rebaz's corrections so it gets sharper each time (self-development.md).
       fetchInboxTriage(learnings).then((t) => {
         setInboxLoading(false);
-        if (!t) { setInboxErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
-        // Be honest: no Gmail creds in the runtime is NOT "nothing needs you" — say it's not connected.
-        if (t.connected === false) { setInboxErr(t.error ?? 'No Gmail connected to the runtime — open Connections and reconnect (the Claude app’s Gmail is separate).'); setInboxActs([]); return; }
-        if (t.error) setInboxErr(t.error);
-        setInboxActs(t.triaged.filter((m) => m.verdict === 'act'));
-        setInboxKnow(t.triaged.filter((m) => m.verdict === 'know').length);
-        setInboxFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
+        if (!t) { if (!ci) setInboxErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        // Honest: no Gmail creds in the runtime is NOT "nothing needs you" — say it's not connected (but keep last-known if we have it).
+        if (t.connected === false) { if (!ci) { setInboxErr(t.error ?? 'No Gmail connected to the runtime — open Connections and reconnect (the Claude app’s Gmail is separate).'); setInboxActs([]); } return; }
+        if (t.error && t.triaged.length === 0) { if (!ci) setInboxErr(t.error); return; } // keep last-known
+        const acts = t.triaged.filter((m) => m.verdict === 'act');
+        const know = t.triaged.filter((m) => m.verdict === 'know').length;
+        const filed = t.triaged.filter((m) => m.verdict === 'ignore').length;
+        setInboxActs(acts); setInboxKnow(know); setInboxFiled(filed); setInboxErr(null);
+        writeJson(INBOX_TRIAGE_KEY, { acts, know, filed });
       });
       fetchSlackTriage(learnings).then((t) => {
         setSlackLoading(false);
-        if (!t) { setSlackErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
-        if (t.connected === false) { setSlackErr(t.error ?? 'No Slack connected to the runtime — open Connections and reconnect.'); setSlackActs([]); return; }
-        if (t.error) setSlackErr(t.error);
-        setSlackActs(t.triaged.filter((m) => m.verdict === 'act'));
-        setSlackKnow(t.triaged.filter((m) => m.verdict === 'know').length);
-        setSlackFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);
+        if (!t) { if (!cs) setSlackErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        if (t.connected === false) { if (!cs) { setSlackErr(t.error ?? 'No Slack connected to the runtime — open Connections and reconnect.'); setSlackActs([]); } return; }
+        if (t.error && t.triaged.length === 0) { if (!cs) setSlackErr(t.error); return; } // keep last-known
+        const acts = t.triaged.filter((m) => m.verdict === 'act');
+        const know = t.triaged.filter((m) => m.verdict === 'know').length;
+        const filed = t.triaged.filter((m) => m.verdict === 'ignore').length;
+        setSlackActs(acts); setSlackKnow(know); setSlackFiled(filed); setSlackErr(null);
+        writeJson(SLACK_TRIAGE_KEY, { acts, know, filed });
       });
     });
     fetchBriefingData().then((d) => d && setData(d));
@@ -397,12 +422,14 @@ export default function HomePage() {
       email: { account: m.account, id: m.id, from: m.from, subject: m.subject },
     });
     recordTriageCorrection({ medium: 'email', from: m.from, subject: m.subject, decision: 'act' });
+    recordTriageOutcome('confirmed'); // Xanî surfaced it, Rebaz agreed — a hit
     setLearned(learnedCount());
     flashMsg('Tracked — MARVIN is holding it for you.');
     setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
   };
   const dismissEmail = (m: TriagedEmail) => {
     recordTriageCorrection({ medium: 'email', from: m.from, subject: m.subject, decision: 'ignore' });
+    recordTriageOutcome('corrected'); // Xanî surfaced it, Rebaz said no — a wrong call
     setLearned(learnedCount());
     flashMsg('Learned — I’ll file messages like that next time.');
     setInboxActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
@@ -422,12 +449,14 @@ export default function HomePage() {
       slack: { workspace: m.workspace, channelId: m.channelId, channel: m.channel, from: m.from, text: m.text },
     });
     recordTriageCorrection({ medium: 'slack', from: m.from, subject: m.dm ? m.text : `#${m.channel}: ${m.text}`, decision: 'act' });
+    recordTriageOutcome('confirmed');
     setLearned(learnedCount());
     flashMsg('Tracked — MARVIN is holding it for you.');
     setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
   };
   const dismissSlack = (m: TriagedSlack) => {
     recordTriageCorrection({ medium: 'slack', from: m.from, subject: m.dm ? m.text : `#${m.channel}: ${m.text}`, decision: 'ignore' });
+    recordTriageOutcome('corrected');
     setLearned(learnedCount());
     flashMsg('Learned — I’ll file messages like that next time.');
     setSlackActs((cur) => (cur ? cur.filter((x) => x.id !== m.id) : cur));
@@ -446,6 +475,9 @@ export default function HomePage() {
         return;
       }
       const reSubject = /^re:/i.test(loop.email.subject) ? loop.email.subject : `Re: ${loop.email.subject}`;
+      // Reply to the real reply-to address; the sidecar extracts the bare address and
+      // refuses to send if there isn't one.
+      const to = mb?.replyTo || loop.email.from;
       enqueueApproval({
         kind: 'email',
         title: `Reply to ${loop.email.from}`,
@@ -454,7 +486,7 @@ export default function HomePage() {
         actionLabel: 'Send',
         voiceKey: voiceKeyFor('email', 'all'),
         // Real threaded payload → approving actually sends into the same conversation.
-        payload: { kind: 'email', to: loop.email.from, subject: reSubject, body: r.draft, account: loop.email.account, threadId: mb?.threadId, inReplyTo: mb?.messageId, references: mb?.references },
+        payload: { kind: 'email', to, subject: reSubject, body: r.draft, account: loop.email.account, threadId: mb?.threadId, inReplyTo: mb?.messageId, references: mb?.references },
       });
       flashMsg('✍️ Draft ready in Approvals — review & send.');
       return;

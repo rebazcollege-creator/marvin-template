@@ -48,5 +48,5 @@ export function markNudged(now: Date = new Date()): void {
 // Varied lead-ins so repeated nudges don't habituate into background noise.
 const LEADINS = ['When you have a sec', 'No rush, but', 'Whenever you’re ready', 'Small heads-up', 'For when you surface'];
 export function nudgeLeadIn(seed = Date.now()): string {
-  return LEADINS[Math.abs(Math.floor(seed)) % LEADINS.length];
+  return LEADINS[Math.abs(Math.floor(seed)) % LEADINS.length] ?? LEADINS[0]!;
 }

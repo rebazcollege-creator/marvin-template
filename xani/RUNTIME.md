@@ -16,8 +16,9 @@ Xanî runs as **two local processes**:
 | **Runtime (sidecar)** | `npm run sidecar` | A small Node server on `localhost:8787` that owns all credentials and makes the real Gmail/Calendar/Slack/Trello/Buffer/Anthropic calls. |
 
 The UI never holds secrets. When you approve an action, the UI calls the sidecar
-(`POST /act`) and the sidecar performs it. If the sidecar isn't running, approvals
-are recorded and marked "will run when the runtime is on" — they don't silently fail.
+(`POST /act`) and the sidecar performs it. If the sidecar isn't running, the item
+STAYS PENDING in Approvals and tells you nothing was sent — start the runtime and
+approve it again. (There is no background queue that re-runs it automatically.)
 
 ```bash
 cd ~/marvin-template/xani

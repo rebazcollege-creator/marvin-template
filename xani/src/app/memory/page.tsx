@@ -19,6 +19,7 @@ import {
 import { ensureStorageReady } from '@/lib/storage';
 import { Modal } from '@/components/ui/Modal';
 import { logActivity } from '@/lib/activity';
+import { learningTrend, MIN_DECISIONS, type LearningTrend } from '@/lib/learning-metrics';
 
 /**
  * Memory — what MARVIN has learned, what it wants to remember, and the changes it
@@ -36,11 +37,13 @@ export default function MemoryPage() {
   const [proposed, setProposed] = useState<MemoryEntry[]>([]);
   const [adjustments, setAdjustments] = useState<SelfAdjustment[]>([]);
   const [editing, setEditing] = useState<Editing | null>(null);
+  const [trend, setTrend] = useState<LearningTrend | null>(null);
 
   const refresh = () => {
     setMemories(getMemories());
     setProposed(getProposedMemories());
     setAdjustments(getAdjustments());
+    setTrend(learningTrend());
   };
 
   useEffect(() => {
@@ -76,6 +79,34 @@ export default function MemoryPage() {
     <div className="mx-auto max-w-3xl px-8 pb-16 pt-7">
       <h1 className="font-display text-2xl font-semibold text-text">Memory</h1>
       <p className="mt-1 text-[13px] text-muted">What MARVIN knows about you, and how it carries that forward.</p>
+
+      {/* Is it getting sharper? Honest weekly wrong-call rate, not a vanity counter:
+          the rate can only fall through real accuracy, and the decision count shows
+          whether a falling rate means "smarter" or just "unused". */}
+      {trend && (
+        <section className="mt-6 rounded-2xl border border-border bg-surface p-5">
+          <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-muted">Is MARVIN getting sharper?</div>
+          {trend.thisWeek.decisions === 0 && trend.lastWeek.decisions === 0 ? (
+            <p className="mt-2 text-[13px] text-text-2">
+              No data yet. Every “Track it” or “Not for me” you tap on Home teaches MARVIN — and shows up here as an honest weekly score.
+            </p>
+          ) : (
+            <>
+              <p className="mt-2 text-[13.5px] text-text">
+                This week: <span className="font-semibold">{trend.thisWeek.decisions}</span> calls reviewed,{' '}
+                <span className="font-semibold">{trend.thisWeek.corrections}</span> wrong
+                {trend.rateThisWeek !== null && <> ({Math.round(trend.rateThisWeek * 100)}% wrong-call rate)</>}
+                {trend.rateLastWeek !== null && <> · last week {Math.round(trend.rateLastWeek * 100)}%</>}
+              </p>
+              <p className="mt-1 text-[12.5px] text-text-2">
+                {trend.improving === true && '↓ Getting sharper — it needed fewer corrections than last week.'}
+                {trend.improving === false && '↑ Rougher week — keep correcting it; every tap teaches it.'}
+                {trend.improving === null && `Not enough decisions yet for a fair trend (needs ${MIN_DECISIONS}+ per week).`}
+              </p>
+            </>
+          )}
+        </section>
+      )}
 
       {/* Self-adjustments */}
       {pending.length > 0 && (

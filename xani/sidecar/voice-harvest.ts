@@ -198,7 +198,7 @@ async function harvestSlack(corpus: Corpus, opts: HarvestOpts): Promise<void> {
       const runs = groupBursts(all, gapMs);
       for (let i = 0; i < runs.length; i++) {
         const r = runs[i];
-        if (r.text.length < MIN_CHARS) continue;
+        if (!r || r.text.length < MIN_CHARS) continue;
         if (r.userId === selfId) {
           dedupePush(mineOf(corpus, mineKey), { text: r.text, ts: r.ts, channel: c.name }, CAP_PER_KEY);
         } else if (r.userId) {

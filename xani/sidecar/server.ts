@@ -7,6 +7,8 @@ import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
+import { originAllowed } from './security.ts';
+import { evaluateAction } from './guard.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
 import { geminiGenerate, resolveProvider, claudeCliGenerate } from './llm.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
@@ -24,8 +26,9 @@ import {
   getBuffer,
   getGithub,
   executeAction,
+  markSlackRead,
 } from './connectors.ts';
-import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload, MailboxAction, InboxTriage, SlackTriage, TriagedSlack, SlackHistory } from '../src/lib/marvin-protocol.ts';
+import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload, MailboxAction, InboxTriage, SlackTriage, TriagedSlack, SlackHistory, EmailVerdict } from '../src/lib/marvin-protocol.ts';
 
 /**
  * MARVIN sidecar HTTP server.
@@ -427,12 +430,21 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   }
 }
 
+/** Cache inbox triage briefly, like Slack's: Home mounts call this on every load and
+ *  each call is an LLM pass over 40 messages. Keyed on the newest message + learned
+ *  set, so new mail or a fresh correction re-triages at once. */
+let inboxTriageCache: { at: number; key: string; data: InboxTriage } | null = null;
+
 async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
   if (!modelAvailable()) return { connected: false, triaged: [], error: 'No API key.' };
   const inbox = await getInbox('inbox', '');
   if (!inbox.connected) return { connected: false, triaged: [], error: inbox.error };
   const msgs = inbox.messages.slice(0, 40);
   if (msgs.length === 0) return { connected: true, triaged: [] };
+  const cacheKey = `${msgs[0]?.id ?? ''}|${msgs.length}|${(learned ?? []).join('')}`;
+  if (inboxTriageCache && inboxTriageCache.key === cacheKey && Date.now() - inboxTriageCache.at < 90_000) {
+    return inboxTriageCache.data;
+  }
   const list = msgs.map((m) => ({ id: m.id, from: m.from, to: (m.to ?? '').slice(0, 200), when: ageLabel(Date.parse(m.receivedAt)), subject: m.subject, snippet: (m.snippet ?? '').slice(0, 220) }));
   try {
     const text = await oneShot(withLearnings(TRIAGE_SYSTEM, learned), JSON.stringify(list), 2400);
@@ -442,18 +454,32 @@ async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
     const byId = new Map(parsed.map((p) => [p.id, p]));
     const triaged = msgs.map((m) => {
       const v = byId.get(m.id);
-      const verdict = v?.verdict === 'act' || v?.verdict === 'know' || v?.verdict === 'ignore' ? v.verdict : 'know';
-      const audience = v?.audience === 'you' ? 'you' : v?.audience === 'team' ? 'team' : undefined;
+      const verdict: EmailVerdict =
+        v?.verdict === 'act' ? 'act'
+        : v?.verdict === 'ignore' ? 'ignore'
+        : 'know';
+      const audience: 'you' | 'team' | undefined = v?.audience === 'you' ? 'you' : v?.audience === 'team' ? 'team' : undefined;
       return { id: m.id, account: m.account, from: m.from, subject: m.subject, snippet: m.snippet, receivedAt: m.receivedAt, verdict, reason: v?.reason ?? '', headline: (v?.headline ?? '').trim() || undefined, audience };
     });
-    return { connected: true, triaged };
+    const data: InboxTriage = { connected: true, triaged };
+    inboxTriageCache = { at: Date.now(), key: cacheKey, data };
+    return data;
   } catch (err) {
+    // Errors are not cached — the next load retries at once.
     return { connected: true, triaged: [], error: (err as Error).message };
   }
 }
 
-function cors(res: ServerResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+/**
+ * Reflect the request's Origin only when it is on the allowlist (never `*`, which
+ * would let any web page read the responses — i.e. Rebaz's mail). A disallowed or
+ * absent Origin gets no CORS header, so the browser blocks cross-origin reads.
+ */
+function cors(res: ServerResponse, origin?: string) {
+  if (origin && originAllowed(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
@@ -486,7 +512,17 @@ function json(res: ServerResponse, status: number, body: unknown) {
 }
 
 const server = createServer(async (req, res) => {
-  cors(res);
+  const origin = req.headers.origin;
+  cors(res, origin);
+
+  // Server-side gate: a browser cannot forge Origin, so rejecting a present-but-
+  // disallowed Origin blocks a drive-by web page from reaching the sidecar's
+  // secrets or actions. (No Origin → non-browser/same-origin; allowed for now, to
+  // be closed by a shared spawn-time token.) /health stays open for readiness pings.
+  if (origin && !originAllowed(origin) && req.url !== '/health') {
+    json(res, 403, { error: 'Origin not allowed.' });
+    return;
+  }
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204).end();
@@ -796,10 +832,23 @@ const server = createServer(async (req, res) => {
     }
   }
 
+  if (req.method === 'POST' && req.url === '/slack/mark') {
+    try {
+      const b = JSON.parse(await readBody(req)) as { workspace?: string; channel?: string; ts?: string };
+      return json(res, 200, await markSlackRead({ workspace: b.workspace ?? '', channel: b.channel ?? '', ts: b.ts ?? '' }));
+    } catch (err) {
+      return json(res, 200, { ok: false, error: (err as Error).message });
+    }
+  }
+
   if (req.method === 'POST' && req.url === '/act') {
     try {
       const { payload } = JSON.parse(await readBody(req)) as { payload: ActPayload };
       if (!payload || !payload.kind) return json(res, 400, { ok: false, error: 'Missing action payload.' });
+      // Server-side policy gate. /act is reached only after the user approved the
+      // item in Approvals, so the actor is 'user_approved'.
+      const verdict = evaluateAction(payload, 'user_approved');
+      if (!verdict.allowed) return json(res, 200, { ok: false, error: verdict.reason });
       const result = await executeAction(payload);
       return json(res, 200, result);
     } catch (err) {
@@ -973,12 +1022,14 @@ const server = createServer(async (req, res) => {
   res.writeHead(404).end('Not found');
 });
 
-server.listen(PORT, () => {
+// Bind to loopback only — the sidecar holds every secret and must never be
+// reachable from the local network (co-working Wi-Fi, etc.), only from this machine.
+server.listen(PORT, '127.0.0.1', () => {
   // eslint-disable-next-line no-console
   const prov = resolveProvider(Boolean(anthropic));
   const label = prov === 'cli' ? 'Claude Code CLI (your login — no API key)'
     : prov === 'gemini' ? 'Gemini (Google AI)'
     : prov === 'anthropic' ? 'Claude (Anthropic API)'
     : 'NONE — set XANI_USE_CLAUDE_CLI=1, or a Gemini/Anthropic key';
-  console.log(`MARVIN sidecar on http://localhost:${PORT} (model: ${label})`);
+  console.log(`MARVIN sidecar on http://127.0.0.1:${PORT} (model: ${label})`);
 });

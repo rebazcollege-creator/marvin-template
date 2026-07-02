@@ -218,7 +218,7 @@ export async function geminiGenerate(
   const sys = flattenSystem(params.system);
   const contents = params.messages
     .map((m) => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: textOf(m.content) }] }))
-    .filter((c) => c.parts[0].text.trim().length > 0);
+    .filter((c) => (c.parts[0]?.text ?? '').trim().length > 0);
 
   const body = {
     ...(sys ? { system_instruction: { parts: [{ text: sys }] } } : {}),

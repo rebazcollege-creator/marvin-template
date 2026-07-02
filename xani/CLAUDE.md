@@ -11,24 +11,29 @@ Repo: xani | Branch: main | Timezone: Europe/Berlin
   loop. NOT the Claude Agent SDK (no durable state; CLI-style approval fights a
   desktop UI). NOT Next API routes — `output:'export'` is static, it has no
   server. All Claude/integration calls live in the sidecar; the renderer talks to
-  it over Tauri IPC.
+  it over **HTTP on 127.0.0.1:8787** (loopback-bound, Origin-allowlisted —
+  sidecar/security.ts; SQLite kv persistence is the part that goes over Tauri IPC).
 - **Secrets live in the OS keychain** via `tauri-plugin-keyring`, handed to the
   sidecar via env at spawn. Never in the renderer, never `NEXT_PUBLIC_`, never
   `.env` consumed by browser code. (Stronghold is deprecated — do not use.)
 - **Local data = SQLite** (rusqlite bundled + sqlite-vec) owned by Rust, exposed
   via typed Tauri commands. NOT `tauri-plugin-sql` (leaks SQL to renderer, can't
   load extensions). Frontend: TanStack Query (over `invoke`) + Zustand for UI.
-- **Confirmation enforced at the runtime**, not the prompt: every tool call goes
-  through `src/lib/actions/guard.ts` (read/write classification + day-off + read-
-  only-scope checks). Writes block the loop on a UI approval promise.
+- **Confirmation enforced at the runtime**, not the prompt: agent write-tools
+  block on a UI approval promise (sidecar/agent.ts), and every `/act` action runs
+  through `sidecar/guard.ts` server-side (kind validation + locked kinds + actor-
+  scoped days-off, disabled by default). The guard lives in the SIDECAR — the
+  renderer is the untrusted side and cannot police itself.
 - Haiku for routine, Sonnet for Studios; prompt caching on the stable system
   block → ~$8/month. Model IDs verified current: `claude-haiku-4-5`,
   `claude-sonnet-4-6`.
 - Studios = single-agent persona injection first (Option A). Multi-agent spawn
   (~15x tokens) only if Studio quality demands it.
 - ⌘K command palette (cmdk) is the primary navigation/action spine.
-- Zapier MCP for Trello (board 683dafe308be04e369b8434c). Direct MCP for Slack
-  (C0HRYE891, C052Z75EY73) and Buffer. 5 Gmail accounts (independent OAuth).
+- Integrations are plain REST in the sidecar (connectors.ts): Trello key+token
+  (board 683dafe308be04e369b8434c), Slack via @slack/web-api with auto-discovered
+  channels (no hardcoded IDs), Buffer access token. 5 Gmail accounts (independent
+  OAuth). The earlier Zapier-MCP/Direct-MCP routing was superseded by this.
 - Fresh repo, /reference for old code (gitignored).
 
 ## Hard constraints

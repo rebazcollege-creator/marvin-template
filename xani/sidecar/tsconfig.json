@@ -12,5 +12,7 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["**/*.ts", "../src/lib/marvin-protocol.ts"]
+  "include": ["**/*.ts", "../src/lib/marvin-protocol.ts"],
+  "//": "Test files are exercised by `node --test` (type-stripped at runtime), not typechecked here — they import renderer value modules that are ESM under the renderer's own tsconfig but would trip verbatimModuleSyntax in this nodenext project.",
+  "exclude": ["**/*.test.ts"]
 }

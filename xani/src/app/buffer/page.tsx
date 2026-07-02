@@ -58,7 +58,8 @@ export default function BufferPage() {
       {state === 'loading' && <div className="xsk h-24 rounded-2xl" />}
       {state === 'offline' && <Note>MARVIN’s runtime isn’t reachable. Start it with <code className="rounded bg-bg px-1">npm run sidecar</code>. You can still draft a post — it waits in Approvals.</Note>}
       {state === 'loaded' && data && !data.connected && <Note>Buffer connects via Direct MCP (pending wiring). Draft/scheduled counts per platform will appear here. You can still draft a post — it waits in Approvals. Publishing always needs your confirmation.</Note>}
-      {state === 'loaded' && data?.connected && data.drafts === 0 && data.scheduled === 0 && <Note>Nothing in the Buffer queue.</Note>}
+      {state === 'loaded' && data?.connected && data.error && <Note>Couldn’t read Buffer just now ({data.error}). This isn’t an empty queue — try Refresh in a moment.</Note>}
+      {state === 'loaded' && data?.connected && !data.error && data.drafts === 0 && data.scheduled === 0 && <Note>Nothing in the Buffer queue.</Note>}
 
       {state === 'loaded' && data?.connected && (data.drafts > 0 || data.scheduled > 0) && (
         <ul className="space-y-2.5">

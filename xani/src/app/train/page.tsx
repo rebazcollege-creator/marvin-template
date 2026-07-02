@@ -310,7 +310,7 @@ type Sender = { email: string; name: string; count: number; subject: string };
 
 function parseSender(from: string): { email: string; name: string } {
   const m = from.match(/<([^>]+)>/);
-  const email = (m ? m[1] : from.includes('@') ? from : '').trim().toLowerCase();
+  const email = (m?.[1] ?? (from.includes('@') ? from : '')).trim().toLowerCase();
   let name = m ? from.slice(0, from.indexOf('<')).trim() : from.trim();
   name = name.replace(/^["']|["']$/g, '').trim();
   if (!name) name = email || from;

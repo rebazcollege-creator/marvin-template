@@ -17,23 +17,29 @@ import { ingestMemory, getMemories } from '@/lib/memory';
 export type TriageMedium = 'email' | 'slack';
 export type TriageDecision = 'ignore' | 'act';
 
-/** Record a triage correction as a durable memory. Returns the phrased rule. */
+/** Record a triage correction as a durable memory. Returns the phrased rule.
+ *
+ *  The rule quotes only the SENDER, never the message's own subject/text: these
+ *  rules are injected into the trusted triage system prompt, and quoting
+ *  attacker-authored content there would let a crafted subject line smuggle
+ *  instructions into the prompt the moment Rebaz files it (memory poisoning).
+ *  The `subject` input is still accepted for future UI context but is not
+ *  embedded in the rule. */
 export function recordTriageCorrection(input: {
   medium: TriageMedium;
   from: string;
-  /** Subject line (email) or a short snippet (Slack). */
+  /** Subject line (email) or a short snippet (Slack). Not embedded in the rule. */
   subject: string;
   decision: TriageDecision;
 }): string {
   const where = input.medium === 'email' ? 'email' : 'Slack message';
-  const subj = input.subject.length > 90 ? `${input.subject.slice(0, 87)}…` : input.subject;
 
   const content =
     input.decision === 'ignore'
-      ? `Rebaz filed a ${where} from "${input.from}" ("${subj}") as not needing him. ` +
+      ? `Rebaz filed a ${where} from "${input.from}" as not needing him. ` +
         `Treat routine ${where}s from "${input.from}" as low-priority — surface them only when ` +
         `they name Rebaz directly or clearly ask him to do something.`
-      : `Rebaz tracked a ${where} from "${input.from}" ("${subj}") as a real commitment. ` +
+      : `Rebaz tracked a ${where} from "${input.from}" as a real commitment. ` +
         `Senders like "${input.from}" usually need him — lean toward surfacing them.`;
 
   ingestMemory({

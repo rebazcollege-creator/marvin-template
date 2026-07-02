@@ -8,7 +8,7 @@ import { useMemo } from 'react';
  * stops being invisible. Real calendar data only — renders nothing when there's none.
  */
 
-type Ev = { title: string; start: string; end: string; allDay: boolean };
+type Ev = { title: string; start: string; end?: string; allDay?: boolean };
 
 function clock(iso: string, tz: string): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: tz, hour: '2-digit', minute: '2-digit' }).format(new Date(iso));

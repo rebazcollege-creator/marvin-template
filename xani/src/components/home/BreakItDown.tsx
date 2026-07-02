@@ -120,7 +120,7 @@ export function BreakItDown({
       {firstOpen >= 0 && onStartFirst && (
         <button
           type="button"
-          onClick={() => onStartFirst(steps[firstOpen].step)}
+          onClick={() => { const s = steps[firstOpen]; if (s) onStartFirst(s.step); }}
           className="mt-3 rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim"
         >
           ▶ Do the first one with me

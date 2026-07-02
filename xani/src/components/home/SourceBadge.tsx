@@ -34,7 +34,7 @@ export function SourceBadge({
   label?: string;
   urgent?: boolean;
 }) {
-  const b = BRAND[urgent ? 'urgent' : source] ?? BRAND.manual;
+  const b = BRAND[urgent ? 'urgent' : source] ?? BRAND.manual!;
   return (
     <span className="inline-flex items-center gap-1.5">
       <span

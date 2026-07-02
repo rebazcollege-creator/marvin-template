@@ -14,7 +14,10 @@ import { bumpInboxCache, bumpSlackCache } from './connectors.ts';
 
 const FILE = join(process.cwd(), '.xani-creds.json');
 
-const ALLOW = new Set([
+/** Exported so tests can assert parity with the Rust keychain's key list.
+ *  Provider/toggle keys (ANTHROPIC/GEMINI/CLI) are model config, not integration
+ *  creds, so the parity test exempts them. */
+export const ALLOW = new Set([
   'ANTHROPIC_API_KEY',
   'GOOGLE_AI_API_KEY',
   'GEMINI_API_KEY',

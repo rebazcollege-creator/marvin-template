@@ -37,6 +37,15 @@ export function slackTsMs(ts: string): number {
   return Number.isFinite(n) ? Math.round(n * 1000) : 0;
 }
 
+/** The exact wall-clock date+time of an instant, in the user's timezone — so a relative
+ *  "13h ago" can always be checked against the real send date ("1 Jul, 22:04"). */
+export function whenExact(ms: number, tz?: string): string {
+  if (!ms || Number.isNaN(ms)) return '';
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: tz, day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+  }).format(new Date(ms));
+}
+
 /** True when an instant is within the last `days` — used to stop stale items looking new. */
 export function isRecent(ms: number, days = 4, now: Date = new Date()): boolean {
   return ms > 0 && now.getTime() - ms <= days * 86_400_000;

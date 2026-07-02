@@ -19,7 +19,7 @@ import { Momentum } from '@/components/home/Momentum';
 import { MicButton } from '@/components/home/MicButton';
 import { SourceBadge } from '@/components/home/SourceBadge';
 import { DayRitual } from '@/components/home/DayRitual';
-import { dueLabel, estLabel, timeAgo, slackTsMs } from '@/lib/tone';
+import { dueLabel, estLabel, timeAgo, slackTsMs, whenExact } from '@/lib/tone';
 
 /**
  * Home — the ADHD command surface (foundations.md). Optimised for Rebaz's top
@@ -73,6 +73,18 @@ function Aud({ a }: { a?: 'you' | 'team' | 'group' }) {
   );
 }
 
+/** A timestamp that shows BOTH the relative age and the exact send date, so a "13h ago" can
+ *  always be checked against the real date in Slack/Gmail — nothing can quietly look new. */
+function Stamp({ ms, tz }: { ms: number; tz?: string }) {
+  if (!ms || Number.isNaN(ms)) return null;
+  const exact = whenExact(ms, tz);
+  return (
+    <span className="ml-auto shrink-0 text-right text-[12px] text-muted" title={exact}>
+      {timeAgo(ms)} <span className="opacity-60">· {exact}</span>
+    </span>
+  );
+}
+
 /** Inline "see full message" expander — reveals the whole email/thread under a card. */
 function SeeMore({ open, body, onToggle }: { open: boolean; body?: string; onToggle: () => void }) {
   return (
@@ -89,8 +101,8 @@ function SeeMore({ open, body, onToggle }: { open: boolean; body?: string; onTog
   );
 }
 
-function LoopCard({ loop, now, expanded, body, onExpand, onDone, onSnooze, onDraft }: {
-  loop: OpenLoop; now: Date;
+function LoopCard({ loop, now, tz, expanded, body, onExpand, onDone, onSnooze, onDraft }: {
+  loop: OpenLoop; now: Date; tz?: string;
   expanded: boolean; body?: string; onExpand: () => void;
   onDone: () => void; onSnooze: () => void; onDraft?: () => void;
 }) {
@@ -103,7 +115,7 @@ function LoopCard({ loop, now, expanded, body, onExpand, onDone, onSnooze, onDra
         <SourceBadge source={loop.source} label={loop.channel ?? src.label} />
         {loop.audience && <Aud a={loop.audience} />}
         {loop.from && <span className="text-[13px] text-text-2">{loop.from}</span>}
-        {when && <span className="ml-auto text-[12px] font-medium text-muted">{timeAgo(Date.parse(when))}</span>}
+        {when && <Stamp ms={Date.parse(when)} tz={tz} />}
       </div>
       <p className="mt-2.5 font-display text-[18px] leading-snug text-text">{loop.headline || loop.task}</p>
       {(loop.estMins || due) && (
@@ -137,9 +149,12 @@ function matchEmail(loop: OpenLoop, msgs: InboxData['messages']): InboxData['mes
   const subj = (loop.headline ? '' : loop.task).trim().toLowerCase();
   if (!subj) return undefined;
   const from = loop.from ? emailAddr(loop.from) : '';
+  const eq = (s: string) => s.trim().toLowerCase();
   return (
-    msgs.find((m) => m.subject.trim().toLowerCase() === subj && (!from || emailAddr(m.from) === from)) ??
-    msgs.find((m) => m.subject.trim().toLowerCase() === subj)
+    msgs.find((m) => eq(m.subject) === subj && (!from || emailAddr(m.from) === from)) ??
+    msgs.find((m) => eq(m.subject) === subj) ??
+    // Same sender, subject contained either way — catches a stored subject that got truncated.
+    (from ? msgs.find((m) => emailAddr(m.from) === from && (eq(m.subject).includes(subj) || subj.includes(eq(m.subject)))) : undefined)
   );
 }
 function matchSlack(loop: OpenLoop, msgs: SlackData['messages']): SlackData['messages'][number] | undefined {
@@ -151,6 +166,29 @@ function matchSlack(loop: OpenLoop, msgs: SlackData['messages']): SlackData['mes
     msgs.find((m) => m.user.trim().toLowerCase() === from && m.text.trim().toLowerCase().startsWith(head)) ??
     msgs.find((m) => m.text.trim().toLowerCase().startsWith(head))
   );
+}
+
+/** Cheap HTML→text for the reading pane. Notification emails (Trello, GitHub, calendar) ship
+ *  HTML only with no text/plain part; without this the "See full message" pane came up empty. */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<\/(p|div|tr|li|h[1-6]|table)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"')
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+/** Best plain-text of a fetched email body: server text, then stripped HTML, then a fallback. */
+function emailBodyText(mb: { text?: string; body?: string; html?: string } | null, fallback = ''): string {
+  if (!mb) return fallback;
+  const t = (mb.text || mb.body || '').trim();
+  if (t) return t;
+  if (mb.html) { const s = stripHtml(mb.html); if (s) return s; }
+  return fallback;
 }
 
 export default function HomePage() {
@@ -481,7 +519,7 @@ export default function HomePage() {
                   body={bodyCache.current[`one:${oneThing.id}`]}
                   onToggle={() => toggleExpand(`one:${oneThing.id}`, () =>
                     oneThing.email
-                      ? fetchMessageBody(oneThing.email.account, oneThing.email.id).then((mb) => mb?.text || mb?.body || '')
+                      ? fetchMessageBody(oneThing.email.account, oneThing.email.id).then((mb) => emailBodyText(mb))
                       : summarizeItem({ kind: 'slack', workspace: oneThing.slack!.workspace, channel: oneThing.slack!.channelId }).then((r) => r.body || ''),
                   )}
                 />
@@ -542,13 +580,13 @@ export default function HomePage() {
                   <SourceBadge source="email" label={m.account} />
                   <Aud a={m.audience} />
                   <span className="text-[13px] text-text-2">{m.from}</span>
-                  {m.receivedAt && <span className="ml-auto text-[12px] text-muted">{timeAgo(Date.parse(m.receivedAt))}</span>}
+                  {m.receivedAt && <Stamp ms={Date.parse(m.receivedAt)} tz={tz} />}
                 </div>
                 <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.headline || m.subject}</p>
                 <SeeMore
                   open={openKeys.has(`in:${m.id}`)}
                   body={bodyCache.current[`in:${m.id}`]}
-                  onToggle={() => toggleExpand(`in:${m.id}`, () => fetchMessageBody(m.account, m.id).then((mb) => mb?.text || mb?.body || m.snippet || ''))}
+                  onToggle={() => toggleExpand(`in:${m.id}`, () => fetchMessageBody(m.account, m.id).then((mb) => emailBodyText(mb, m.snippet)))}
                 />
                 <div className="mt-4 flex flex-wrap gap-2.5">
                   <button type="button" onClick={() => trackEmail(m)} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">+ Track it</button>
@@ -586,7 +624,7 @@ export default function HomePage() {
                   <SourceBadge source="slack" urgent={m.emergency} label={`${m.emergency ? 'URGENT · ' : ''}${m.dm ? 'DM' : `#${m.channel}`} · ${m.workspaceName}`} />
                   <Aud a={m.audience} />
                   <span className="text-[13px] text-text-2">{m.from}</span>
-                  {m.ts && <span className="ml-auto text-[12px] text-muted">{timeAgo(slackTsMs(m.ts))}</span>}
+                  {m.ts && <Stamp ms={slackTsMs(m.ts)} tz={tz} />}
                 </div>
                 <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.headline || (m.text.length > 200 ? `${m.text.slice(0, 197)}…` : m.text)}</p>
                 <SeeMore
@@ -642,11 +680,12 @@ export default function HomePage() {
                     key={l.id}
                     loop={l}
                     now={now}
+                    tz={tz}
                     expanded={openKeys.has(key)}
                     body={bodyCache.current[key]}
                     onExpand={() => toggleExpand(key, () =>
                       l.email
-                        ? fetchMessageBody(l.email.account, l.email.id).then((mb) => mb?.text || mb?.body || '')
+                        ? fetchMessageBody(l.email.account, l.email.id).then((mb) => emailBodyText(mb))
                         : l.slack
                           ? summarizeItem({ kind: 'slack', workspace: l.slack.workspace, channel: l.slack.channelId }).then((r) => r.body || l.slack!.text)
                           : Promise.resolve(''),

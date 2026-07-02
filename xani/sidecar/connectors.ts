@@ -1,4 +1,5 @@
 import { WebClient } from '@slack/web-api';
+import { sanitizeHeader, encodeSubject } from './mail.ts';
 import type {
   BriefingData,
   InboxData,
@@ -811,7 +812,12 @@ async function sendGmail(p: { to: string; subject: string; body: string; account
   if (!c) return { ok: false, note: 'Gmail not connected — add GMAIL_* credentials.' };
   const token = await googleAccessToken(c.id, c.secret, c.refresh);
   if (!token) return { ok: false, error: 'Could not authorise Gmail.' };
-  const raw = base64url(`To: ${p.to}\r\nSubject: ${p.subject}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${p.body}`);
+  // Neutralise CR/LF in header values (no injected Bcc/etc.) and RFC 2047-encode a
+  // non-ASCII subject so Kurdish/Arabic/German subjects arrive intact. Body is after
+  // the blank line, so its newlines are fine.
+  const to = sanitizeHeader(p.to);
+  const subject = encodeSubject(p.subject);
+  const raw = base64url(`To: ${to}\r\nSubject: ${subject}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${p.body}`);
   try {
     const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',

@@ -7,6 +7,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
+import { originAllowed } from './security.ts';
 import { runAgentTurn, type CreateMessage, type LLMResponse, type ApprovalRequest } from './agent.ts';
 import { TOOLS_BY_NAME, type ToolDef } from './tools.ts';
 import {
@@ -239,8 +240,16 @@ async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
   }
 }
 
-function cors(res: ServerResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+/**
+ * Reflect the request's Origin only when it is on the allowlist (never `*`, which
+ * would let any web page read the responses — i.e. Rebaz's mail). A disallowed or
+ * absent Origin gets no CORS header, so the browser blocks cross-origin reads.
+ */
+function cors(res: ServerResponse, origin?: string) {
+  if (origin && originAllowed(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
@@ -273,7 +282,17 @@ function json(res: ServerResponse, status: number, body: unknown) {
 }
 
 const server = createServer(async (req, res) => {
-  cors(res);
+  const origin = req.headers.origin;
+  cors(res, origin);
+
+  // Server-side gate: a browser cannot forge Origin, so rejecting a present-but-
+  // disallowed Origin blocks a drive-by web page from reaching the sidecar's
+  // secrets or actions. (No Origin → non-browser/same-origin; allowed for now, to
+  // be closed by a shared spawn-time token.) /health stays open for readiness pings.
+  if (origin && !originAllowed(origin) && req.url !== '/health') {
+    json(res, 403, { error: 'Origin not allowed.' });
+    return;
+  }
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204).end();
@@ -585,7 +604,9 @@ const server = createServer(async (req, res) => {
   res.writeHead(404).end('Not found');
 });
 
-server.listen(PORT, () => {
+// Bind to loopback only — the sidecar holds every secret and must never be
+// reachable from the local network (co-working Wi-Fi, etc.), only from this machine.
+server.listen(PORT, '127.0.0.1', () => {
   // eslint-disable-next-line no-console
-  console.log(`MARVIN sidecar on http://localhost:${PORT} (key ${apiKey ? 'present' : 'MISSING'})`);
+  console.log(`MARVIN sidecar on http://127.0.0.1:${PORT} (key ${apiKey ? 'present' : 'MISSING'})`);
 });

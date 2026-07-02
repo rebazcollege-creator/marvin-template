@@ -50,9 +50,11 @@ export default function ApprovalsPage() {
   };
 
   const approve = async (item: ApprovalItem) => {
+    // No executable payload → this item can't actually be sent/created yet. Say so
+    // honestly and mark it reviewed; never imply it went out.
     if (!item.payload) {
       decide(item.id, 'approved');
-      setResult(`Approved — ${item.title}.`);
+      setResult(`Marked as reviewed — but this one isn’t wired to send yet, so nothing was sent.`);
       return;
     }
     setResult(`Running “${item.title}”…`);
@@ -61,8 +63,9 @@ export default function ApprovalsPage() {
       decide(item.id, 'approved');
       setResult(`Done — ${item.title}.${r.url ? ' Opened in the app.' : ''}`);
     } else if (r.offline) {
-      decide(item.id, 'approved');
-      setResult('Approved. It will run once the runtime is on (start it with: npm run sidecar).');
+      // Runtime unreachable → nothing was sent. Keep the item PENDING so it can be
+      // retried; do NOT mark it approved (there is no queue that re-runs it later).
+      setResult('Couldn’t reach the runtime, so nothing was sent. It’s still waiting for you — start the runtime (npm run sidecar) and approve again.');
     } else {
       setResult(`Couldn’t run: ${r.error ?? r.note ?? 'not connected'}. Left in the queue.`);
     }

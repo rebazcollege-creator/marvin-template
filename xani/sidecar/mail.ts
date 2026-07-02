@@ -1,0 +1,30 @@
+/**
+ * Outgoing-mail header safety.
+ *
+ * Email headers are line-delimited: a raw CR/LF inside a value lets an attacker
+ * inject extra headers (e.g. a hidden `Bcc:`). Draft bodies are model-generated
+ * and recipient/subject values can originate from untrusted mail, so both must be
+ * neutralised before they go into the RFC 822 header block. Kept as small pure
+ * functions so they are unit-testable without a network or a token.
+ */
+
+/** Collapse CR/LF (and stray control chars) so a value can't break out of its header. */
+export function sanitizeHeader(value: string): string {
+  return String(value ?? '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/[\x00-\x1f\x7f]/g, '')
+    .trim();
+}
+
+/**
+ * RFC 2047-encode a subject when it contains non-ASCII (Rebaz writes Kurdish,
+ * Arabic, German). Pure ASCII passes through unchanged. Single encoded-word — for
+ * a personal assistant's subjects this is ample; very long non-ASCII subjects are
+ * not split into 75-char words (a later refinement), but they arrive intact rather
+ * than mojibake.
+ */
+export function encodeSubject(subject: string): string {
+  const clean = sanitizeHeader(subject);
+  if (/^[\x20-\x7e]*$/.test(clean)) return clean;
+  return `=?UTF-8?B?${Buffer.from(clean, 'utf8').toString('base64')}?=`;
+}

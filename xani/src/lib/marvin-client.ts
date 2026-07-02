@@ -333,6 +333,21 @@ export async function toneCheck(text: string, mode: 'check' | 'soften' | 'warm' 
   }
 }
 
+/** Summarise one item into a headline (+ audience) and return the full body for "see more". */
+export async function summarizeItem(p: { kind: 'email' | 'slack'; account?: string; id?: string; workspace?: string; channel?: string }): Promise<{ ok: boolean; headline?: string; audience?: 'you' | 'team'; body?: string; error?: string }> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/summarize-item`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(p),
+    });
+    if (!resp.ok) return { ok: false, error: `runtime responded ${resp.status}` };
+    return (await resp.json()) as { ok: boolean; headline?: string; audience?: 'you' | 'team'; body?: string; error?: string };
+  } catch {
+    return { ok: false, error: 'runtime unreachable' };
+  }
+}
+
 /** Understanding loop — ask the runtime for new clarifying questions about Rebaz's world. */
 export async function generateQuestions(known: string[], asked: string[]): Promise<{ ok: boolean; questions?: { question: string; about?: string; context?: string }[]; error?: string }> {
   try {

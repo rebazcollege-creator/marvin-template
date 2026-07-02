@@ -1,11 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady } from '@/lib/storage';
 import { fetchBriefingData, fetchMessageBody, peekData, PATHS } from '@/lib/marvin-data';
-import { fetchInboxTriage, fetchSlackTriage, requestDraft, sortDump } from '@/lib/marvin-client';
+import { fetchInboxTriage, fetchSlackTriage, requestDraft, sortDump, summarizeItem } from '@/lib/marvin-client';
 import { enqueueApproval } from '@/lib/approvals';
 import type { BriefingData, TriagedEmail, TriagedSlack } from '@/lib/marvin-protocol';
 import { activeLoops, captureLoop, completeLoop, snoozeLoop, refineLoop, type OpenLoop } from '@/lib/open-loops';
@@ -73,6 +73,22 @@ function Aud({ a }: { a?: 'you' | 'team' | 'group' }) {
   );
 }
 
+/** Inline "see full message" expander — reveals the whole email/thread under a card. */
+function SeeMore({ open, body, onToggle }: { open: boolean; body?: string; onToggle: () => void }) {
+  return (
+    <div className="mt-3">
+      <button type="button" onClick={onToggle} className="text-[12.5px] font-semibold text-accent hover:underline">
+        {open ? 'Hide full message' : 'See full message'}
+      </button>
+      {open && (
+        <div className="mt-2 max-h-80 overflow-y-auto whitespace-pre-wrap rounded-xl border border-border bg-bg px-3.5 py-3 text-[13px] leading-relaxed text-text-2">
+          {body === undefined || body === '…' ? 'Loading…' : body}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function LoopCard({ loop, now, onDone, onSnooze, onDraft }: { loop: OpenLoop; now: Date; onDone: () => void; onSnooze: () => void; onDraft?: () => void }) {
   const src = SOURCE[loop.source] ?? SOURCE.manual;
   const due = dueLabel(loop.dueAt, now);
@@ -125,7 +141,21 @@ export default function HomePage() {
   const [flash, setFlash] = useState<string | null>(null);
   const [learned, setLearned] = useState(0);
   const [overwhelmed, setOverwhelmed] = useState(false);
+  const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
+  const bodyCache = useRef<Record<string, string>>({});
+  const triedHeadline = useRef<Set<string>>(new Set());
   const now = useMemo(() => new Date(), []);
+
+  // Expand / collapse the full message under a card; fetches the body once, then caches it.
+  const toggleExpand = async (key: string, fetcher: () => Promise<string>) => {
+    setOpenKeys((s) => { const n = new Set(s); if (n.has(key)) n.delete(key); else n.add(key); return n; });
+    if (bodyCache.current[key] === undefined) {
+      bodyCache.current[key] = '…';
+      const body = await fetcher().catch(() => '');
+      bodyCache.current[key] = body || '(couldn’t load the full message)';
+      setOpenKeys((s) => new Set(s));
+    }
+  };
 
   const flashMsg = (s: string) => {
     setFlash(s);
@@ -193,6 +223,24 @@ export default function HomePage() {
     [rest, now],
   );
   const restList = stale ? rest.filter((l) => l.id !== stale.id) : rest;
+
+  // The one thing should read as MARVIN's interpretation, not the raw subject. If the top loop
+  // is an email/Slack item without a headline yet, generate one (in its full context) and store it.
+  useEffect(() => {
+    if (!oneThing || oneThing.headline) return;
+    const id = oneThing.id;
+    if (triedHeadline.current.has(id)) return;
+    const p = oneThing.email
+      ? { kind: 'email' as const, account: oneThing.email.account, id: oneThing.email.id }
+      : oneThing.slack
+        ? { kind: 'slack' as const, workspace: oneThing.slack.workspace, channel: oneThing.slack.channelId }
+        : null;
+    if (!p) return;
+    triedHeadline.current.add(id);
+    void summarizeItem(p).then((r) => {
+      if (r.ok && r.headline) { refineLoop(id, { headline: r.headline, task: r.headline }); reloadLoops(); }
+    });
+  }, [oneThing, reloadLoops]);
 
   const onCapture = (text?: string) => {
     const t = (text ?? capture).trim();
@@ -335,7 +383,7 @@ export default function HomePage() {
                   </button>
                 )}
               </div>
-              <p className="mt-2 font-display text-[24px] font-semibold leading-snug text-text">{oneThing.task}</p>
+              <p className="mt-2 font-display text-[24px] font-semibold leading-snug text-text">{oneThing.headline || oneThing.task}</p>
               <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-text-2">
                 <SourceBadge source={oneThing.source} label={oneThing.channel ?? SOURCE[oneThing.source].label} />
                 {oneThing.from && <span>· {oneThing.from}</span>}
@@ -350,6 +398,17 @@ export default function HomePage() {
                 <button type="button" onClick={() => completeLoop(oneThing.id)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">✓ Done</button>
                 <button type="button" onClick={() => snoozeLoop(oneThing.id, new Date(now.getTime() + 3 * 3600_000).toISOString())} className="rounded-xl px-3 py-2.5 text-[13px] font-medium text-muted transition hover:text-text-2">Not now</button>
               </div>
+              {(oneThing.email || oneThing.slack) && (
+                <SeeMore
+                  open={openKeys.has(`one:${oneThing.id}`)}
+                  body={bodyCache.current[`one:${oneThing.id}`]}
+                  onToggle={() => toggleExpand(`one:${oneThing.id}`, () =>
+                    oneThing.email
+                      ? fetchMessageBody(oneThing.email.account, oneThing.email.id).then((mb) => mb?.text || mb?.body || '')
+                      : summarizeItem({ kind: 'slack', workspace: oneThing.slack!.workspace, channel: oneThing.slack!.channelId }).then((r) => r.body || ''),
+                  )}
+                />
+              )}
               {overwhelmed && (
                 <p className="mt-4 rounded-xl bg-[color-mix(in_srgb,var(--accent)_8%,var(--surface))] px-4 py-3 text-[13px] text-text-2">
                   🌿 Everything else is hidden. Just this one. Breathe — you don’t have to hold the rest, I’ve got it.
@@ -409,6 +468,11 @@ export default function HomePage() {
                   {m.receivedAt && <span className="ml-auto text-[12px] text-muted">{timeAgo(Date.parse(m.receivedAt))}</span>}
                 </div>
                 <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.headline || m.subject}</p>
+                <SeeMore
+                  open={openKeys.has(`in:${m.id}`)}
+                  body={bodyCache.current[`in:${m.id}`]}
+                  onToggle={() => toggleExpand(`in:${m.id}`, () => fetchMessageBody(m.account, m.id).then((mb) => mb?.text || mb?.body || m.snippet || ''))}
+                />
                 <div className="mt-4 flex flex-wrap gap-2.5">
                   <button type="button" onClick={() => trackEmail(m)} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">+ Track it</button>
                   <button type="button" onClick={() => dismissEmail(m)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Not for me</button>
@@ -448,6 +512,11 @@ export default function HomePage() {
                   {m.ts && <span className="ml-auto text-[12px] text-muted">{timeAgo(slackTsMs(m.ts))}</span>}
                 </div>
                 <p className="mt-2 font-display text-[18px] leading-snug text-text">{m.headline || (m.text.length > 200 ? `${m.text.slice(0, 197)}…` : m.text)}</p>
+                <SeeMore
+                  open={openKeys.has(`sl:${m.id}`)}
+                  body={bodyCache.current[`sl:${m.id}`]}
+                  onToggle={() => toggleExpand(`sl:${m.id}`, () => summarizeItem({ kind: 'slack', workspace: m.workspace, channel: m.channelId }).then((r) => r.body || m.text))}
+                />
                 <div className="mt-4 flex flex-wrap gap-2.5">
                   <button type="button" onClick={() => trackSlack(m)} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">+ Track it</button>
                   <button type="button" onClick={() => dismissSlack(m)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Not for me</button>

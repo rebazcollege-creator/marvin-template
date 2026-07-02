@@ -47,6 +47,8 @@ export type OpenLoop = {
   email?: { account: string; id: string; from: string; subject: string };
   /** For Slack loops: enough context to draft a reply. */
   slack?: { workspace: string; channelId: string; channel: string; from: string; text: string };
+  /** MARVIN's interpreted one-line summary (what it is + action) — shown instead of raw subject. */
+  headline?: string;
   /** Time-visibility: rough total estimate in minutes (from breakdown or manual). */
   estMins?: number;
   /** ADHD "break it down": tiny concrete steps, first one startable in <2 min. */
@@ -122,7 +124,7 @@ export function snoozeLoop(id: string, until: string): void {
 }
 
 /** Refine a loop in place (AI brain-dump sort: cleaned title / estimate / kind). */
-export function refineLoop(id: string, patch: Partial<Pick<OpenLoop, 'task' | 'estMins' | 'channel'>>): void {
+export function refineLoop(id: string, patch: Partial<Pick<OpenLoop, 'task' | 'estMins' | 'channel' | 'headline'>>): void {
   save(listLoops().map((l) => (l.id === id ? { ...l, ...patch } : l)));
 }
 

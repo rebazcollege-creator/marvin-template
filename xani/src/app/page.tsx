@@ -168,6 +168,10 @@ function matchSlack(loop: OpenLoop, msgs: SlackData['messages']): SlackData['mes
   );
 }
 
+/** A headline the summariser produces when it was handed an empty body — never show these as if
+ *  they were a real interpretation; regenerate, or fall back to the message's actual subject. */
+const BAD_HEADLINE = /no (email )?content|missing content|incomplete|nothing to (analyz|summari)|could ?n'?t (read|load|find)|^no message|empty (message|email)|content (provided|after header)/i;
+
 /** Cheap HTML→text for the reading pane. Notification emails (Trello, GitHub, calendar) ship
  *  HTML only with no text/plain part; without this the "See full message" pane came up empty. */
 function stripHtml(html: string): string {
@@ -303,7 +307,9 @@ export default function HomePage() {
   useEffect(() => {
     if (recovering.current) return; // our own writes re-fire this effect — don't re-enter mid-batch
     const targets = loops.filter(
-      (l) => (l.source === 'email' || l.source === 'slack') && !l.headline && !triedHeadline.current.has(l.id),
+      (l) => (l.source === 'email' || l.source === 'slack')
+        && (!l.headline || BAD_HEADLINE.test(l.headline)) // missing OR previously-stored garbage → (re)generate
+        && !triedHeadline.current.has(l.id),
     );
     if (targets.length === 0) return;
     recovering.current = true;
@@ -342,7 +348,11 @@ export default function HomePage() {
               : null;
           if (!p) continue;
           const r = await summarizeItem(p);
-          if (r.ok && r.headline) refineLoop(l.id, { headline: r.headline });
+          if (r.ok && r.headline && !BAD_HEADLINE.test(r.headline)) {
+            refineLoop(l.id, { headline: r.headline });
+          } else if (l.headline && BAD_HEADLINE.test(l.headline)) {
+            attachLoopRef(l.id, { headline: undefined }); // wipe stored garbage → card shows the real subject
+          }
         }
       } finally {
         recovering.current = false;

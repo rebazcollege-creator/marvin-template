@@ -286,6 +286,37 @@ function withLearnings(base: string, learned: string[]): string {
  *  is rate-limited. 90s keeps it fresh without hammering Slack. */
 let slackTriageCache: { at: number; key: string; data: SlackTriage } | null = null;
 
+/** Cheap HTML→text. Notification emails (Trello / GitHub / calendar) are HTML-only, so without
+ *  this the summariser gets an empty body and hallucinates "No email content provided" as a headline. */
+function htmlToText(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<\/(p|div|tr|li|h[1-6]|table)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+    .replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"')
+    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
+/** A closing acknowledgment ("thanks" / "ok" / 🙏 / :pray:) — the other person is wrapping up,
+ *  not asking. Used so a thread Rebaz already handled doesn't keep surfacing as if it needs a reply. */
+function isAck(raw: string): boolean {
+  const cleaned = raw.trim().toLowerCase();
+  if (!cleaned) return true;
+  // Strip :shortcode: and unicode emoji — an emoji-only reply is a reaction, not a request.
+  const noEmoji = cleaned
+    .replace(/:[a-z0-9_+-]+:/g, ' ')
+    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu, ' ')
+    .replace(/[\s!.,:;'"()]+/g, ' ')
+    .trim();
+  if (!noEmoji) return true;
+  const ACK = /^(thanks( so much| a lot| a ton)?|thank you|thx|ty|ok|okay|okey|k|kk|great|perfect|got it|gotcha|noted|understood|will do|sounds good|cool|awesome|nice|appreciate it|much appreciated|cheers|no worries|np|yep|yeah|sure|makes sense|agreed|good to know|roger)$/;
+  return ACK.test(noEmoji);
+}
+
 async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   if (!modelAvailable()) return { connected: false, triaged: [], error: 'No API key.' };
   // Cache is keyed on the learned-corrections set, so a fresh correction re-triages at once.
@@ -335,23 +366,26 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
       .reverse()
       .map((x) => `${x.user}: ${(x.text ?? '').replace(/\s+/g, ' ').slice(0, 160)}`)
       .join('\n');
-    for (const m of h.messages) {
-      const text = (m.text ?? '').trim();
-      if (!text) continue;
-      if (m.ts && nowSec - Number(m.ts) > MAX_AGE_SEC) continue; // stale — not new, don't surface
-      if (m.userId && selfIds.has(m.userId)) continue; // Rebaz's own message — not a task for him
-      const nameMention = /\brebaz\b/i.test(text);
-      if (!(isDM || nameMention || m.emergency)) continue; // the flag rules (triage-rules.md §2)
-      const id = `${c.id}:${m.ts}`;
-      if (seen.has(id)) continue;
-      seen.add(id);
-      // Who it's aimed at: a 1:1 DM or an @mention is "you"; a group DM is "group"; a channel is "team".
-      const audience: 'you' | 'group' | 'team' = c.kind === 'dm' || nameMention ? 'you' : c.kind === 'group' ? 'group' : 'team';
-      candidates.push({
-        id, workspace: c.workspace, workspaceName: wsName.get(c.workspace) ?? c.workspace,
-        channelId: c.id, channel: c.name, dm: isDM, audience, from: m.user, text, ts: m.ts, emergency: m.emergency, context,
-      });
-    }
+    // Only the LATEST message decides whether a conversation is waiting on Rebaz. Scanning every
+    // message made handled/old threads resurface (he replied, she said "thanks" — still shown as new).
+    const latest = h.messages[0]; // conversations.history is newest-first
+    if (!latest) continue;
+    const text = (latest.text ?? '').trim();
+    if (!text) continue;
+    if (latest.ts && nowSec - Number(latest.ts) > MAX_AGE_SEC) continue; // last activity is old — not new
+    if (latest.userId && selfIds.has(latest.userId)) continue; // Rebaz sent the last word — he already replied
+    if (isAck(text)) continue; // "thanks" / "ok" / 🙏 — the thread is closed, not an open ask
+    const nameMention = /\brebaz\b/i.test(text);
+    if (!(isDM || nameMention || latest.emergency)) continue; // channels need an @mention / emergency
+    const id = `${c.id}:${latest.ts}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    // Who it's aimed at: a 1:1 DM or an @mention is "you"; a group DM is "group"; a channel is "team".
+    const audience: 'you' | 'group' | 'team' = c.kind === 'dm' || nameMention ? 'you' : c.kind === 'group' ? 'group' : 'team';
+    candidates.push({
+      id, workspace: c.workspace, workspaceName: wsName.get(c.workspace) ?? c.workspace,
+      channelId: c.id, channel: c.name, dm: isDM, audience, from: latest.user, text, ts: latest.ts, emergency: latest.emergency, context,
+    });
   }
   candidates.sort((a, b) => Number(b.ts) - Number(a.ts)); // newest first
   const capped = candidates.slice(0, 40);
@@ -509,9 +543,14 @@ const server = createServer(async (req, res) => {
       let audience: 'you' | 'team' | undefined;
       if (b.kind === 'email' && b.account && b.id) {
         const mb = await getMessageBody(b.account, b.id);
-        body = (mb.text || mb.body || '').replace(/\n{3,}/g, '\n\n').trim().slice(0, 8000);
+        let text = (mb.text || mb.body || '').trim();
+        if (!text && mb.html) text = htmlToText(mb.html); // HTML-only notification email
+        text = text.replace(/\n{3,}/g, '\n\n').trim().slice(0, 8000);
+        // Reject an empty body BEFORE prepending "To:" — otherwise the model gets no content and
+        // invents an error-sounding headline ("No email content provided").
+        if (!text) return json(res, 200, { ok: false, error: 'No readable content.' });
         const to = (mb as { to?: string }).to || '';
-        body = `To: ${to}\n\n${body}`;
+        body = `To: ${to}\n\n${text}`;
       } else if (b.kind === 'slack' && b.workspace && b.channel) {
         const h = await getSlackHistory({ workspace: b.workspace, channel: b.channel, limit: 14 });
         body = (h.messages || []).slice(0, 14).reverse().map((m) => `${m.user}: ${m.text}`).join('\n').slice(0, 8000);

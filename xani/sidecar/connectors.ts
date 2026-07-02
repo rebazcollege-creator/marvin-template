@@ -66,7 +66,7 @@ function gmailCreds(n: number): { id: string; secret: string; refresh: string } 
 
 // ── Gmail ─────────────────────────────────────────────────────────
 
-async function gmailUnreadCounts(): Promise<{ connected: boolean; accounts: { account: string; unread: number }[] }> {
+export async function gmailUnreadCounts(): Promise<{ connected: boolean; accounts: { account: string; unread: number }[] }> {
   const connected = GMAIL_ACCOUNTS.map((a) => ({ a, c: gmailCreds(a.n) })).filter((x) => x.c);
   // All accounts in parallel — previously sequential (token + fetch per account).
   const results = await Promise.all(

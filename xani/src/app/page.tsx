@@ -255,6 +255,8 @@ export default function HomePage() {
       fetchInboxTriage(learnings).then((t) => {
         setInboxLoading(false);
         if (!t) { setInboxErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        // Be honest: no Gmail creds in the runtime is NOT "nothing needs you" — say it's not connected.
+        if (t.connected === false) { setInboxErr(t.error ?? 'No Gmail connected to the runtime — open Connections and reconnect (the Claude app’s Gmail is separate).'); setInboxActs([]); return; }
         if (t.error) setInboxErr(t.error);
         setInboxActs(t.triaged.filter((m) => m.verdict === 'act'));
         setInboxKnow(t.triaged.filter((m) => m.verdict === 'know').length);
@@ -263,8 +265,8 @@ export default function HomePage() {
       fetchSlackTriage(learnings).then((t) => {
         setSlackLoading(false);
         if (!t) { setSlackErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        if (t.connected === false) { setSlackErr(t.error ?? 'No Slack connected to the runtime — open Connections and reconnect.'); setSlackActs([]); return; }
         if (t.error) setSlackErr(t.error);
-        if (!t.connected) { setSlackActs([]); return; }
         setSlackActs(t.triaged.filter((m) => m.verdict === 'act'));
         setSlackKnow(t.triaged.filter((m) => m.verdict === 'know').length);
         setSlackFiled(t.triaged.filter((m) => m.verdict === 'ignore').length);

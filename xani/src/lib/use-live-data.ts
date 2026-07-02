@@ -15,12 +15,17 @@ import { invalidate, peekData } from '@/lib/marvin-data';
 export type LiveDataState = 'loading' | 'loaded' | 'offline';
 
 export function useLiveData<T>(path: string, fetcher: () => Promise<T | null>) {
-  const [data, setData] = useState<T | null>(() => peekData<T>(path));
-  const [state, setState] = useState<LiveDataState>(() => (peekData<T>(path) ? 'loaded' : 'loading'));
+  // Start null/loading on BOTH server and client — reading the cache (localStorage) during the
+  // initial render makes the client's first paint differ from the server's and throws a hydration
+  // mismatch. The cache is seeded in the effect below, which runs immediately after hydration.
+  const [data, setData] = useState<T | null>(null);
+  const [state, setState] = useState<LiveDataState>('loading');
   const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let alive = true;
+    const cached = peekData<T>(path); // instant paint from last-known data, post-hydration
+    if (cached) { setData(cached); setState('loaded'); }
     fetcher().then((d) => {
       if (!alive) return;
       if (d) {

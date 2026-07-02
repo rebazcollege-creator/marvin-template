@@ -106,7 +106,13 @@ export default function HomePage() {
   const [slackLoading, setSlackLoading] = useState(true);
   const [flash, setFlash] = useState<string | null>(null);
   const [learned, setLearned] = useState(0);
-  const now = useMemo(() => new Date(), []);
+  // Resident tray app — the window stays open for hours, so the clock must tick or
+  // "meeting in 45 min" stays 45 min forever (the exact time-blindness this fights).
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(t);
+  }, []);
 
   const flashMsg = (s: string) => {
     setFlash(s);

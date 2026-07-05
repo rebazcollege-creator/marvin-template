@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { streamMarvin, transcribeAudio } from '@/lib/marvin-client';
+import { streamMarvin, transcribeAudio, webSearch, type WebSearchResult } from '@/lib/marvin-client';
 import { composeStudioSystemPrompt } from '@/lib/context';
 import { DEFAULT_SETTINGS, getSettings, saveSettings, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady, readJson, writeJson, newId } from '@/lib/storage';
@@ -66,6 +66,9 @@ export function LeadStoriesStudio() {
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState<Run[]>([]);
   const [promptDraft, setPromptDraft] = useState('');
+  // Real sources found for the current claim + a note when search isn't available.
+  const [sources, setSources] = useState<WebSearchResult[]>([]);
+  const [searchNote, setSearchNote] = useState('');
 
   // emergency trend-drops (LeadStories Slack)
   const [emerg, setEmerg] = useState<EmergItem[]>([]);
@@ -165,9 +168,34 @@ export function LeadStoriesStudio() {
     setOutput('');
     setVerdict('');
     setCopied(false);
+    setSources([]);
+    setSearchNote('');
+
+    // SAFE web search: the sidecar fetches real sources and we hand them to the model to
+    // cite — the model never gets a tool. Without a key, we say so and don't fabricate.
+    const search = await webSearch(text, 6);
+    let sourcesBlock = '';
+    if (search.ok && search.results.length) {
+      setSources(search.results);
+      sourcesBlock =
+        'WEB SEARCH RESULTS for this claim (real, current). Base your VERDICT and SOURCES ONLY on these; ' +
+        'cite the exact URLs you use. If they are insufficient to decide, the VERDICT is Unverified. Do NOT invent sources.\n\n' +
+        search.results.map((r, i) => `[${i + 1}] ${r.title}${r.age ? ` (${r.age})` : ''}\n${r.url}\n${r.snippet}`).join('\n\n');
+    } else {
+      setSearchNote(
+        search.error === 'no_key'
+          ? 'No web search key set — this note uses training knowledge only and may be dated. Add a free Brave Search key in Connections for live sourced fact-checking.'
+          : search.error === 'bad_key'
+            ? 'Web search key was rejected — check the Brave key in Connections.'
+            : 'Web search is unavailable right now — this note uses training knowledge only.',
+      );
+    }
 
     const model = getSettings().models.studio;
-    const system = [{ type: 'text' as const, text: composeStudioSystemPrompt(STUDIO), cache: true }];
+    const system = [
+      { type: 'text' as const, text: composeStudioSystemPrompt(STUDIO), cache: true },
+      ...(sourcesBlock ? [{ type: 'text' as const, text: sourcesBlock, cache: false }] : []),
+    ];
 
     let out = '';
     await streamMarvin({ model, system, messages: [{ role: 'user', content: text }] }, (e) => {
@@ -342,6 +370,7 @@ export function LeadStoriesStudio() {
       >
         {busy ? 'Checking…' : 'Fact-check'}
       </button>
+      {searchNote && <p className="mt-2 max-w-2xl text-[12px] leading-relaxed text-muted">{searchNote}</p>}
 
       {output && (
         <section className="mt-7 rounded-2xl border border-border bg-surface p-6">
@@ -362,6 +391,20 @@ export function LeadStoriesStudio() {
           <p className="mt-4 border-t border-border pt-3 text-[11.5px] text-muted">
             Xanî never writes to TCS — copy this note and paste it in by hand.
           </p>
+        </section>
+      )}
+
+      {sources.length > 0 && (
+        <section className="mt-4 rounded-2xl border border-border bg-surface p-5">
+          <div className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.07em] text-muted">Sources MARVIN searched ({sources.length})</div>
+          <ul className="space-y-2">
+            {sources.map((s, i) => (
+              <li key={i} className="min-w-0 text-[12.5px]">
+                <a href={s.url} target="_blank" rel="noreferrer" className="font-medium text-accent hover:underline">{s.title || s.url}</a>
+                <span className="block truncate text-muted">{s.url}</span>
+              </li>
+            ))}
+          </ul>
         </section>
       )}
 

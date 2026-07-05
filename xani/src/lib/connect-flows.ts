@@ -159,6 +159,19 @@ export const FLOWS: Record<string, ConnectMethod[]> = {
       fields: [{ key: 'accessToken', label: 'Access token', type: 'password', placeholder: '1/…', envKey: 'BUFFER_ACCESS_TOKEN' }],
     },
   ],
+  websearch: [
+    {
+      id: 'token',
+      label: 'Brave Search API key',
+      blurb: 'Gives the fact-check studio live web sources to cite. Brave has a free tier (2,000 searches/month) — create a key, then paste it here. Xanî searches on your behalf; the model only reads the results.',
+      kind: 'form',
+      recommended: true,
+      envHint: 'BRAVE_SEARCH_API_KEY',
+      docsLabel: 'Brave · Search API',
+      docsUrl: 'https://brave.com/search/api/',
+      fields: [{ key: 'apiKey', label: 'Subscription token', type: 'password', placeholder: 'BSA…', envKey: 'BRAVE_SEARCH_API_KEY' }],
+    },
+  ],
   github: [
     {
       id: 'oauth',
@@ -202,6 +215,8 @@ export function credKeysFor(id: string): string[] {
       return ['BUFFER_ACCESS_TOKEN'];
     case 'github':
       return ['GITHUB_TOKEN'];
+    case 'websearch':
+      return ['BRAVE_SEARCH_API_KEY'];
     default:
       return [];
   }

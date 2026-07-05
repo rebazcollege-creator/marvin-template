@@ -26,6 +26,7 @@ const REQUIRED: Record<string, string[]> = {
   trello: ['TRELLO_API_KEY', 'TRELLO_TOKEN', 'TRELLO_BOARD_ID'],
   buffer: ['BUFFER_ACCESS_TOKEN'],
   github: ['GITHUB_TOKEN'],
+  websearch: ['BRAVE_SEARCH_API_KEY'],
 };
 
 function Card({ c, state, credsReady, onOpen }: { c: Connection; state?: ConnState; credsReady: boolean; onOpen: () => void }) {

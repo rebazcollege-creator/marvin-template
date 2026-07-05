@@ -26,6 +26,7 @@ export const CONNECTIONS: Connection[] = [
   { id: 'trello', glyph: 'T', name: 'Trello', category: 'Tasks', desc: 'Turn decisions into cards.', tint: 'var(--accent-soft)', edge: '#C0613A' },
   { id: 'buffer', glyph: 'B', name: 'Buffer', category: 'Social', desc: 'Draft and queue posts for approval.', tint: '#F8EFDF', edge: '#D89A4E' },
   { id: 'notion', glyph: 'N', name: 'Notion', category: 'Docs & wiki', desc: 'Pull context from your workspace.', tint: 'var(--hover)', edge: 'var(--text-2)' },
+  { id: 'websearch', glyph: '⌕', name: 'Web Search', category: 'Research', desc: 'Live sources for the fact-check studio (Brave, free tier).', tint: '#E8EEE5', edge: '#6E8B6A' },
   { id: 'github', glyph: 'G', name: 'GitHub', category: 'Code', desc: 'Track issues and pull requests.', tint: 'var(--hover)', edge: 'var(--text-2)' },
   { id: 'linear', glyph: 'L', name: 'Linear', category: 'Tasks', desc: 'Read and create tickets.', tint: 'var(--hover)', edge: 'var(--text-2)' },
   { id: 'hubspot', glyph: 'H', name: 'HubSpot', category: 'CRM', desc: 'See deals and contacts in context.', tint: 'var(--hover)', edge: 'var(--text-2)' },

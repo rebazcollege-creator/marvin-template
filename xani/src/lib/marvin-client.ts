@@ -462,6 +462,22 @@ export async function requestDraft(p: {
 }
 
 /** True if the runtime (sidecar) is reachable. Used by the sidebar status dot. */
+export interface WebSearchResult { title: string; url: string; snippet: string; age?: string }
+/** Ask the sidecar to search the web (Brave). Safe: the sidecar fetches; the model
+ *  never gets a tool. Returns {ok:false, error:'no_key'} when no key is configured. */
+export async function webSearch(query: string, count = 5): Promise<{ ok: boolean; results: WebSearchResult[]; error?: string }> {
+  try {
+    const r = await fetch(`${SIDECAR_URL}/websearch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query, count }),
+    });
+    return (await r.json()) as { ok: boolean; results: WebSearchResult[]; error?: string };
+  } catch {
+    return { ok: false, results: [], error: 'unreachable' };
+  }
+}
+
 export async function pingRuntime(): Promise<boolean> {
   try {
     const resp = await fetch(`${SIDECAR_URL}/health`, { cache: 'no-store' });

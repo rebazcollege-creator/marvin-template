@@ -11,6 +11,7 @@ import { kvAll, kvSet, kvRemove, kvImport, kvFlush } from './kv.ts';
 import { TRIAGE_CACHE_FILE as TRIAGE_CACHE_PATH } from './paths.ts';
 import { startScheduler } from './scheduler.ts';
 import { serveStatic } from './static.ts';
+import { braveWebSearch } from './websearch.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
 import { originAllowed } from './security.ts';
@@ -883,6 +884,17 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'GET' && req.url === '/creds/status') {
     return json(res, 200, credStatus());
+  }
+
+  // Server-side web search (Brave) — the sidecar fetches sources and hands them to the
+  // model as reading material. Never exposes a tool to the model. Graceful without a key.
+  if (req.method === 'POST' && req.url === '/websearch') {
+    try {
+      const { query, count } = JSON.parse(await readBody(req)) as { query?: string; count?: number };
+      return json(res, 200, await braveWebSearch(String(query ?? ''), count ?? 5));
+    } catch (err) {
+      return json(res, 200, { ok: false, results: [], error: (err as Error).message });
+    }
   }
 
   if (req.method === 'POST' && req.url === '/oauth/start') {

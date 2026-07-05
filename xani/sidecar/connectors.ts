@@ -41,8 +41,18 @@ async function googleAccessToken(clientId: string, clientSecret: string, refresh
   return (await googleToken(clientId, clientSecret, refreshToken)).token ?? null;
 }
 
-/** Token exchange that also surfaces the error (for honest diagnostics). */
+/**
+ * In-memory access-token cache, keyed by refresh token (unique per account). Google
+ * access tokens live ~1 hour, but every read used to re-run the full OAuth refresh —
+ * ~11 round-trips to Google's auth server on a single Home load (5 Gmail unread + 5
+ * Gmail triage + calendar). Caching until 60s before expiry removes almost all of them.
+ */
+const googleTokenCache = new Map<string, { token: string; exp: number }>();
+
+/** Token exchange that also surfaces the error (for honest diagnostics). Cached. */
 async function googleToken(clientId: string, clientSecret: string, refreshToken: string): Promise<{ token?: string; error?: string }> {
+  const cached = googleTokenCache.get(refreshToken);
+  if (cached && cached.exp > Date.now()) return { token: cached.token };
   try {
     const r = await fetch('https://oauth2.googleapis.com/token', {
       method: 'POST',
@@ -50,9 +60,15 @@ async function googleToken(clientId: string, clientSecret: string, refreshToken:
       body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }),
     });
     const body = await r.text();
-    if (!r.ok) return { error: `auth ${r.status}: ${body.slice(0, 160)}` };
-    const j = JSON.parse(body) as { access_token?: string };
-    return j.access_token ? { token: j.access_token } : { error: 'no access_token returned' };
+    if (!r.ok) {
+      googleTokenCache.delete(refreshToken); // a revoked/expired refresh token must not serve a stale hit
+      return { error: `auth ${r.status}: ${body.slice(0, 160)}` };
+    }
+    const j = JSON.parse(body) as { access_token?: string; expires_in?: number };
+    if (!j.access_token) return { error: 'no access_token returned' };
+    const ttlMs = (typeof j.expires_in === 'number' && j.expires_in > 0 ? j.expires_in : 3600) * 1000;
+    googleTokenCache.set(refreshToken, { token: j.access_token, exp: Date.now() + ttlMs - 60_000 });
+    return { token: j.access_token };
   } catch (e) {
     return { error: (e as Error).message };
   }

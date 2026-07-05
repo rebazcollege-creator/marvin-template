@@ -13,6 +13,7 @@ import { startScheduler } from './scheduler.ts';
 import { serveStatic } from './static.ts';
 import { braveWebSearch } from './websearch.ts';
 import { deadlineRule, normalizeDeadline } from './deadline.ts';
+import { buildBriefInput, pressingCards } from './brief.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
 import { originAllowed } from './security.ts';
@@ -469,21 +470,17 @@ async function computeMorningBrief(): Promise<BriefSnap> {
     getCalendar().catch(() => ({ connected: false, events: [] as { title: string; start: string }[] })),
     getTrello().catch(() => ({ connected: false, cards: [] as { name: string; due?: string | null; urgent?: boolean; list?: string }[] })),
   ]);
-  const events = (cal.events ?? []).slice(0, 8);
-  const dueCards = (trello.cards ?? []).filter((c) => c.urgent || c.due).slice(0, 8);
 
-  if (inboxActs.length === 0 && slackActs.length === 0 && events.length === 0 && dueCards.length === 0) {
-    return base; // genuinely clear — no model call, Home shows the calm state
-  }
-
-  const lines: string[] = [];
-  if (inboxActs.length) lines.push('INBOX (needs a reply/decision):\n' + inboxActs.slice(0, 8).map((t) => `- [${t.account}] ${t.from}: ${t.headline || t.subject}${t.dueAt ? ` (due ${t.dueAt})` : ''}`).join('\n'));
-  if (slackActs.length) lines.push('SLACK (needs you):\n' + slackActs.slice(0, 8).map((t) => `- [${t.workspaceName}] ${t.dm ? 'DM' : `#${t.channel}`} ${t.from}: ${t.headline || t.text.slice(0, 120)}${t.dueAt ? ` (due ${t.dueAt})` : ''}`).join('\n'));
-  if (events.length) lines.push('CALENDAR (today):\n' + events.map((e) => `- ${e.start}: ${e.title}`).join('\n'));
-  if (dueCards.length) lines.push('TRELLO (overdue / due today):\n' + dueCards.map((c) => `- ${c.name}${c.due ? ` (due ${c.due})` : ''}${c.list ? ` [${c.list}]` : ''}`).join('\n'));
+  const { empty, prompt } = buildBriefInput({
+    inboxActs,
+    slackActs,
+    events: cal.events ?? [],
+    dueCards: pressingCards(trello.cards ?? []),
+  });
+  if (empty) return base; // genuinely clear — no model call, Home shows the calm state
 
   try {
-    const text = await oneShot(BRIEF_SYSTEM, lines.join('\n\n'), 500);
+    const text = await oneShot(BRIEF_SYSTEM, prompt, 500);
     return { at: Date.now(), forDate, text: text.trim() };
   } catch {
     return base;

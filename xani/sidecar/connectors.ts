@@ -178,11 +178,13 @@ async function gmailBatchGetMetadata(token: string, ids: string[]): Promise<Reco
       )
       .join('') + `--${boundary}--`;
   try {
+    // The batch multiplexes ~25 message reads in one round-trip — give it more headroom
+    // than a single call before the timeout abort fires.
     const r = await fetchT('https://gmail.googleapis.com/batch/gmail/v1', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/mixed; boundary=${boundary}` },
       body,
-    });
+    }, 20_000);
     if (!r.ok) return null;
     return parseBatchResponse(r.headers.get('content-type') ?? '', await r.text());
   } catch {

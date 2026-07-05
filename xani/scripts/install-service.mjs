@@ -51,11 +51,14 @@ if (uninstall) {
   process.exit(0);
 }
 
-// 1) Make sure the interface is built (out/) — this is what the service serves.
-if (!existsSync(join(APP_ROOT, 'out', 'index.html'))) {
-  say('Building the interface once (this takes a minute)…');
+// 1) Build the interface fresh — an existing out/ may be WEEKS stale, and serving it
+//    would silently run an old app. --skip-build only if you know it's current.
+if (!process.argv.includes('--skip-build')) {
+  say('Building the interface (this takes a minute)…');
   const b = spawnSync('npm', ['run', 'app:build'], { cwd: APP_ROOT, stdio: 'inherit' });
   if (b.status !== 0) die('The interface build failed — scroll up for the error, or ask MARVIN’s developer session for help.');
+} else if (!existsSync(join(APP_ROOT, 'out', 'index.html'))) {
+  die('--skip-build was passed but out/ has no build. Run without --skip-build.');
 }
 
 // 2) Write the launchd job. process.execPath = the exact node that ran this script,

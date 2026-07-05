@@ -103,8 +103,8 @@ export function resolveProvider(hasAnthropic: boolean): 'cli' | 'gemini' | 'anth
   if (forced === 'anthropic') return hasAnthropic ? 'anthropic' : 'none';
   if (cli && claudeForcedOn()) return 'cli'; // the user's explicit toggle
   if (hasAnthropic) return 'anthropic'; // full-capability key beats silent CLI preference
+  if (cli && !claudeDisabled()) return 'cli'; // logged-in Claude beats Gemini on quality
   if (usingGemini()) return 'gemini';
-  if (cli && !claudeDisabled()) return 'cli'; // the no-key default when nothing else is set
   return 'none';
 }
 

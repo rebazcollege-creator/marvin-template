@@ -49,6 +49,40 @@ function localEntries(): [string, string][] {
   return out;
 }
 
+/**
+ * Dirty ledger — keys changed while the sidecar copy couldn't be updated (sidecar
+ * down, or a /kv write failed). Without it, the next hydrate would let the server's
+ * STALE value overwrite the newer local one (or resurrect a removed key). Stored
+ * under a non-`xani.` key so the ledger itself is never synced or exported.
+ */
+const DIRTY_KEY = 'xani-kv-dirty';
+type DirtyOp = 'set' | 'remove';
+function readDirty(): Record<string, DirtyOp> {
+  try {
+    return JSON.parse(window.localStorage.getItem(DIRTY_KEY) ?? '{}') as Record<string, DirtyOp>;
+  } catch {
+    return {};
+  }
+}
+function markDirty(key: string, op: DirtyOp): void {
+  try {
+    const d = readDirty();
+    d[key] = op;
+    window.localStorage.setItem(DIRTY_KEY, JSON.stringify(d));
+  } catch {
+    /* ledger is best-effort */
+  }
+}
+function clearDirty(keys: string[]): void {
+  try {
+    const d = readDirty();
+    for (const k of keys) delete d[k];
+    window.localStorage.setItem(DIRTY_KEY, JSON.stringify(d));
+  } catch {
+    /* ledger is best-effort */
+  }
+}
+
 async function backendLoadAll(): Promise<[string, string][]> {
   if (isTauri()) {
     return await tauriInvoke<[string, string][]>('kv_all');
@@ -60,17 +94,44 @@ async function backendLoadAll(): Promise<[string, string][]> {
     const j = (await r.json()) as { kv?: Record<string, string> };
     const server = j.kv ?? {};
     httpKv = true;
-    // Merge: local as base, server overlays (authoritative). Anything only-local is
-    // pushed up once, so a pre-migration browser profile loses nothing.
+    const dirty = readDirty();
+    // Merge: local as base; server overlays EXCEPT keys we changed while it was
+    // unreachable (their local value is newer). Removed-while-down keys stay removed.
     const merged = new Map<string, string>(local);
-    for (const [k, v] of Object.entries(server)) merged.set(k, v);
-    const onlyLocal = local.filter(([k]) => !(k in server));
-    if (onlyLocal.length) {
+    for (const [k, v] of Object.entries(server)) {
+      if (!(k in dirty)) merged.set(k, v);
+    }
+    for (const [k, op] of Object.entries(dirty)) {
+      if (op === 'remove') merged.delete(k);
+    }
+    // Replay upward: only-local keys (first migration) + dirty sets in one bulk
+    // import; dirty removes individually. Ledger entries clear only on success.
+    const toPush = new Map<string, string>(local.filter(([k]) => !(k in server)));
+    for (const [k, op] of Object.entries(dirty)) {
+      if (op === 'set') {
+        const v = merged.get(k);
+        if (v !== undefined) toPush.set(k, v);
+      }
+    }
+    if (toPush.size) {
       void fetch(`${SIDECAR_URL}/kv/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ kv: Object.fromEntries(onlyLocal) }),
-      }).catch(() => undefined);
+        body: JSON.stringify({ kv: Object.fromEntries(toPush) }),
+      })
+        .then((res) => { if (res.ok) clearDirty([...toPush.keys()]); })
+        .catch(() => undefined);
+    }
+    for (const [k, op] of Object.entries(dirty)) {
+      if (op === 'remove') {
+        void fetch(`${SIDECAR_URL}/kv/remove`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: k }),
+        })
+          .then((res) => { if (res.ok) clearDirty([k]); })
+          .catch(() => undefined);
+      }
     }
     return [...merged.entries()];
   } catch {
@@ -89,26 +150,44 @@ async function backendSet(key: string, value: string): Promise<void> {
       /* quota — the sidecar copy below is the durable one */
     }
   }
-  // …and persist to the sidecar, which is the durable, backed-up copy.
-  if (httpKv) {
+  // …and persist to the sidecar, which is the durable, backed-up copy. A failed or
+  // impossible server write marks the key dirty so the next hydrate replays it
+  // instead of letting the server's stale value win.
+  if (!httpKv) {
+    markDirty(key, 'set');
+    return;
+  }
+  try {
     const r = await fetch(`${SIDECAR_URL}/kv/set`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, value }),
     });
     if (!r.ok) throw new Error(`kv/set ${r.status}`);
+    clearDirty([key]);
+  } catch (e) {
+    markDirty(key, 'set');
+    throw e; // writeJson surfaces this as a storage error — the value is safe locally
   }
 }
 
 async function backendRemove(key: string): Promise<void> {
   if (isTauri()) return tauriInvoke('kv_remove', { key });
   if (typeof window !== 'undefined') window.localStorage.removeItem(key);
-  if (httpKv) {
-    await fetch(`${SIDECAR_URL}/kv/remove`, {
+  if (!httpKv) {
+    markDirty(key, 'remove');
+    return;
+  }
+  try {
+    const r = await fetch(`${SIDECAR_URL}/kv/remove`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key }),
-    }).catch(() => undefined);
+    });
+    if (!r.ok) throw new Error(`kv/remove ${r.status}`);
+    clearDirty([key]);
+  } catch {
+    markDirty(key, 'remove'); // replayed on next hydrate; key stays gone locally
   }
 }
 
@@ -184,15 +263,23 @@ export async function exportAll(): Promise<Record<string, string>> {
  * Restore a backup produced by exportAll(). Only `xani.*` keys are accepted (a
  * foreign/corrupt file can't plant arbitrary keys). Existing keys are overwritten;
  * returns the number of keys restored.
+ *
+ * Validation happens BEFORE any write (a corrupt file restores nothing), and a
+ * failed server persist marks the key dirty rather than aborting mid-restore —
+ * previously one failed write left the store half-restored with no recovery.
  */
 export async function importAll(data: Record<string, string>): Promise<number> {
   await ensureStorageReady();
+  const entries = Object.entries(data).filter(([key, value]) => key.startsWith('xani.') && typeof value === 'string');
+  for (const [, value] of entries) JSON.parse(value); // all-or-nothing validation, before any write
   let n = 0;
-  for (const [key, value] of Object.entries(data)) {
-    if (!key.startsWith('xani.') || typeof value !== 'string') continue;
-    JSON.parse(value); // must be valid JSON — throws (and aborts) on a corrupt entry
+  for (const [key, value] of entries) {
     if (cache) cache.set(key, value);
-    await backendSet(key, value);
+    try {
+      await backendSet(key, value);
+    } catch {
+      /* value is in cache + local mirror and marked dirty — replayed on next hydrate */
+    }
     n++;
   }
   return n;

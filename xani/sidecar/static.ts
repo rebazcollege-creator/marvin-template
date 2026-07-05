@@ -1,5 +1,5 @@
 import { createReadStream, existsSync, statSync } from 'node:fs';
-import { join, normalize, extname } from 'node:path';
+import { join, normalize, extname, sep } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 /**
@@ -73,10 +73,12 @@ export function serveStatic(req: IncomingMessage, res: ServerResponse, urlPath: 
     return false;
   }
 
-  // Path-traversal guard: the normalized path must stay inside OUT_DIR.
+  // Path-traversal guard: the normalized path must stay inside OUT_DIR. The boundary
+  // separator matters — a bare startsWith(OUT_DIR) would also match a SIBLING like
+  // "outEVIL/" (…/xani/outEVIL starts with …/xani/out), so "../outEVIL/x" would pass.
   const rel = normalize(clean).replace(/^([/\\])+/, '');
   const base = join(OUT_DIR, rel);
-  if (!base.startsWith(OUT_DIR)) return false;
+  if (base !== OUT_DIR && !base.startsWith(OUT_DIR + sep)) return false;
 
   for (const candidate of [base, join(base, 'index.html'), `${base}.html`]) {
     try {

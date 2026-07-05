@@ -68,9 +68,13 @@ function toApiSystem(system: unknown): Anthropic.MessageCreateParams['system'] {
   if (typeof system === 'string') return system;
   if (Array.isArray(system)) {
     return system.map((raw) => {
-      const b = raw as { type?: string; text?: string; cache?: boolean };
+      // The block may carry the internal `cache` flag OR an already-converted
+      // `cache_control` (runAgentTurn converts before this runs). Honour EITHER —
+      // reading only `cache` silently dropped caching on the agent path, so the
+      // stable system block the two-block design caches was never actually cached.
+      const b = raw as { type?: string; text?: string; cache?: boolean; cache_control?: { type: 'ephemeral' } };
       const base = { type: 'text' as const, text: b.text ?? '' };
-      return b.cache ? { ...base, cache_control: { type: 'ephemeral' as const } } : base;
+      return b.cache || b.cache_control ? { ...base, cache_control: { type: 'ephemeral' as const } } : base;
     }) as Anthropic.MessageCreateParams['system'];
   }
   return system as Anthropic.MessageCreateParams['system'];

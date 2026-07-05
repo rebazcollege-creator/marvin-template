@@ -17,6 +17,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
+import { CliStreamAccumulator } from './cli-stream.ts';
 
 const GEMINI_KEY = (): string => process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
 const GEMINI_MODEL = (): string => process.env.GEMINI_MODEL || 'gemini-2.0-flash';
@@ -117,8 +118,14 @@ function cliModel(model?: string): string {
   return 'haiku'; // triage/drafts default — fast + cheap on the subscription
 }
 
-/** Spawn `claude -p`, feed the prompt on stdin, return the assistant text. */
-function runClaude(args: string[], input: string): Promise<string> {
+/**
+ * Spawn `claude -p` in stream-json mode, feed the prompt on stdin, and stream the
+ * assistant's text out through onText as it is generated. Returns the full text.
+ *
+ * This is the difference between "blank screen for 5–20s then a blob" and "words
+ * appear as MARVIN thinks" — on the logged-in subscription, no API key.
+ */
+function runClaudeStream(args: string[], input: string, onText?: (t: string) => void): Promise<string> {
   return new Promise((resolve, reject) => {
     // Strip Anthropic API-key env so the CLI authenticates with the logged-in Claude
     // subscription (OAuth) instead of a stale/dead ANTHROPIC_API_KEY — otherwise the CLI
@@ -128,16 +135,15 @@ function runClaude(args: string[], input: string): Promise<string> {
     delete env.ANTHROPIC_AUTH_TOKEN;
     // Run in the user's HOME, not a temp dir: Claude Code shows a one-time "trust this
     // folder" prompt for unknown dirs, and in headless (-p) mode it can't answer it and
-    // exits 1. Home is trusted on first interactive run, so -p works. (tmpdir is never
-    // trusted → every call failed.) Home has no project CLAUDE.md to pollute the task.
+    // exits 1. Home is trusted on first interactive run, so -p works.
     const child = spawn(CLAUDE_BIN(), args, { env, cwd: homedir() });
-    let out = '';
+    const acc = new CliStreamAccumulator(onText);
     let err = '';
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
       reject(new Error('claude cli timed out'));
     }, 120_000);
-    child.stdout.on('data', (d) => (out += d));
+    child.stdout.on('data', (d) => acc.push(d.toString()));
     child.stderr.on('data', (d) => (err += d));
     child.on('error', (e) => {
       clearTimeout(timer);
@@ -145,19 +151,13 @@ function runClaude(args: string[], input: string): Promise<string> {
     });
     child.on('close', (code) => {
       clearTimeout(timer);
-      // Claude -p writes its own error to STDOUT (as JSON) on failure — surface both streams.
-      let j: { result?: string; is_error?: boolean; error?: string; subtype?: string } | null = null;
-      try {
-        j = JSON.parse(out);
-      } catch {
-        /* not JSON */
-      }
-      if (code !== 0 || j?.is_error) {
-        const detail = (j?.error || j?.result || j?.subtype || err || out || '(no output)').toString().slice(0, 400);
+      acc.end();
+      const modelError = acc.errored;
+      if (code !== 0 || modelError) {
+        const detail = (modelError || err || acc.finalText() || '(no output)').toString().slice(0, 400);
         return reject(new Error(`claude cli exited ${code}: ${detail}`));
       }
-      if (j && typeof j.result === 'string') return resolve(j.result);
-      resolve(out.trim()); // plain-text output (no --output-format json)
+      resolve(acc.finalText());
     });
     child.stdin.write(input);
     child.stdin.end();
@@ -166,7 +166,8 @@ function runClaude(args: string[], input: string): Promise<string> {
 
 /**
  * Run one generation through the Claude Code CLI (your logged-in subscription).
- * Flattens the Anthropic-shaped system + messages into a single prompt (text-only).
+ * Flattens the Anthropic-shaped system + messages into a single prompt and streams
+ * the answer token-by-token (text-only — tool use arrives via MCP in a later step).
  */
 export async function claudeCliGenerate(
   params: { system?: unknown; messages: { role: string; content: unknown }[]; max_tokens?: number; model?: string },
@@ -178,12 +179,17 @@ export async function claudeCliGenerate(
     .filter((l) => l.trim().length > 3)
     .join('\n\n');
   const prompt = [sys, convo].filter(Boolean).join('\n\n---\n\n') || ' ';
-  // --strict-mcp-config with no --mcp-config = load NO MCP servers: much faster cold start
-  // and avoids the "1 setup issue: MCP" hang, since triage/drafts never need tools anyway.
-  const args = ['-p', '--output-format', 'json', '--strict-mcp-config', '--model', cliModel(params.model)];
-  const text = await runClaude(args, prompt);
-  if (onText && text) onText(text);
-  return text;
+  // stream-json + partial messages = real token streaming. --strict-mcp-config with no
+  // --mcp-config loads NO MCP servers (fast cold start; tools land in the MCP step).
+  const args = [
+    '-p',
+    '--output-format', 'stream-json',
+    '--include-partial-messages',
+    '--verbose', // required by the CLI for stream-json on -p
+    '--strict-mcp-config',
+    '--model', cliModel(params.model),
+  ];
+  return runClaudeStream(args, prompt, onText);
 }
 
 /** Flatten Anthropic-style system (string or SystemBlock[]) to plain text. */

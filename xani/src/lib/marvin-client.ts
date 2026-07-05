@@ -462,6 +462,26 @@ export async function requestDraft(p: {
 }
 
 /** True if the runtime (sidecar) is reachable. Used by the sidebar status dot. */
+export interface SlackMatch { workspace: string; workspaceName: string; channel: string; user: string; text: string; ts: string; permalink: string }
+export interface LookupResult {
+  email: { connected: boolean; messages: { id: string; account: string; from: string; subject: string; snippet: string; receivedAt: string }[]; error?: string };
+  slack: { connected: boolean; matches: SlackMatch[]; error?: string };
+  error?: string;
+}
+/** Search the user's OWN email + Slack together (read-only, sidecar-side). */
+export async function lookup(query: string): Promise<LookupResult> {
+  try {
+    const r = await fetch(`${SIDECAR_URL}/lookup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    return (await r.json()) as LookupResult;
+  } catch {
+    return { email: { connected: false, messages: [] }, slack: { connected: false, matches: [] }, error: 'unreachable' };
+  }
+}
+
 export interface WebSearchResult { title: string; url: string; snippet: string; age?: string }
 /** Ask the sidecar to search the web (Brave). Safe: the sidecar fetches; the model
  *  never gets a tool. Returns {ok:false, error:'no_key'} when no key is configured. */

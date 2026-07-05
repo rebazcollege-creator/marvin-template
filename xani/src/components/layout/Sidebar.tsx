@@ -13,6 +13,7 @@ type Studio = { label: string; href: string; dot: string };
 
 const PRIMARY: Item[] = [
   { label: 'Home', href: '/', icon: 'home' },
+  { label: 'Find', href: '/find', icon: 'find' },
   { label: 'Inbox', href: '/inbox', icon: 'inbox' },
   { label: 'Drive', href: '/drive', icon: 'drive' },
   { label: 'Trello', href: '/trello', icon: 'trello' },
@@ -43,6 +44,7 @@ function Icon({ name }: { name: string }) {
   const p = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.6, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   switch (name) {
     case 'home': return (<svg {...p}><path d="M3 10.5 12 4l9 6.5" /><path d="M5 9.5V20h14V9.5" /></svg>);
+    case 'find': return (<svg {...p}><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>);
     case 'inbox': return (<svg {...p}><path d="M4 13h4l2 3h4l2-3h4" /><path d="M4 13 6 5h12l2 8v6H4z" /></svg>);
     case 'drive': return (<svg {...p}><path d="M8 4h8l4 7-4 7H8L4 11z" /></svg>);
     case 'trello': return (<svg {...p}><rect x="4" y="4" width="16" height="16" rx="2" /><rect x="7" y="7" width="3.5" height="9" rx="1" /><rect x="13.5" y="7" width="3.5" height="5" rx="1" /></svg>);

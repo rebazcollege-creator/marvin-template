@@ -34,6 +34,8 @@ import {
   getGithub,
   executeAction,
   markSlackRead,
+  searchEmail,
+  searchSlack,
 } from './connectors.ts';
 import type { ChatRequest, StreamEvent, ProposedMemory, ActPayload, MailboxAction, InboxTriage, SlackTriage, TriagedSlack, SlackHistory, EmailVerdict } from '../src/lib/marvin-protocol.ts';
 
@@ -884,6 +886,23 @@ const server = createServer(async (req, res) => {
 
   if (req.method === 'GET' && req.url === '/creds/status') {
     return json(res, 200, credStatus());
+  }
+
+  // Search across the user's OWN world — email + Slack together, in one call. The
+  // sidecar does the searching (read-only); the model never gets a tool. This is the
+  // cross-platform link ("did Sarah reply — email or Slack?") from the brief.
+  if (req.method === 'POST' && req.url === '/lookup') {
+    try {
+      const { query } = JSON.parse(await readBody(req)) as { query?: string };
+      const q = String(query ?? '');
+      const [email, slack] = await Promise.all([
+        searchEmail(q).catch((e) => ({ connected: false, messages: [], error: (e as Error).message })),
+        searchSlack(q).catch((e) => ({ connected: false, matches: [], error: (e as Error).message })),
+      ]);
+      return json(res, 200, { email, slack });
+    } catch (err) {
+      return json(res, 400, { email: { connected: false, messages: [] }, slack: { connected: false, matches: [] }, error: (err as Error).message });
+    }
   }
 
   // Server-side web search (Brave) — the sidecar fetches sources and hands them to the

@@ -15,6 +15,7 @@ type Item = { label: string; href: string; keywords?: string };
 
 const NAV: Item[] = [
   { label: 'Home / Briefing', href: '/' },
+  { label: 'Find — search email & Slack', href: '/find', keywords: 'search find lookup did reply across' },
   { label: 'Inbox', href: '/inbox', keywords: 'email gmail mail' },
   { label: 'Drive', href: '/drive', keywords: 'files documents' },
   { label: 'Trello', href: '/trello', keywords: 'cards board tasks' },

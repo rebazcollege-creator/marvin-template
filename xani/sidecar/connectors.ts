@@ -321,6 +321,86 @@ export async function getInbox(folder = 'inbox', cursorRaw = ''): Promise<InboxD
   return data;
 }
 
+/**
+ * Search across all connected Gmail accounts with a raw Gmail query (the same `q=`
+ * operators the Gmail UI uses: from:, subject:, "quoted", after:…). Read-only; the
+ * model never runs this — the sidecar does, and hands rows back as context. This is
+ * the safe half of "MARVIN, did Sarah reply?" and the cross-platform link to Slack.
+ */
+export async function searchEmail(query: string, perAccount = 6): Promise<{ connected: boolean; messages: InboxData['messages']; error?: string }> {
+  const q = (query ?? '').trim().slice(0, 300);
+  const accounts = GMAIL_ACCOUNTS.map((a) => ({ a, c: gmailCreds(a.n) })).filter((x) => x.c);
+  if (accounts.length === 0) return { connected: false, messages: [] };
+  if (!q) return { connected: true, messages: [] };
+  const errs: string[] = [];
+  const per = await Promise.all(
+    accounts.map(async ({ a, c }) => {
+      const { token, error } = await googleToken(c!.id, c!.secret, c!.refresh);
+      if (!token) { errs.push(`${a.role}: ${error ?? 'auth failed'}`); return [] as InboxData['messages']; }
+      try {
+        const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=${perAccount}`;
+        const list = await fetchT(listUrl, { headers: { Authorization: `Bearer ${token}` } });
+        if (!list.ok) { errs.push(`${a.role}: Gmail API ${list.status}`); return []; }
+        const lj = (await list.json()) as { messages?: { id: string }[] };
+        const ids = (lj.messages ?? []).map((m) => m.id);
+        if (ids.length === 0) return [];
+        let msgs = await gmailBatchGetMetadata(token, ids);
+        if (!msgs) {
+          msgs = (await mapPool(ids, 8, async (id) => {
+            const det = await fetchT(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?${META_PARAMS}`, { headers: { Authorization: `Bearer ${token}` } });
+            return det.ok ? ((await det.json()) as Record<string, unknown>) : null;
+          })).filter((x): x is Record<string, unknown> => x != null);
+        }
+        return msgs.map((dj) => rowFromMessage(dj, a.role)).filter((r): r is InboxData['messages'][number] => r != null);
+      } catch (e) {
+        errs.push(`${a.role}: ${(e as Error).message}`);
+        return [];
+      }
+    }),
+  );
+  const messages = per.flat().sort((x, y) => (y.receivedAt > x.receivedAt ? 1 : y.receivedAt < x.receivedAt ? -1 : 0));
+  return { connected: true, messages, error: messages.length === 0 && errs.length ? errs[0] : undefined };
+}
+
+export interface SlackMatch { workspace: string; workspaceName: string; channel: string; user: string; text: string; ts: string; permalink: string; }
+/**
+ * Search Slack messages across connected workspaces. Needs a USER token (xoxp) with
+ * search:read — a bot token can't search. Read-only, sidecar-side. Graceful when the
+ * scope/token is missing (returns an error string, never throws).
+ */
+export async function searchSlack(query: string, limit = 8): Promise<{ connected: boolean; matches: SlackMatch[]; error?: string }> {
+  const q = (query ?? '').trim().slice(0, 300);
+  const active = SLACK_WORKSPACES.filter((w) => slackReadToken(w) && slackTokenKind(w) === 'user');
+  if (active.length === 0) return { connected: false, matches: [] };
+  if (!q) return { connected: true, matches: [] };
+  const matches: SlackMatch[] = [];
+  const errs: string[] = [];
+  await Promise.all(
+    active.map(async (w) => {
+      try {
+        const client = new WebClient(slackReadToken(w), SLACK_WC_OPTS);
+        const r = await client.search.messages({ query: q, count: limit, sort: 'timestamp' });
+        for (const m of r.messages?.matches ?? []) {
+          matches.push({
+            workspace: w.role,
+            workspaceName: w.name,
+            channel: (m.channel as { name?: string } | undefined)?.name ?? '',
+            user: m.username ?? (m.user as string | undefined) ?? '',
+            text: m.text ?? '',
+            ts: m.ts ?? '',
+            permalink: m.permalink ?? '',
+          });
+        }
+      } catch (e) {
+        // A missing search:read scope surfaces here — say so, don't crash the lookup.
+        errs.push(`${w.name}: ${(e as Error).message}`);
+      }
+    }),
+  );
+  matches.sort((a, b) => Number(b.ts) - Number(a.ts));
+  return { connected: true, matches: matches.slice(0, limit * active.length), error: matches.length === 0 && errs.length ? errs[0] : undefined };
+}
+
 /** Decode a base64url Gmail body part to text. */
 function decodeB64(data: string): string {
   try {

@@ -12,7 +12,7 @@ import { KV_FILE } from './paths.ts';
  * Under Tauri the renderer keeps using the Rust SQLite kv instead — same contract.
  */
 
-const MAX_VALUE_BYTES = 1_000_000; // 1MB per key — far above any real xani.* payload
+const MAX_VALUE_BYTES = 8_000_000; // 8MB per key — chat histories can grow past 1MB
 const MAX_KEYS = 5_000;
 
 let store: Record<string, string> | null = null;
@@ -53,7 +53,9 @@ export function kvAll(): Record<string, string> {
 }
 
 export function kvSet(key: string, value: string): boolean {
-  if (!kvAcceptableKey(key) || typeof value !== 'string' || value.length > MAX_VALUE_BYTES) return false;
+  // Byte length, not UTF-16 code units — Kurdish/Arabic/German text is 2-3 bytes/char,
+  // so value.length would under-count and let a much larger payload through.
+  if (!kvAcceptableKey(key) || typeof value !== 'string' || Buffer.byteLength(value, 'utf8') > MAX_VALUE_BYTES) return false;
   const s = load();
   if (!(key in s) && Object.keys(s).length >= MAX_KEYS) return false;
   s[key] = value;
@@ -68,13 +70,17 @@ export function kvRemove(key: string): boolean {
   return true;
 }
 
-/** Bulk import (localStorage → sidecar migration). Returns how many keys were accepted. */
-export function kvImport(entries: Record<string, unknown>): number {
-  let n = 0;
+/**
+ * Bulk import (localStorage → sidecar migration / dirty-ledger replay). Returns the
+ * list of keys ACTUALLY accepted — callers clear their retry ledger only for these, so
+ * a rejected (e.g. oversized) key isn't marked done and then reverted to a stale copy.
+ */
+export function kvImport(entries: Record<string, unknown>): string[] {
+  const accepted: string[] = [];
   for (const [k, v] of Object.entries(entries ?? {})) {
-    if (typeof v === 'string' && kvSet(k, v)) n++;
+    if (typeof v === 'string' && kvSet(k, v)) accepted.push(k);
   }
-  return n;
+  return accepted;
 }
 
 /** Flush any pending debounce now (used by the nightly backup for a consistent snapshot). */

@@ -82,6 +82,32 @@ function clearDirty(keys: string[]): void {
     /* ledger is best-effort */
   }
 }
+/**
+ * Clear a dirty mark ONLY if the durable localStorage mirror still holds exactly what we
+ * synced to the server (for a set) or the key is still absent (for a remove). If a newer
+ * write/remove landed after we captured the snapshot, its mark must survive to be replayed
+ * — otherwise a concurrent write done right after startup would be silently rolled back.
+ */
+function clearDirtyIfUnchanged(key: string, expected: string | null): void {
+  try {
+    if (window.localStorage.getItem(key) === expected) clearDirty([key]);
+  } catch {
+    /* best effort */
+  }
+}
+
+/** The sidecar's per-boot kv token, injected into the app's own HTML (same-origin only). */
+function kvToken(): string {
+  if (typeof document === 'undefined') return '';
+  return document.querySelector('meta[name="xani-kv-token"]')?.getAttribute('content') ?? '';
+}
+function kvHeaders(withJson = false): Record<string, string> {
+  const h: Record<string, string> = {};
+  const t = kvToken();
+  if (t) h['X-Xani-Token'] = t;
+  if (withJson) h['Content-Type'] = 'application/json';
+  return h;
+}
 
 async function backendLoadAll(): Promise<[string, string][]> {
   if (isTauri()) {
@@ -89,7 +115,8 @@ async function backendLoadAll(): Promise<[string, string][]> {
   }
   const local = localEntries();
   try {
-    const r = await fetch(`${SIDECAR_URL}/kv/all`, { signal: AbortSignal.timeout(2000) });
+    // No token (dev mode: UI served by Next, not the sidecar) → 401 → localStorage fallback.
+    const r = await fetch(`${SIDECAR_URL}/kv/all`, { headers: kvHeaders(), signal: AbortSignal.timeout(2000) });
     if (!r.ok) throw new Error(`kv ${r.status}`);
     const j = (await r.json()) as { kv?: Record<string, string> };
     const server = j.kv ?? {};
@@ -97,6 +124,8 @@ async function backendLoadAll(): Promise<[string, string][]> {
     const dirty = readDirty();
     // Merge: local as base; server overlays EXCEPT keys we changed while it was
     // unreachable (their local value is newer). Removed-while-down keys stay removed.
+    // NOTE: this is last-offline-writer-wins, not newest-wins (no timestamps) — a fine
+    // trade-off for a single-user, usually single-window app.
     const merged = new Map<string, string>(local);
     for (const [k, v] of Object.entries(server)) {
       if (!(k in dirty)) merged.set(k, v);
@@ -104,8 +133,10 @@ async function backendLoadAll(): Promise<[string, string][]> {
     for (const [k, op] of Object.entries(dirty)) {
       if (op === 'remove') merged.delete(k);
     }
-    // Replay upward: only-local keys (first migration) + dirty sets in one bulk
-    // import; dirty removes individually. Ledger entries clear only on success.
+    // Replay upward: only-local keys (first migration) + dirty sets in one bulk import;
+    // dirty removes individually. A mark clears only if the server ACCEPTED the key AND
+    // the mirror still holds the synced value (clearDirtyIfUnchanged) — so a rejected
+    // (oversized) key or a value changed mid-flight keeps its mark and is retried.
     const toPush = new Map<string, string>(local.filter(([k]) => !(k in server)));
     for (const [k, op] of Object.entries(dirty)) {
       if (op === 'set') {
@@ -116,20 +147,24 @@ async function backendLoadAll(): Promise<[string, string][]> {
     if (toPush.size) {
       void fetch(`${SIDECAR_URL}/kv/import`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: kvHeaders(true),
         body: JSON.stringify({ kv: Object.fromEntries(toPush) }),
       })
-        .then((res) => { if (res.ok) clearDirty([...toPush.keys()]); })
+        .then(async (res) => {
+          if (!res.ok) return;
+          const body = (await res.json().catch(() => ({}))) as { accepted?: string[] };
+          for (const k of body.accepted ?? []) clearDirtyIfUnchanged(k, toPush.get(k) ?? null);
+        })
         .catch(() => undefined);
     }
     for (const [k, op] of Object.entries(dirty)) {
       if (op === 'remove') {
         void fetch(`${SIDECAR_URL}/kv/remove`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: kvHeaders(true),
           body: JSON.stringify({ key: k }),
         })
-          .then((res) => { if (res.ok) clearDirty([k]); })
+          .then((res) => { if (res.ok) clearDirtyIfUnchanged(k, null); })
           .catch(() => undefined);
       }
     }
@@ -160,11 +195,11 @@ async function backendSet(key: string, value: string): Promise<void> {
   try {
     const r = await fetch(`${SIDECAR_URL}/kv/set`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: kvHeaders(true),
       body: JSON.stringify({ key, value }),
     });
     if (!r.ok) throw new Error(`kv/set ${r.status}`);
-    clearDirty([key]);
+    clearDirtyIfUnchanged(key, value);
   } catch (e) {
     markDirty(key, 'set');
     throw e; // writeJson surfaces this as a storage error — the value is safe locally
@@ -181,11 +216,11 @@ async function backendRemove(key: string): Promise<void> {
   try {
     const r = await fetch(`${SIDECAR_URL}/kv/remove`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: kvHeaders(true),
       body: JSON.stringify({ key }),
     });
     if (!r.ok) throw new Error(`kv/remove ${r.status}`);
-    clearDirty([key]);
+    clearDirtyIfUnchanged(key, null);
   } catch {
     markDirty(key, 'remove'); // replayed on next hydrate; key stays gone locally
   }

@@ -17,6 +17,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { existsSync } from 'node:fs';
+import { StringDecoder } from 'node:string_decoder';
 import { CliStreamAccumulator } from './cli-stream.ts';
 
 const GEMINI_KEY = (): string => process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY || '';
@@ -138,12 +139,15 @@ function runClaudeStream(args: string[], input: string, onText?: (t: string) => 
     // exits 1. Home is trusted on first interactive run, so -p works.
     const child = spawn(CLAUDE_BIN(), args, { env, cwd: homedir() });
     const acc = new CliStreamAccumulator(onText);
+    // Decode across chunk boundaries: a 64KB pipe split landing mid-character would
+    // otherwise corrupt Rebaz's Kurdish/Arabic/German output (and the saved message).
+    const decoder = new StringDecoder('utf8');
     let err = '';
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
       reject(new Error('claude cli timed out'));
     }, 120_000);
-    child.stdout.on('data', (d) => acc.push(d.toString()));
+    child.stdout.on('data', (d) => acc.push(decoder.write(d as Buffer)));
     child.stderr.on('data', (d) => (err += d));
     child.on('error', (e) => {
       clearTimeout(timer);
@@ -151,6 +155,8 @@ function runClaudeStream(args: string[], input: string, onText?: (t: string) => 
     });
     child.on('close', (code) => {
       clearTimeout(timer);
+      const tail = decoder.end();
+      if (tail) acc.push(tail);
       acc.end();
       const modelError = acc.errored;
       if (code !== 0 || modelError) {

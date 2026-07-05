@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, statSync } from 'node:fs';
+import { createReadStream, existsSync, statSync, readFileSync } from 'node:fs';
 import { join, normalize, extname, sep } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
@@ -41,9 +41,27 @@ export function uiBuilt(): boolean {
   return existsSync(join(OUT_DIR, 'index.html'));
 }
 
-function send(res: ServerResponse, file: string, status = 200): void {
+function send(res: ServerResponse, file: string, status = 200, injectToken?: string): void {
+  const type = MIME[extname(file)] ?? 'application/octet-stream';
+  // Same-origin token delivery: inject the sidecar's per-boot kv token into the app's
+  // own HTML so the renderer can authenticate its /kv calls. HTML is served WITHOUT
+  // CORS headers (see the static branch in server.ts), so a cross-origin page cannot
+  // read this token out of the response.
+  if (injectToken && type.startsWith('text/html')) {
+    try {
+      const html = readFileSync(file, 'utf8').replace(
+        /<\/head>/i,
+        `<meta name="xani-kv-token" content="${injectToken}"></head>`,
+      );
+      res.writeHead(status, { 'Content-Type': type, 'Cache-Control': 'no-cache' });
+      res.end(html);
+      return;
+    } catch {
+      /* fall through to streaming the file unmodified */
+    }
+  }
   res.writeHead(status, {
-    'Content-Type': MIME[extname(file)] ?? 'application/octet-stream',
+    'Content-Type': type,
     // Hashed Next assets are immutable; HTML must always revalidate.
     'Cache-Control': file.includes('/_next/') ? 'public, max-age=31536000, immutable' : 'no-cache',
   });
@@ -53,10 +71,16 @@ function send(res: ServerResponse, file: string, status = 200): void {
 /**
  * Try to serve `urlPath` from out/. Returns true if a response was sent.
  * Resolution mirrors Next's trailingSlash export: /inbox → /inbox/index.html.
+ * `kvToken`, when given, is injected into served HTML for same-origin kv auth.
  */
-export function serveStatic(req: IncomingMessage, res: ServerResponse, urlPath: string): boolean {
+export function serveStatic(req: IncomingMessage, res: ServerResponse, urlPath: string, kvToken?: string): boolean {
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
-  const clean = decodeURIComponent(urlPath.split('?')[0] ?? '/');
+  let clean: string;
+  try {
+    clean = decodeURIComponent(urlPath.split('?')[0] ?? '/');
+  } catch {
+    return false; // a malformed %-escape (e.g. /%c0) must not throw and crash the runtime
+  }
   if (clean.includes('\0')) return false;
 
   if (!uiBuilt()) {
@@ -83,7 +107,7 @@ export function serveStatic(req: IncomingMessage, res: ServerResponse, urlPath: 
   for (const candidate of [base, join(base, 'index.html'), `${base}.html`]) {
     try {
       if (existsSync(candidate) && statSync(candidate).isFile()) {
-        send(res, candidate);
+        send(res, candidate, 200, kvToken);
         return true;
       }
     } catch {
@@ -93,7 +117,7 @@ export function serveStatic(req: IncomingMessage, res: ServerResponse, urlPath: 
 
   const notFound = join(OUT_DIR, '404.html');
   if (existsSync(notFound)) {
-    send(res, notFound, 404);
+    send(res, notFound, 404, kvToken);
     return true;
   }
   return false;

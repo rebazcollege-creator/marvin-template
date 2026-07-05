@@ -127,9 +127,10 @@ export function Sidebar() {
       runtimeHealth().then((h) => {
         if (!alive) return;
         setRuntimeUp(h.up);
-        // Capability honesty: say plainly when chat runs text-only (CLI/Gemini),
-        // instead of letting account-lookups and learning fail silently.
-        setAiNote(h.up && h.tools === false ? 'AI is text-only right now' : undefined);
+        // Capability honesty: say plainly when chat runs text-only (CLI/Gemini). Only when
+        // a provider actually exists — 'none' isn't "text-only", it's "no AI configured".
+        const hasProvider = Boolean(h.provider) && h.provider !== 'none';
+        setAiNote(h.up && hasProvider && h.tools === false ? 'AI is text-only right now' : undefined);
       });
     check();
     const id = window.setInterval(check, 15000);

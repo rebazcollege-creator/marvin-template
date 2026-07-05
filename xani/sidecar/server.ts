@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { spawnSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { writeFileSync, unlinkSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -52,6 +53,10 @@ loadCreds();
 const PORT = Number(process.env.MARVIN_SIDECAR_PORT ?? 8787);
 const apiKey = process.env.ANTHROPIC_API_KEY ?? '';
 const anthropic = apiKey ? new Anthropic({ apiKey }) : null;
+
+/** Per-boot capability token gating /kv (MARVIN's brain). Injected only into the app's
+ *  own same-origin HTML, so cross-origin pages and other local processes can't call kv. */
+const KV_TOKEN = randomBytes(24).toString('base64url');
 
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -595,7 +600,7 @@ const server = createServer(async (req, res) => {
       provider: prov,
       capabilities: {
         tools: prov === 'anthropic',
-        streaming: prov === 'anthropic',
+        streaming: prov === 'anthropic' || prov === 'cli', // the CLI path streams token deltas
         note: prov === 'anthropic' || prov === 'none' ? undefined
           : 'Text-only provider: chat can’t read your accounts mid-conversation or save learnings.',
       },
@@ -833,33 +838,47 @@ const server = createServer(async (req, res) => {
 
   // Sidecar-owned kv store — persistence for the renderer outside Tauri, so MARVIN's
   // brain (memories, settings, loops, chats) no longer lives in browser localStorage.
-  if (req.method === 'GET' && req.url === '/kv/all') {
-    return json(res, 200, { ok: true, kv: kvAll() });
-  }
-  if (req.method === 'POST' && req.url === '/kv/set') {
-    try {
-      const { key, value } = JSON.parse(await readBody(req)) as { key?: string; value?: string };
-      const ok = kvSet(String(key ?? ''), String(value ?? ''));
-      return json(res, ok ? 200 : 400, ok ? { ok: true } : { ok: false, error: 'Rejected key or oversized value.' });
-    } catch (err) {
-      return json(res, 400, { ok: false, error: (err as Error).message });
+  //
+  // This holds the memory store, which feeds MARVIN's system prompt — a write here can
+  // steer the model. So /kv is gated on the per-boot capability token (KV_TOKEN),
+  // delivered ONLY into the app's own same-origin HTML (see static.ts; that HTML is
+  // served without CORS headers, so a cross-origin page can't scrape it). Requests
+  // without the token — a cross-origin page, or another local process that hasn't read
+  // the app's HTML — are refused, closing the write-gate-bypass / prompt-poisoning hole.
+  if (req.url?.startsWith('/kv/')) {
+    if ((req.headers['x-xani-token'] ?? '') !== KV_TOKEN) {
+      return json(res, 401, { ok: false, error: 'Missing or invalid Xanî token.' });
     }
-  }
-  if (req.method === 'POST' && req.url === '/kv/remove') {
-    try {
-      const { key } = JSON.parse(await readBody(req)) as { key?: string };
-      return json(res, 200, { ok: kvRemove(String(key ?? '')) });
-    } catch (err) {
-      return json(res, 400, { ok: false, error: (err as Error).message });
+    if (req.method === 'GET' && req.url === '/kv/all') {
+      return json(res, 200, { ok: true, kv: kvAll() });
     }
-  }
-  if (req.method === 'POST' && req.url === '/kv/import') {
-    try {
-      const { kv } = JSON.parse(await readBody(req)) as { kv?: Record<string, unknown> };
-      return json(res, 200, { ok: true, imported: kvImport(kv ?? {}) });
-    } catch (err) {
-      return json(res, 400, { ok: false, error: (err as Error).message });
+    if (req.method === 'POST' && req.url === '/kv/set') {
+      try {
+        const { key, value } = JSON.parse(await readBody(req)) as { key?: string; value?: string };
+        const ok = kvSet(String(key ?? ''), String(value ?? ''));
+        return json(res, ok ? 200 : 400, ok ? { ok: true } : { ok: false, error: 'Rejected key or oversized value.' });
+      } catch (err) {
+        return json(res, 400, { ok: false, error: (err as Error).message });
+      }
     }
+    if (req.method === 'POST' && req.url === '/kv/remove') {
+      try {
+        const { key } = JSON.parse(await readBody(req)) as { key?: string };
+        return json(res, 200, { ok: kvRemove(String(key ?? '')) });
+      } catch (err) {
+        return json(res, 400, { ok: false, error: (err as Error).message });
+      }
+    }
+    if (req.method === 'POST' && req.url === '/kv/import') {
+      try {
+        const { kv } = JSON.parse(await readBody(req)) as { kv?: Record<string, unknown> };
+        const accepted = kvImport(kv ?? {}); // exact keys stored — client clears only these
+        return json(res, 200, { ok: true, accepted });
+      } catch (err) {
+        return json(res, 400, { ok: false, error: (err as Error).message });
+      }
+    }
+    return json(res, 404, { ok: false, error: 'Unknown kv endpoint.' });
   }
 
   if (req.method === 'GET' && req.url === '/creds/status') {
@@ -1120,7 +1139,12 @@ const server = createServer(async (req, res) => {
   }
 
   // Single-port service mode: anything that isn't an API route is the built UI.
-  if (serveStatic(req, res, req.url ?? '/')) return;
+  // Strip the reflected CORS header first — the HTML carries the kv token, and it must
+  // only be readable same-origin (a cross-origin page must not be able to fetch+scrape it).
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    res.removeHeader('Access-Control-Allow-Origin');
+    if (serveStatic(req, res, req.url ?? '/', KV_TOKEN)) return;
+  }
 
   res.writeHead(404).end('Not found');
 });

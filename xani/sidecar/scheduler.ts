@@ -38,7 +38,16 @@ export function runNightlyBackup(now: Date = new Date()): boolean {
         return {};
       }
     };
-    writeFileSync(file, JSON.stringify({ at: now.toISOString(), kv: read(KV_FILE), creds: read(CREDS_FILE) }), { mode: 0o600 });
+    const kv = read(KV_FILE);
+    const creds = read(CREDS_FILE);
+    // Never let an empty snapshot (kv.json corrupt/deleted, or a never-opened fresh
+    // machine) rotate away good history: if there's genuinely nothing to save AND we
+    // already hold at least one backup, skip. A first-ever empty run still writes one.
+    const existing = readdirSync(BACKUPS_DIR).filter((f) => f.startsWith('backup-') && f.endsWith('.json'));
+    if (Object.keys(kv).length === 0 && Object.keys(creds).length === 0 && existing.length > 0) {
+      return false;
+    }
+    writeFileSync(file, JSON.stringify({ at: now.toISOString(), kv, creds }), { mode: 0o600 });
     // Retention: keep the newest KEEP_BACKUPS files.
     const all = readdirSync(BACKUPS_DIR).filter((f) => f.startsWith('backup-') && f.endsWith('.json')).sort();
     for (const old of all.slice(0, Math.max(0, all.length - KEEP_BACKUPS))) {

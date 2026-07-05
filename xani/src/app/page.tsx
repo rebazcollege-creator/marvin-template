@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady, readJson, writeJson } from '@/lib/storage';
 import { fetchBriefingData, fetchInbox, fetchMessageBody, fetchSlack, peekData, PATHS } from '@/lib/marvin-data';
-import { fetchInboxTriage, fetchSlackTriage, getBrief, requestDraft, sortDump, summarizeItem } from '@/lib/marvin-client';
+import { fetchInboxTriage, fetchSlackTriage, getBrief, getWaiting, requestDraft, sortDump, summarizeItem } from '@/lib/marvin-client';
 import { enqueueApproval } from '@/lib/approvals';
-import type { BriefingData, InboxData, SlackData, TriagedEmail, TriagedSlack } from '@/lib/marvin-protocol';
+import type { BriefingData, InboxData, SlackData, TriagedEmail, TriagedSlack, WaitingItem } from '@/lib/marvin-protocol';
 import { activeLoops, attachLoopRef, captureLoop, completeLoop, snoozeLoop, refineLoop, type OpenLoop } from '@/lib/open-loops';
 import { syncOpenLoops } from '@/lib/loops-monitor';
 import { recordTriageCorrection, triageLearnings, learnedCount } from '@/lib/triage-learning';
@@ -251,6 +251,8 @@ export default function HomePage() {
   const [learned, setLearned] = useState(0);
   const [overwhelmed, setOverwhelmed] = useState(false);
   const [brief, setBrief] = useState('');
+  const [waiting, setWaiting] = useState<WaitingItem[]>([]);
+  const [showAllWaiting, setShowAllWaiting] = useState(false);
   // ADHD Rule 1 — a primary surface shows at most 3 items; the rest are one tap away,
   // so a busy morning is a short calm list, not an endless scroll.
   const HOME_CAP = 3;
@@ -302,6 +304,9 @@ export default function HomePage() {
       // synthesised server-side from inbox/slack "act" items + calendar + urgent Trello.
       // SWR — instant if today's is cached, regenerates in the background otherwise.
       void getBrief(learnings).then((b) => { if (b.ok && b.text) setBrief(b.text); });
+
+      // Silence detection: emails he sent that went quiet and still want a reply.
+      void getWaiting().then((w) => { if (w?.connected) setWaiting(w.items); });
       void syncOpenLoops().then(reloadLoops); // pull live Trello commitments into Open Loops
 
       // Seed triage from the last session so Home is populated on open; then revalidate.
@@ -552,6 +557,34 @@ export default function HomePage() {
     }
   };
 
+  // Draft a gentle follow-up on a thread that went quiet. Routes through Approvals —
+  // nothing sends without Rebaz's nod. Threaded by threadId so it lands in the same convo.
+  const draftNudge = async (item: WaitingItem) => {
+    flashMsg('MARVIN is drafting a nudge…');
+    const who = item.to || 'them';
+    const context =
+      `I emailed ${who} ${item.quietDays} day${item.quietDays === 1 ? '' : 's'} ago and haven't heard back. ` +
+      `Subject: "${item.subject}". My message was: ${item.snippet}. ` +
+      `Write a short, warm follow-up chasing a reply — no guilt-tripping, just a gentle nudge.`;
+    const r = await requestDraft({ account: item.account, from: who, subject: item.subject, body: context, medium: 'email', voice: voicePromptFor('email', 'all') });
+    if (!r.ok || !r.draft) { flashMsg(`Draft failed: ${r.error ?? 'unknown error'}`); return; }
+    const reSubject = /^re:/i.test(item.subject) ? item.subject : `Re: ${item.subject}`;
+    enqueueApproval({
+      kind: 'email',
+      title: `Nudge ${who}`,
+      source: `Email · ${item.account}`,
+      preview: r.draft,
+      actionLabel: 'Send',
+      voiceKey: voiceKeyFor('email', 'all'),
+      payload: { kind: 'email', to: item.to, subject: reSubject, body: r.draft, account: item.account, threadId: item.threadId },
+    });
+    flashMsg('✍️ Nudge ready in Approvals — review & send.');
+  };
+  // Let it go — hide this one for the session (he's decided it doesn't need chasing).
+  const dismissWaiting = (item: WaitingItem) => {
+    setWaiting((cur) => cur.filter((w) => w.threadId !== item.threadId));
+  };
+
   return (
     <div className="mx-auto max-w-2xl px-8 pb-24 pt-10">
       {/* greeting + time */}
@@ -760,6 +793,36 @@ export default function HomePage() {
               <p className="mt-4 px-1 text-[12.5px] text-muted">{slackKnow} good to know · {slackFiled} filed away as noise.</p>
             )}
           </section>
+
+          {/* waiting on a reply — emails he sent that went quiet and still want an answer */}
+          {waiting.length > 0 && (
+            <section className="mt-10">
+              <div className="mb-4 flex items-baseline gap-3 px-1">
+                <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted">Still waiting on a reply</h2>
+                <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-2">{waiting.length}</span>
+              </div>
+              {(showAllWaiting ? waiting : waiting.slice(0, HOME_CAP)).map((w) => (
+                <div key={w.threadId} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <SourceBadge source="email" label={w.account} />
+                    <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-semibold text-muted">quiet {w.quietDays}d</span>
+                    {w.to && <span className="text-[13px] text-text-2">to {w.to}</span>}
+                  </div>
+                  <p className="mt-2 font-display text-[18px] leading-snug text-text">{w.subject}</p>
+                  {w.snippet && <p className="mt-1.5 text-[13px] leading-relaxed text-text-2">“{w.snippet.length > 160 ? `${w.snippet.slice(0, 157)}…` : w.snippet}”</p>}
+                  <div className="mt-4 flex flex-wrap gap-2.5">
+                    <button type="button" onClick={() => void draftNudge(w)} className="rounded-xl bg-accent px-4 py-2.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim">✍️ Draft a nudge</button>
+                    <button type="button" onClick={() => dismissWaiting(w)} className="rounded-xl border border-border-2 bg-surface-2 px-4 py-2.5 text-[13px] font-semibold text-text-2 transition hover:bg-hover">Let it go</button>
+                  </div>
+                </div>
+              ))}
+              {waiting.length > HOME_CAP && (
+                <button type="button" onClick={() => setShowAllWaiting((v) => !v)} className="px-1 text-[12.5px] font-semibold text-accent transition hover:underline">
+                  {showAllWaiting ? 'Show less' : `Show ${waiting.length - HOME_CAP} more`}
+                </button>
+              )}
+            </section>
+          )}
 
           {/* gentle resurfacing — a dropped thread returns as an invitation, never a scolding */}
           {stale && (

@@ -200,6 +200,30 @@ export interface SlackTriage {
   triaged: TriagedSlack[];
   error?: string;
 }
+
+// ── Silence detection: emails Rebaz sent that went quiet (GET /waiting) ──────
+/** A sent thread whose last word was Rebaz's and that has had no reply for a while —
+ *  the "you're still waiting on this" nudge. Built from sent-mail thread metadata,
+ *  then filtered by the model to only messages that actually expected a reply. */
+export interface WaitingItem {
+  /** Which Gmail account the thread lives in (personal / leadstories / …). */
+  account: string;
+  threadId: string;
+  /** Who Rebaz is waiting on (the To line of his last message). */
+  to: string;
+  subject: string;
+  /** Rebaz's last message in the thread (what he's awaiting a reply to). */
+  snippet: string;
+  /** ISO timestamp of Rebaz's last message. */
+  sentAt: string;
+  /** Whole days of silence since that message. */
+  quietDays: number;
+}
+export interface WaitingOnData {
+  connected: boolean;
+  items: WaitingItem[];
+  error?: string;
+}
 /** A page of full channel history (on-demand; isolates the rate-limited conversations.history). */
 export interface SlackHistory {
   ok: boolean;

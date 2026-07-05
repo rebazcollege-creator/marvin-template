@@ -1,6 +1,7 @@
 import { WebClient } from '@slack/web-api';
 import { sanitizeHeader, encodeSubject, sanitizeRecipients } from './mail.ts';
 import { htmlToText } from './html.ts';
+import type { ThreadMeta, ThreadMsgMeta } from './waiting.ts';
 import type {
   BriefingData,
   InboxData,
@@ -360,6 +361,64 @@ export async function searchEmail(query: string, perAccount = 6): Promise<{ conn
   );
   const messages = per.flat().sort((x, y) => (y.receivedAt > x.receivedAt ? 1 : y.receivedAt < x.receivedAt ? -1 : 0));
   return { connected: true, messages, error: messages.length === 0 && errs.length ? errs[0] : undefined };
+}
+
+/**
+ * Silence detection — fetch the metadata of Rebaz's recent SENT threads across all
+ * connected Gmail accounts, so pickAwaiting() (sidecar/waiting.ts) can decide which
+ * ones are still waiting on a reply. Read-only; cred-gated; never throws.
+ *
+ * Per account: list sent messages in the window, dedupe to unique threads, then fetch
+ * each thread's metadata (all its messages, with the SENT label marking Rebaz's own).
+ * Thread fetches run with bounded concurrency and are capped per account so a chatty
+ * mailbox can't fan out unboundedly.
+ */
+export async function getSentThreadsMeta(windowDays = 21, threadsPerAccount = 20): Promise<{ connected: boolean; threads: ThreadMeta[]; error?: string }> {
+  const accounts = GMAIL_ACCOUNTS.map((a) => ({ a, c: gmailCreds(a.n) })).filter((x) => x.c);
+  if (accounts.length === 0) return { connected: false, threads: [] };
+  const errs: string[] = [];
+  const per = await Promise.all(
+    accounts.map(async ({ a, c }) => {
+      const { token, error } = await googleToken(c!.id, c!.secret, c!.refresh);
+      if (!token) { errs.push(`${a.role}: ${error ?? 'auth failed'}`); return [] as ThreadMeta[]; }
+      try {
+        const q = `in:sent newer_than:${Math.max(1, Math.floor(windowDays))}d`;
+        const listUrl = `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=${threadsPerAccount * 2}`;
+        const list = await fetchT(listUrl, { headers: { Authorization: `Bearer ${token}` } });
+        if (!list.ok) { errs.push(`${a.role}: Gmail API ${list.status}`); return []; }
+        const lj = (await list.json()) as { messages?: { id: string; threadId: string }[] };
+        // Unique thread ids, preserving order (newest first), capped per account.
+        const threadIds: string[] = [];
+        const seen = new Set<string>();
+        for (const m of lj.messages ?? []) {
+          if (m.threadId && !seen.has(m.threadId)) { seen.add(m.threadId); threadIds.push(m.threadId); }
+          if (threadIds.length >= threadsPerAccount) break;
+        }
+        const threads = await mapPool(threadIds, 8, async (tid) => {
+          const tr = await fetchT(`https://gmail.googleapis.com/gmail/v1/users/me/threads/${tid}?${META_PARAMS}`, { headers: { Authorization: `Bearer ${token}` } });
+          if (!tr.ok) return null;
+          const tj = (await tr.json()) as { id?: string; messages?: { labelIds?: string[]; internalDate?: string; snippet?: string; payload?: { headers?: { name: string; value: string }[] } }[] };
+          const messages: ThreadMsgMeta[] = (tj.messages ?? []).map((mm) => {
+            const header = (name: string) => mm.payload?.headers?.find((h) => h.name.toLowerCase() === name)?.value ?? '';
+            return {
+              fromMe: (mm.labelIds ?? []).includes('SENT'),
+              internalDate: mm.internalDate ? Number(mm.internalDate) : 0,
+              to: header('to'),
+              subject: header('subject'),
+              snippet: mm.snippet ?? '',
+            };
+          });
+          return { account: a.role, threadId: tid, messages } as ThreadMeta;
+        });
+        return threads.filter((t): t is ThreadMeta => t != null);
+      } catch (e) {
+        errs.push(`${a.role}: ${(e as Error).message}`);
+        return [];
+      }
+    }),
+  );
+  const threads = per.flat();
+  return { connected: true, threads, error: threads.length === 0 && errs.length ? errs[0] : undefined };
 }
 
 export interface SlackMatch { workspace: string; workspaceName: string; channel: string; user: string; text: string; ts: string; permalink: string; }

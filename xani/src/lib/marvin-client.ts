@@ -8,6 +8,7 @@ import type {
   ProposedMemory,
   SlackTriage,
   StreamEvent,
+  WaitingOnData,
 } from '@/lib/marvin-protocol';
 
 /**
@@ -510,6 +511,17 @@ export async function getBrief(learned: string[] = []): Promise<MorningBrief> {
     return (await r.json()) as MorningBrief;
   } catch {
     return { ok: false, text: '' };
+  }
+}
+
+/** Emails Rebaz sent that have gone quiet and still want a reply — the "you're still
+ *  waiting on this" nudge. Served stale-while-revalidate; null when the runtime is down. */
+export async function getWaiting(): Promise<WaitingOnData | null> {
+  try {
+    const r = await fetch(`${SIDECAR_URL}/waiting`, { cache: 'no-store' });
+    return (await r.json()) as WaitingOnData;
+  } catch {
+    return null;
   }
 }
 

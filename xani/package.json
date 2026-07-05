@@ -20,7 +20,7 @@
     "service:uninstall": "node scripts/install-service.mjs --uninstall",
     "sidecar": "node sidecar/server.ts",
     "sidecar:build": "node sidecar/build.mjs",
-    "sidecar:test": "node --test sidecar/agent.test.ts sidecar/hardening.test.ts sidecar/learning-metrics.test.ts sidecar/batch-parser.test.ts sidecar/slack-view.test.ts sidecar/cli-stream.test.ts sidecar/kv.test.ts sidecar/scheduler.test.ts sidecar/deadline.test.ts sidecar/brief.test.ts sidecar/waiting.test.ts"
+    "sidecar:test": "node --test sidecar/agent.test.ts sidecar/hardening.test.ts sidecar/learning-metrics.test.ts sidecar/batch-parser.test.ts sidecar/slack-view.test.ts sidecar/cli-stream.test.ts sidecar/kv.test.ts sidecar/scheduler.test.ts sidecar/deadline.test.ts sidecar/brief.test.ts sidecar/waiting.test.ts sidecar/notify.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

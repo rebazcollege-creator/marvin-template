@@ -15,6 +15,7 @@ import { braveWebSearch } from './websearch.ts';
 import { deadlineRule, normalizeDeadline } from './deadline.ts';
 import { buildBriefInput, pressingCards } from './brief.ts';
 import { pickAwaiting, DEFAULT_WAITING_OPTS } from './waiting.ts';
+import { decideNotifications, pruneFiredKeys, type NotifyEmergency } from './notify.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
 import { originAllowed } from './security.ts';
@@ -578,6 +579,43 @@ async function getWaiting(): Promise<WaitingOnData> {
   return (await (waitingState.inflight ?? refreshWaiting())).data;
 }
 
+// ── Notifications: the only things worth interrupting Rebaz for ──────────────
+// The decision (what fires, deduped, day-off/waking-hours aware) lives in the pure,
+// tested notify.ts. Here we assemble its input from live state and persist the
+// "already fired" ledger in kv so a notification never repeats across restarts.
+const NOTIFY_FIRED_KEY = 'xani.notify.fired';
+
+function readFiredLedger(): Record<string, number> {
+  try {
+    const raw = kvAll()[NOTIFY_FIRED_KEY];
+    const j = raw ? (JSON.parse(raw) as Record<string, number>) : {};
+    return j && typeof j === 'object' ? j : {};
+  } catch { return {}; }
+}
+function writeFiredLedger(led: Record<string, number>): void {
+  try { kvSet(NOTIFY_FIRED_KEY, JSON.stringify(pruneFiredKeys(led, Date.now()))); } catch { /* best-effort */ }
+}
+
+/** Assemble the notification decider's input from current triage/brief state. */
+function pendingNotifications() {
+  const emergencies: NotifyEmergency[] = (triageState.slack?.data.triaged ?? [])
+    .filter((t) => t.verdict === 'act' && t.emergency)
+    .map((t) => ({ id: t.id, from: t.from, channel: t.dm ? 'DM' : `#${t.channel}`, headline: t.headline, text: t.text }));
+  const brief = triageState.brief ? { forDate: triageState.brief.forDate, hasContent: !!triageState.brief.text.trim() } : null;
+  return decideNotifications(
+    {
+      dayOff: configuredDaysOff().includes(new Date().getDay()),
+      hour: new Date().getHours(),
+      wakeStart: TRIAGE_WAKE_START,
+      wakeEnd: TRIAGE_WAKE_END,
+      emergencies,
+      brief,
+    },
+    Object.keys(readFiredLedger()),
+    todayKey(),
+  );
+}
+
 
 /** Relative age of an instant ("13h ago") — handed to Claude so IT can weigh recency when
  *  deciding what still needs Rebaz, instead of recency being decided only by code. */
@@ -851,6 +889,33 @@ const server = createServer(async (req, res) => {
       return json(res, 200, w);
     } catch (err) {
       return json(res, 200, { connected: false, items: [], error: (err as Error).message });
+    }
+  }
+
+  // What should interrupt Rebaz right now (emergencies, brief-ready) — deduped, day-off
+  // and waking-hours aware. GET does not mutate: the deliverer acks after it actually
+  // shows them, so a delivery failure never silently swallows a notification.
+  if (req.method === 'GET' && req.url === '/notifications/pending') {
+    try {
+      return json(res, 200, { ok: true, notifications: pendingNotifications() });
+    } catch (err) {
+      return json(res, 200, { ok: false, notifications: [], error: (err as Error).message });
+    }
+  }
+  // Record that these notification keys were delivered, so they never fire again.
+  if (req.method === 'POST' && req.url === '/notifications/ack') {
+    try {
+      const body = JSON.parse((await readBody(req)) || '{}') as { keys?: unknown };
+      const keys = Array.isArray(body.keys) ? body.keys.filter((k): k is string => typeof k === 'string') : [];
+      if (keys.length) {
+        const led = readFiredLedger();
+        const now = Date.now();
+        for (const k of keys) led[k] = now;
+        writeFiredLedger(led);
+      }
+      return json(res, 200, { ok: true, acked: keys.length });
+    } catch (err) {
+      return json(res, 200, { ok: false, error: (err as Error).message });
     }
   }
 

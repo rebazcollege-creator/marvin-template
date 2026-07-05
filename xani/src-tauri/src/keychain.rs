@@ -31,6 +31,11 @@ pub fn has_api_key() -> bool {
 /// They are injected into the sidecar's environment at spawn (never the renderer).
 /// keyring can't enumerate entries, so we read from this known set.
 const INTEGRATION_KEYS: &[&str] = &[
+    // Model provider config — Settings writes these; missing entries made the
+    // desktop Gemini/CLI toggles hang with "Unknown credential key".
+    "GOOGLE_AI_API_KEY",
+    "GEMINI_API_KEY",
+    "XANI_USE_CLAUDE_CLI",
     "TRELLO_API_KEY",
     "TRELLO_TOKEN",
     "TRELLO_BOARD_ID",

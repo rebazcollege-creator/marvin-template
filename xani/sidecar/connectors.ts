@@ -1,5 +1,6 @@
 import { WebClient } from '@slack/web-api';
 import { sanitizeHeader, encodeSubject, sanitizeRecipients } from './mail.ts';
+import { htmlToText } from './html.ts';
 import type {
   BriefingData,
   InboxData,
@@ -54,7 +55,7 @@ async function googleToken(clientId: string, clientSecret: string, refreshToken:
   const cached = googleTokenCache.get(refreshToken);
   if (cached && cached.exp > Date.now()) return { token: cached.token };
   try {
-    const r = await fetch('https://oauth2.googleapis.com/token', {
+    const r = await fetchT('https://oauth2.googleapis.com/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ client_id: clientId, client_secret: clientSecret, refresh_token: refreshToken, grant_type: 'refresh_token' }),
@@ -91,7 +92,7 @@ export async function gmailUnreadCounts(): Promise<{ connected: boolean; account
       const token = await googleAccessToken(c!.id, c!.secret, c!.refresh);
       if (!token) return null;
       try {
-        const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX', {
+        const r = await fetchT('https://gmail.googleapis.com/gmail/v1/users/me/labels/INBOX', {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!r.ok) return null;
@@ -114,6 +115,15 @@ const FOLDER_QUERY: Record<string, string> = {
   spam: 'in:spam',
   trash: 'in:trash',
 };
+
+/**
+ * fetch with a hard timeout — every external call (Google, Trello, Buffer, GitHub)
+ * goes through this. Node's fetch has NO default timeout, so a stalled upstream
+ * used to hang a request (and any inflight-deduped refresh behind it) forever.
+ */
+function fetchT(url: string | URL, init?: RequestInit, ms = 10_000): Promise<Response> {
+  return fetch(url, { ...(init ?? {}), signal: init?.signal ?? AbortSignal.timeout(ms) });
+}
 
 /** Run async `fn` over `items` with bounded concurrency, preserving order. */
 async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
@@ -168,7 +178,7 @@ async function gmailBatchGetMetadata(token: string, ids: string[]): Promise<Reco
       )
       .join('') + `--${boundary}--`;
   try {
-    const r = await fetch('https://gmail.googleapis.com/batch/gmail/v1', {
+    const r = await fetchT('https://gmail.googleapis.com/batch/gmail/v1', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/mixed; boundary=${boundary}` },
       body,
@@ -260,7 +270,7 @@ export async function getInbox(folder = 'inbox', cursorRaw = ''): Promise<InboxD
         const listUrl =
           `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(q)}&maxResults=${PAGE_SIZE}` +
           (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '');
-        const list = await fetch(listUrl, { headers: { Authorization: `Bearer ${token}` } });
+        const list = await fetchT(listUrl, { headers: { Authorization: `Bearer ${token}` } });
         if (!list.ok) {
           errs.push(`${a.role}: Gmail API ${list.status} — ${(await list.text()).slice(0, 160)}`);
           return [];
@@ -275,7 +285,7 @@ export async function getInbox(folder = 'inbox', cursorRaw = ''): Promise<InboxD
         if (!msgs) {
           msgs = (
             await mapPool(ids, 12, async (id) => {
-              const det = await fetch(
+              const det = await fetchT(
                 `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?${META_PARAMS}`,
                 { headers: { Authorization: `Bearer ${token}` } },
               );
@@ -318,21 +328,6 @@ function decodeB64(data: string): string {
   }
 }
 
-/** Collapse an HTML body to readable plain text (fallback / for the AI drafter). */
-function htmlToText(html: string): string {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<br\s*\/?>(?=)/gi, '\n')
-    .replace(/<\/(p|div|tr|li|h[1-6])>/gi, '\n')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
 
 /** Walk a Gmail payload tree, collecting the richest HTML and a plain-text fallback. */
 function extractBody(payload: unknown): { html: string; text: string } {
@@ -380,7 +375,7 @@ export async function getMessageBody(
   const { token, error } = await googleToken(c.id, c.secret, c.refresh);
   if (!token) return { ok: false, error: error ?? 'auth failed' };
   try {
-    const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, {
+    const r = await fetchT(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=full`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!r.ok) return { ok: false, error: `Gmail API ${r.status}` };
@@ -485,7 +480,7 @@ export async function getCalendar(): Promise<CalendarData> {
     'https://www.googleapis.com/calendar/v3/calendars/primary/events' +
     `?singleEvents=true&orderBy=startTime&timeMin=${start.toISOString()}&timeMax=${end.toISOString()}`;
   try {
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const r = await fetchT(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) return { connected: true, events: [], error: `Google Calendar API ${r.status}` };
     const j = (await r.json()) as {
       items?: { summary?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }[];
@@ -528,7 +523,7 @@ export async function getDrive(): Promise<DriveData> {
     '?orderBy=folder,modifiedTime desc&pageSize=50&q=trashed=false' +
     '&fields=files(id,name,mimeType,modifiedTime,starred)';
   try {
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const r = await fetchT(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) return { connected: true, files: [], error: `Google Drive API ${r.status}` };
     const j = (await r.json()) as {
       files?: { id?: string; name?: string; mimeType?: string; modifiedTime?: string; starred?: boolean }[];
@@ -572,7 +567,7 @@ const MAX_SLACK_CONVOS = 60;
 // Reject rate-limited calls immediately instead of retrying every 10s forever — a 429
 // then just throws, we catch it and move on. This is what prevents a retry-storm from
 // ever building up, no matter how many callers or how strict Slack's tier is.
-const SLACK_WC_OPTS = { rejectRateLimitedCalls: true } as const;
+const SLACK_WC_OPTS = { rejectRateLimitedCalls: true, timeout: 15_000 } as const;
 
 /** Inject display names into bare user mentions (<@U123> → <@U123|Name>) so the
  *  renderer can show "@Name" without shipping the whole user directory. */
@@ -870,7 +865,7 @@ export async function getTrello(): Promise<TrelloData> {
     let statusFieldId: string | null = null;
     const optText = new Map<string, string>();
     try {
-      const cf = await fetch(`https://api.trello.com/1/boards/${c.board}/customFields?${auth}`);
+      const cf = await fetchT(`https://api.trello.com/1/boards/${c.board}/customFields?${auth}`);
       if (cf.ok) {
         const defs = (await cf.json()) as { id: string; name?: string; options?: { id: string; value?: { text?: string } }[] }[];
         const status = defs.find((d) => /status/i.test(d.name ?? ''));
@@ -884,7 +879,7 @@ export async function getTrello(): Promise<TrelloData> {
     }
 
     // `list=true` embeds the card's list; `customFieldItems=true` embeds the Status value.
-    const r = await fetch(
+    const r = await fetchT(
       `https://api.trello.com/1/boards/${c.board}/cards?fields=name,url,due,labels&list=true&customFieldItems=true&${auth}`,
     );
     if (!r.ok) return { connected: true, cards: [], error: `Trello API ${r.status}` };
@@ -924,14 +919,17 @@ export async function getBuffer(): Promise<BufferData> {
   const token = process.env.BUFFER_ACCESS_TOKEN;
   if (!token) return { connected: false, drafts: 0, scheduled: 0, byPlatform: [] };
   try {
-    const r = await fetch(`https://api.bufferapp.com/1/profiles.json?access_token=${token}`);
+    const r = await fetchT(`https://api.bufferapp.com/1/profiles.json?access_token=${token}`);
     if (!r.ok) return { connected: true, drafts: 0, scheduled: 0, byPlatform: [], error: `Buffer API ${r.status}` };
-    const profiles = (await r.json()) as { service?: string; counts?: { pending?: number; sent?: number } }[];
+    const profiles = (await r.json()) as { service?: string; counts?: { pending?: number; sent?: number; drafts?: number } }[];
     let drafts = 0;
     let scheduled = 0;
     const byPlatform: BufferData['byPlatform'] = [];
     for (const p of profiles) {
       const pending = p.counts?.pending ?? 0;
+      // Buffer reports drafts separately when the profile has any; it was never read,
+      // so the app's drafts count was hardwired to 0.
+      drafts += (p.counts as { drafts?: number } | undefined)?.drafts ?? 0;
       scheduled += pending;
       byPlatform.push({ platform: p.service ?? 'channel', count: pending });
     }
@@ -947,7 +945,7 @@ export async function getGithub(): Promise<GithubData> {
   const token = process.env.GITHUB_TOKEN;
   if (!token) return { connected: false, items: [] };
   try {
-    const r = await fetch('https://api.github.com/issues?filter=assigned&state=open&per_page=20', {
+    const r = await fetchT('https://api.github.com/issues?filter=assigned&state=open&per_page=20', {
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'User-Agent': 'xani' },
     });
     if (!r.ok) return { connected: true, items: [], error: `GitHub API ${r.status}` };
@@ -996,7 +994,7 @@ async function sendGmail(p: { to: string; subject: string; body: string; account
   ].filter(Boolean).join('\r\n');
   const raw = base64url(`${headers}\r\n\r\n${p.body}`);
   try {
-    const r = await fetch('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
+    const r = await fetchT('https://gmail.googleapis.com/gmail/v1/users/me/messages/send', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(p.threadId ? { raw, threadId: p.threadId } : { raw }),
@@ -1017,7 +1015,7 @@ async function gmailModify(account: string, id: string, add: string[], remove: s
   const token = await googleAccessToken(c.id, c.secret, c.refresh);
   if (!token) return { ok: false, error: 'Could not authorise Gmail.' };
   try {
-    const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/modify`, {
+    const r = await fetchT(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/modify`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ addLabelIds: add, removeLabelIds: remove }),
@@ -1037,7 +1035,7 @@ async function gmailTrash(account: string, id: string): Promise<ActResult> {
   const token = await googleAccessToken(c.id, c.secret, c.refresh);
   if (!token) return { ok: false, error: 'Could not authorise Gmail.' };
   try {
-    const r = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/trash`, {
+    const r = await fetchT(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}/trash`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
     });
@@ -1059,7 +1057,7 @@ async function createCalendarEvent(p: { title: string; start?: string; end?: str
   const start = p.start ?? new Date(Date.now() + 3600_000).toISOString();
   const end = p.end ?? new Date(new Date(start).getTime() + 3600_000).toISOString();
   try {
-    const r = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
+    const r = await fetchT('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ summary: p.title, start: { dateTime: start }, end: { dateTime: end } }),
@@ -1153,12 +1151,12 @@ async function createTrelloCard(p: { name: string; list?: string; due?: string }
   const auth = `key=${c.key}&token=${c.token}`;
   try {
     // Find the target list on the board (default to the first list).
-    const lr = await fetch(`https://api.trello.com/1/boards/${c.board}/lists?fields=name&${auth}`);
+    const lr = await fetchT(`https://api.trello.com/1/boards/${c.board}/lists?fields=name&${auth}`);
     const lists = lr.ok ? ((await lr.json()) as { id: string; name: string }[]) : [];
     const list = lists.find((l) => p.list && l.name.toLowerCase() === p.list.toLowerCase()) ?? lists[0];
     if (!list) return { ok: false, error: 'No lists on the Trello board.' };
     const params = new URLSearchParams({ idList: list.id, name: p.name, ...(p.due ? { due: p.due } : {}) });
-    const r = await fetch(`https://api.trello.com/1/cards?${auth}&${params.toString()}`, { method: 'POST' });
+    const r = await fetchT(`https://api.trello.com/1/cards?${auth}&${params.toString()}`, { method: 'POST' });
     if (!r.ok) return { ok: false, error: `Trello create failed (${r.status}).` };
     const j = (await r.json()) as { id?: string; shortUrl?: string };
     return { ok: true, id: j.id, url: j.shortUrl };
@@ -1171,13 +1169,13 @@ async function createBufferPost(p: { platform: string; caption: string }): Promi
   const token = process.env.BUFFER_ACCESS_TOKEN;
   if (!token) return { ok: false, note: 'Buffer not connected — add BUFFER_ACCESS_TOKEN.' };
   try {
-    const pr = await fetch(`https://api.bufferapp.com/1/profiles.json?access_token=${token}`);
+    const pr = await fetchT(`https://api.bufferapp.com/1/profiles.json?access_token=${token}`);
     if (!pr.ok) return { ok: false, error: 'Could not list Buffer channels.' };
     const profiles = (await pr.json()) as { id?: string; service?: string }[];
     const profile = profiles.find((x) => (x.service ?? '').toLowerCase() === p.platform.toLowerCase()) ?? profiles[0];
     if (!profile?.id) return { ok: false, error: 'No matching Buffer channel.' };
     const body = new URLSearchParams({ 'profile_ids[]': profile.id, text: p.caption, access_token: token });
-    const r = await fetch('https://api.bufferapp.com/1/updates/create.json', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+    const r = await fetchT('https://api.bufferapp.com/1/updates/create.json', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
     if (!r.ok) return { ok: false, error: `Buffer create failed (${r.status}).` };
     return { ok: true };
   } catch (e) {

@@ -1,18 +1,19 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
 import { bumpInboxCache, bumpSlackCache } from './connectors.ts';
+import { CREDS_FILE, migrateLegacyFiles } from './paths.ts';
 
 /**
- * Dev-side credential store for keys entered in the app's Connections screen.
+ * Credential store for keys entered in the app's Connections screen.
  *
- * Desktop builds keep secrets in the OS keychain (Rust). In dev there is no
- * keychain, so the sidecar persists integration credentials to a gitignored file
- * next to the app and applies them to process.env immediately — so connecting in
- * the UI takes effect at once (live reads + actions), no manual .env editing or
- * restart. Only known integration keys are accepted. Never touched by the renderer.
+ * Desktop builds keep secrets in the OS keychain (Rust). Outside Tauri the sidecar
+ * persists integration credentials to the per-user data directory (see paths.ts —
+ * NOT the repo working directory, which a `git` mishap or `rm -rf` could take out)
+ * and applies them to process.env immediately — so connecting in the UI takes
+ * effect at once. Legacy .xani-creds.json is migrated automatically on first boot.
+ * Only known integration keys are accepted. Never touched by the renderer.
  */
 
-const FILE = join(process.cwd(), '.xani-creds.json');
+const FILE = CREDS_FILE;
 
 /** Exported so tests can assert parity with the Rust keychain's key list.
  *  Provider/toggle keys (ANTHROPIC/GEMINI/CLI) are model config, not integration
@@ -59,6 +60,7 @@ let store: Record<string, string> = {};
 
 export function loadCreds(): void {
   try {
+    migrateLegacyFiles(); // one-time copy of .xani-*.json from cwd into the data dir
     if (!existsSync(FILE)) return;
     store = JSON.parse(readFileSync(FILE, 'utf8')) as Record<string, string>;
     for (const [k, v] of Object.entries(store)) {

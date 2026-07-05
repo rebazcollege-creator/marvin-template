@@ -73,16 +73,27 @@ function claudeDisabled(): boolean {
   return v === '0' || v === 'false' || v === 'no' || v === 'off';
 }
 
+/** Explicit opt-IN (the Settings toggle): the user deliberately chose the CLI. */
+function claudeForcedOn(): boolean {
+  const v = (process.env.XANI_USE_CLAUDE_CLI ?? '').toLowerCase();
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on';
+}
+
 /** Is a usable `claude` binary present? Probed once (cached). */
 export function claudeCliAvailable(): boolean {
   return resolveClaudeBin() !== null;
 }
 
 /**
- * Decide which backend to use. When the logged-in `claude` CLI is installed it is the
- * default (free, uses the Claude subscription, no API key) — set XANI_USE_CLAUDE_CLI=0
- * to opt out, or XANI_AI_PROVIDER=gemini|anthropic|cli to force one. Otherwise fall back
- * to a Gemini key, then an Anthropic key.
+ * Decide which backend to use.
+ *
+ * Order matters: the CLI path is TEXT-ONLY (no tool use, no streaming), so a
+ * configured Anthropic API key — a deliberate, paid choice with full capability —
+ * must not be silently overridden just because the `claude` binary happens to be
+ * installed. Explicit choices always win:
+ *   XANI_AI_PROVIDER=cli|gemini|anthropic  → forced
+ *   XANI_USE_CLAUDE_CLI=1                  → CLI (the Settings toggle)
+ * Then: Anthropic key → Gemini key → CLI-if-installed (the no-key default) → none.
  */
 export function resolveProvider(hasAnthropic: boolean): 'cli' | 'gemini' | 'anthropic' | 'none' {
   const forced = (process.env.XANI_AI_PROVIDER || '').toLowerCase();
@@ -90,10 +101,10 @@ export function resolveProvider(hasAnthropic: boolean): 'cli' | 'gemini' | 'anth
   if (forced === 'cli') return cli ? 'cli' : 'none';
   if (forced === 'gemini') return usingGemini() ? 'gemini' : 'none';
   if (forced === 'anthropic') return hasAnthropic ? 'anthropic' : 'none';
-  if (cli && !claudeDisabled()) return 'cli'; // logged-in CLI is the default when present
+  if (cli && claudeForcedOn()) return 'cli'; // the user's explicit toggle
+  if (hasAnthropic) return 'anthropic'; // full-capability key beats silent CLI preference
   if (usingGemini()) return 'gemini';
-  if (hasAnthropic) return 'anthropic';
-  if (cli) return 'cli';
+  if (cli && !claudeDisabled()) return 'cli'; // the no-key default when nothing else is set
   return 'none';
 }
 
@@ -226,7 +237,7 @@ export async function geminiGenerate(
     generationConfig: { maxOutputTokens: params.max_tokens ?? 1024 },
   };
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL()}:generateContent?key=${encodeURIComponent(key)}`;
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(60_000) });
   if (!r.ok) throw new Error(`Gemini ${r.status}: ${(await r.text()).slice(0, 300)}`);
   const j = (await r.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
   const text = (j.candidates?.[0]?.content?.parts ?? []).map((p) => p.text ?? '').join('');

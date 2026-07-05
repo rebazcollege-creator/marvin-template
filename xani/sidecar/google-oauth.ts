@@ -132,6 +132,7 @@ export function startOAuthLogin(input: { integration: string; clientId: string; 
       }
       try {
         const tr = await fetch(provider.tokenUrl, {
+          signal: AbortSignal.timeout(15_000),
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(provider.jsonAccept ? { Accept: 'application/json' } : {}) },
           body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirect, grant_type: 'authorization_code' }),
@@ -149,7 +150,7 @@ export function startOAuthLogin(input: { integration: string; clientId: string; 
         let account: string | undefined;
         if (provider.whoUrl && provider.whoField) {
           try {
-            const ir = await fetch(provider.whoUrl, { headers: { Authorization: `Bearer ${tj.access_token ?? token}`, Accept: 'application/json', 'User-Agent': 'xani' } });
+            const ir = await fetch(provider.whoUrl, { signal: AbortSignal.timeout(15_000), headers: { Authorization: `Bearer ${tj.access_token ?? token}`, Accept: 'application/json', 'User-Agent': 'xani' } });
             if (ir.ok) account = ((await ir.json()) as Record<string, string>)[provider.whoField];
           } catch {
             /* account label is optional */

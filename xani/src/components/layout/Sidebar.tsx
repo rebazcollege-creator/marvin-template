@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation';
 import { ThemeToggle } from '@/components/theme/ThemeToggle';
 import { ensureStorageReady } from '@/lib/storage';
 import { pendingCount } from '@/lib/approvals';
-import { pingRuntime } from '@/lib/marvin-client';
+import { runtimeHealth } from '@/lib/marvin-client';
 
 type Item = { label: string; href: string; icon: string };
 type Studio = { label: string; href: string; dot: string };
@@ -119,16 +119,25 @@ export function Sidebar() {
     return () => window.removeEventListener('xani:approvals-changed', read);
   }, []);
 
+  const [aiNote, setAiNote] = useState<string | undefined>(undefined);
+
   useEffect(() => {
     let alive = true;
-    const check = () => pingRuntime().then((up) => alive && setRuntimeUp(up));
+    const check = () =>
+      runtimeHealth().then((h) => {
+        if (!alive) return;
+        setRuntimeUp(h.up);
+        // Capability honesty: say plainly when chat runs text-only (CLI/Gemini),
+        // instead of letting account-lookups and learning fail silently.
+        setAiNote(h.up && h.tools === false ? 'AI is text-only right now' : undefined);
+      });
     check();
     const id = window.setInterval(check, 15000);
     return () => { alive = false; window.clearInterval(id); };
   }, []);
 
   const runtimeDot = runtimeUp === null ? 'var(--muted)' : runtimeUp ? '#6E8B6A' : '#D89A4E';
-  const runtimeLabel = runtimeUp === null ? 'Checking runtime…' : runtimeUp ? 'Runtime connected' : 'Runtime offline';
+  const runtimeLabel = runtimeUp === null ? 'Checking runtime…' : runtimeUp ? (aiNote ?? 'Runtime connected') : 'Runtime offline';
 
   return (
     <aside className="gm-rail flex w-60 shrink-0 flex-col overflow-y-auto border-r border-border bg-surface px-3.5 pb-3.5 pt-[22px]">

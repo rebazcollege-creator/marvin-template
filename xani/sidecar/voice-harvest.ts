@@ -21,6 +21,7 @@
  */
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { VOICE_CORPUS_FILE, VOICE_ANALYSIS_FILE, migrateLegacyFiles } from './paths.ts';
 // Connectors are imported lazily inside the harvest functions so the pure helpers
 // (grouping/stripping) stay importable without pulling the Slack/Gmail SDK deps.
 
@@ -49,7 +50,8 @@ export interface Corpus {
   stats: Record<string, number>;
 }
 
-const CORPUS_FILE = join(process.cwd(), '.xani-voice-corpus.json');
+migrateLegacyFiles(); // pick up legacy cwd corpus/analysis on first use
+const CORPUS_FILE = VOICE_CORPUS_FILE;
 const EMPTY: Corpus = { updatedAt: '', mine: {}, incoming: {}, pairs: {}, stats: {} };
 
 // ── Pure helpers (unit-tested) ────────────────────────────────────
@@ -299,7 +301,7 @@ export interface Analysis {
   analyzedAt: string;
 }
 
-const ANALYSIS_FILE = join(process.cwd(), '.xani-voice-analysis.json');
+const ANALYSIS_FILE = VOICE_ANALYSIS_FILE;
 type OneShot = (system: string, user: string, maxTokens: number) => Promise<string>;
 
 /** Join items until a char budget is hit — keeps model prompts bounded. */

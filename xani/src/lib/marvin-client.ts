@@ -36,7 +36,7 @@ function resolveSidecarUrl(): string {
   return 'http://localhost:8787';
 }
 
-const SIDECAR_URL = resolveSidecarUrl();
+export const SIDECAR_URL = resolveSidecarUrl();
 
 export async function streamMarvin(
   req: ChatRequest,
@@ -468,6 +468,26 @@ export async function pingRuntime(): Promise<boolean> {
     return resp.ok;
   } catch {
     return false;
+  }
+}
+
+export interface RuntimeHealth {
+  up: boolean;
+  provider?: string;
+  /** False on text-only providers (CLI/Gemini): chat can't read accounts or save learnings. */
+  tools?: boolean;
+  note?: string;
+}
+
+/** Health + capability honesty — so the UI can say WHAT the runtime can do, not just that it's up. */
+export async function runtimeHealth(): Promise<RuntimeHealth> {
+  try {
+    const resp = await fetch(`${SIDECAR_URL}/health`, { cache: 'no-store' });
+    if (!resp.ok) return { up: false };
+    const j = (await resp.json()) as { provider?: string; capabilities?: { tools?: boolean; note?: string } };
+    return { up: true, provider: j.provider, tools: j.capabilities?.tools, note: j.capabilities?.note };
+  } catch {
+    return { up: false };
   }
 }
 

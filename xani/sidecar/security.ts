@@ -19,6 +19,8 @@
 export const ALLOWED_ORIGINS: ReadonlySet<string> = new Set([
   'http://localhost:3000', // next dev
   'http://127.0.0.1:3000',
+  'http://localhost:8787', // single-port service mode: the sidecar serves the UI itself
+  'http://127.0.0.1:8787',
   'tauri://localhost', // packaged app (macOS / Linux)
   'http://tauri.localhost', // packaged app (Windows)
   'https://tauri.localhost',

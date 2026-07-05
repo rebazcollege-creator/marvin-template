@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Xanî — a personal AI operating system for Rebaz. MARVIN at the centre.",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "next dev",
     "dev:all": "node scripts/dev-all.mjs",
@@ -11,6 +14,10 @@
     "start": "next start",
     "lint": "next lint",
     "tauri": "tauri",
+    "app:build": "next build",
+    "app": "node sidecar/server.ts",
+    "service:install": "node scripts/install-service.mjs",
+    "service:uninstall": "node scripts/install-service.mjs --uninstall",
     "sidecar": "node sidecar/server.ts",
     "sidecar:build": "node sidecar/build.mjs",
     "sidecar:test": "node --test sidecar/agent.test.ts sidecar/hardening.test.ts sidecar/learning-metrics.test.ts sidecar/batch-parser.test.ts sidecar/slack-view.test.ts"

@@ -3,14 +3,12 @@
 import { useEffect, useState } from 'react';
 import { ensureStorageReady } from '@/lib/storage';
 import { Modal } from '@/components/ui/Modal';
-import { enqueueApproval, type ApprovalKind } from '@/lib/approvals';
 import { logActivity } from '@/lib/activity';
 import {
   listAutomations,
   saveAutomations,
   fromText,
   fromTemplate,
-  weeklyEstimate,
   AUTO_TEMPLATES,
   APP_GLYPHS,
   CATEGORIES,
@@ -78,7 +76,6 @@ export default function AutomationsPage() {
   const [eName, setEName] = useState('');
   const [eTrigger, setETrigger] = useState('');
   const [eAuto, setEAuto] = useState<'auto' | 'ask'>('ask');
-  const [runMsg, setRunMsg] = useState('');
 
   useEffect(() => {
     ensureStorageReady().then(() => {
@@ -109,8 +106,6 @@ export default function AutomationsPage() {
     logActivity({ kind: 'automation', title: `Added automation: ${a.name}`, detail: a.trigger });
   };
 
-  const toggle = (id: string) =>
-    persist(items.map((a) => (a.id === id ? { ...a, enabled: !a.enabled } : a)));
   const remove = (id: string) => persist(items.filter((a) => a.id !== id));
 
   const startEdit = (a: Automation) => {
@@ -124,30 +119,6 @@ export default function AutomationsPage() {
     persist(items.map((a) => (a.id === editing.id ? { ...a, name: eName.trim() || a.name, trigger: eTrigger.trim() || a.trigger, autonomy: eAuto } : a)));
     setEditing(null);
   };
-  const catKind: Record<AutoCategory, ApprovalKind> = {
-    Inbox: 'email',
-    Calendar: 'calendar',
-    Social: 'social',
-    Brief: 'task',
-    'Fact-check': 'task',
-  };
-  const runNow = (a: Automation) => {
-    enqueueApproval({
-      kind: catKind[a.category],
-      title: `Run now: ${a.name}`,
-      source: `Automation · ${a.trigger}`,
-      preview: `Run this automation once now:\n${a.steps.map((s, i) => `${i + 1}. ${s}`).join('\n')}`,
-      actionLabel: a.autonomy === 'auto' ? 'Run now' : 'Run & review',
-    });
-    setRunMsg(a.name);
-  };
-
-  const enabled = items.filter((a) => a.enabled);
-  const stats = [
-    { num: enabled.length, label: 'Running now' },
-    { num: enabled.reduce((s, a) => s + weeklyEstimate(a), 0), label: 'Runs this week (est.)' },
-    { num: 0, label: 'Waiting on you' },
-  ];
   const filtered = filter === 'All' ? items : items.filter((a) => a.category === filter);
 
   return (
@@ -155,25 +126,16 @@ export default function AutomationsPage() {
       <header className="mb-5">
         <h1 className="font-display text-2xl font-semibold text-text">Automations</h1>
         <p className="mt-1 text-[13px] text-muted">
-          Standing instructions Xanî runs for you — on a schedule, or the moment something happens.
+          Standing instructions for Xanî — written down now, run automatically later.
         </p>
       </header>
 
-      {runMsg && (
-        <div className="mb-4 flex items-center gap-2 rounded-[11px] border border-border bg-surface px-4 py-2.5 text-[12.5px] text-text-2">
-          <span className="h-1.5 w-1.5 rounded-full bg-green" /> “{runMsg}” sent to Approvals to run.
-          <a href="/approvals" className="ml-auto font-semibold text-accent hover:underline">Review</a>
-        </div>
-      )}
-
-      {/* stats */}
-      <div className="mb-5 flex gap-2.5">
-        {stats.map((s) => (
-          <div key={s.label} className="flex-1 rounded-[13px] border border-border bg-surface px-4 py-3.5">
-            <div className="font-display text-2xl font-semibold leading-none text-text">{s.num}</div>
-            <div className="mt-1.5 text-[11.5px] text-muted">{s.label}</div>
-          </div>
-        ))}
+      {/* Honesty gate: no fake dashboards. Nothing here executes until the engine exists. */}
+      <div className="mb-5 rounded-[13px] border border-border bg-surface px-4 py-3.5 text-[13px] leading-relaxed text-text-2">
+        <span className="font-semibold text-text">The automation engine isn’t switched on yet.</span>{' '}
+        Anything you save here is a plan, not a running task — Xanî will not act on it, brief you, or
+        watch anything on its own until the engine ships. Saving your automations now means they start
+        working the day it does.
       </div>
 
       {/* composer */}
@@ -308,24 +270,10 @@ export default function AutomationsPage() {
                     <TouchSquares touches={a.touches} />
                   </div>
                   <div className="mt-2 text-[11.5px] font-medium text-text-2">
-                    {a.enabled ? 'Active' : 'Paused'} ·{' '}
-                    <span className="font-normal text-muted">No runs yet</span>
+                    Saved · <span className="font-normal text-muted">runs once the engine is switched on</span>
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => toggle(a.id)}
-                    aria-pressed={a.enabled}
-                    aria-label={a.enabled ? 'Disable automation' : 'Enable automation'}
-                    className="relative h-6 w-[42px] rounded-full transition-colors"
-                    style={{ background: a.enabled ? '#C0613A' : 'var(--border)' }}
-                  >
-                    <span
-                      className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all"
-                      style={{ left: a.enabled ? 20 : 2 }}
-                    />
-                  </button>
                   <button
                     type="button"
                     onClick={() => setOpen((o) => ({ ...o, [a.id]: !o[a.id] }))}
@@ -355,13 +303,10 @@ export default function AutomationsPage() {
                     </div>
                     <div>
                       <div className="mb-2.5 text-[10.5px] font-bold tracking-[0.06em] text-muted">RECENT RUNS</div>
-                      <div className="text-[12px] text-muted">No runs yet — it’ll start on the next trigger.</div>
+                      <div className="text-[12px] text-muted">None — the engine isn’t on yet, so this has never run.</div>
                     </div>
                   </div>
                   <div className="mt-3 flex items-center gap-2">
-                    <button type="button" onClick={() => runNow(a)} className="rounded-[9px] bg-accent px-3 py-1.5 text-[12px] font-semibold text-on-accent hover:bg-accent-dim">
-                      Run now
-                    </button>
                     <button type="button" onClick={() => startEdit(a)} className="rounded-[9px] border border-border bg-bg px-3 py-1.5 text-[12px] font-semibold text-text-2 hover:bg-hover">
                       Edit
                     </button>

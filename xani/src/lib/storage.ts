@@ -1,10 +1,17 @@
 /**
- * Storage adapter — Phase 4.
+ * Storage adapter.
  *
- * Persistence now lives in SQLite owned by the Rust side (rusqlite, kv table)
- * and is reached via Tauri commands (kv_all/kv_get/kv_set/kv_remove). When NOT
- * running under Tauri (plain `next dev` in a browser) it falls back to
- * localStorage so development needs no backend.
+ * Persistence backends, in order of preference:
+ *   1. Tauri (packaged app): Rust-owned SQLite kv via commands (kv_all/kv_set/…).
+ *   2. The sidecar's kv store over HTTP (/kv/*): the normal browser path — MARVIN's
+ *      brain (memories, settings, loops, chats) lives in a real file the sidecar
+ *      owns and backs up nightly, NOT in localStorage where "Clear site data"
+ *      silently wiped it.
+ *   3. localStorage: last-resort fallback (sidecar down), and kept as a mirror so
+ *      first paint is instant and nothing is lost while the sidecar restarts.
+ *
+ * On first HTTP hydrate, existing localStorage data is migrated up to the sidecar
+ * (server values win on conflict — it's authoritative once adopted).
  *
  * To avoid turning every getSettings()/getMemories() call site async, we use a
  * CACHE-HYDRATE model: `ensureStorageReady()` loads all `xani.*` keys into an
@@ -13,8 +20,11 @@
  * Components call `ensureStorageReady()` in their mount effect before reading.
  */
 
+import { SIDECAR_URL } from '@/lib/marvin-client';
+
 let cache: Map<string, string> | null = null;
 let readyPromise: Promise<void> | null = null;
+let httpKv = false; // sidecar kv reachable at hydrate time → it is the write target
 
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
@@ -25,10 +35,7 @@ async function tauriInvoke<T>(cmd: string, args?: Record<string, unknown>): Prom
   return invoke<T>(cmd, args);
 }
 
-async function backendLoadAll(): Promise<[string, string][]> {
-  if (isTauri()) {
-    return await tauriInvoke<[string, string][]>('kv_all');
-  }
+function localEntries(): [string, string][] {
   const out: [string, string][] = [];
   if (typeof window !== 'undefined') {
     for (let i = 0; i < window.localStorage.length; i++) {
@@ -42,14 +49,67 @@ async function backendLoadAll(): Promise<[string, string][]> {
   return out;
 }
 
+async function backendLoadAll(): Promise<[string, string][]> {
+  if (isTauri()) {
+    return await tauriInvoke<[string, string][]>('kv_all');
+  }
+  const local = localEntries();
+  try {
+    const r = await fetch(`${SIDECAR_URL}/kv/all`, { signal: AbortSignal.timeout(2000) });
+    if (!r.ok) throw new Error(`kv ${r.status}`);
+    const j = (await r.json()) as { kv?: Record<string, string> };
+    const server = j.kv ?? {};
+    httpKv = true;
+    // Merge: local as base, server overlays (authoritative). Anything only-local is
+    // pushed up once, so a pre-migration browser profile loses nothing.
+    const merged = new Map<string, string>(local);
+    for (const [k, v] of Object.entries(server)) merged.set(k, v);
+    const onlyLocal = local.filter(([k]) => !(k in server));
+    if (onlyLocal.length) {
+      void fetch(`${SIDECAR_URL}/kv/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kv: Object.fromEntries(onlyLocal) }),
+      }).catch(() => undefined);
+    }
+    return [...merged.entries()];
+  } catch {
+    httpKv = false; // sidecar unreachable — run on the localStorage mirror
+    return local;
+  }
+}
+
 async function backendSet(key: string, value: string): Promise<void> {
   if (isTauri()) return tauriInvoke('kv_set', { key, value });
-  if (typeof window !== 'undefined') window.localStorage.setItem(key, value);
+  // Mirror to localStorage always (instant first paint + survives a sidecar restart)…
+  if (typeof window !== 'undefined') {
+    try {
+      window.localStorage.setItem(key, value);
+    } catch {
+      /* quota — the sidecar copy below is the durable one */
+    }
+  }
+  // …and persist to the sidecar, which is the durable, backed-up copy.
+  if (httpKv) {
+    const r = await fetch(`${SIDECAR_URL}/kv/set`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key, value }),
+    });
+    if (!r.ok) throw new Error(`kv/set ${r.status}`);
+  }
 }
 
 async function backendRemove(key: string): Promise<void> {
   if (isTauri()) return tauriInvoke('kv_remove', { key });
   if (typeof window !== 'undefined') window.localStorage.removeItem(key);
+  if (httpKv) {
+    await fetch(`${SIDECAR_URL}/kv/remove`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+    }).catch(() => undefined);
+  }
 }
 
 /** Hydrate the in-memory cache from the backend. Idempotent. */

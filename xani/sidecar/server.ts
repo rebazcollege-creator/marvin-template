@@ -5,6 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
+import { htmlToText } from './html.ts';
+import { kvAll, kvSet, kvRemove, kvImport } from './kv.ts';
+import { TRIAGE_CACHE_FILE as TRIAGE_CACHE_PATH } from './paths.ts';
+import { startScheduler } from './scheduler.ts';
+import { serveStatic } from './static.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
 import { originAllowed } from './security.ts';
@@ -298,7 +303,7 @@ function withLearnings(base: string, learned: string[]): string {
  * is the difference between "Home sits spinning on the Claude CLI" and "Home is instant".
  */
 const TRIAGE_TTL_MS = 90_000;
-const TRIAGE_CACHE_FILE = join(process.cwd(), '.xani-triage-cache.json');
+const TRIAGE_CACHE_FILE = TRIAGE_CACHE_PATH; // per-user data dir (see paths.ts)
 type TriageSnap<T> = { at: number; learnKey: string; data: T };
 const triageState: {
   inbox: TriageSnap<InboxTriage> | null;
@@ -369,20 +374,6 @@ async function refreshSlackTriage(learned: string[]): Promise<SlackTriage> {
 
 hydrateTriage(); // warm the caches from the last session so the first Home load is instant
 
-/** Cheap HTML→text. Notification emails (Trello / GitHub / calendar) are HTML-only, so without
- *  this the summariser gets an empty body and hallucinates "No email content provided" as a headline. */
-function htmlToText(html: string): string {
-  return html
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<\/(p|div|tr|li|h[1-6]|table)>/gi, '\n')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
-    .replace(/&#39;|&apos;/gi, "'").replace(/&quot;/gi, '"')
-    .replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/[ \t]{2,}/g, ' ')
-    .trim();
-}
 
 /** Relative age of an instant ("13h ago") — handed to Claude so IT can weigh recency when
  *  deciding what still needs Rebaz, instead of recency being decided only by code. */
@@ -590,7 +581,21 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === 'GET' && req.url === '/health') {
-    json(res, 200, { ok: true, hasKey: modelAvailable(), provider: resolveProvider(Boolean(anthropic)) });
+    const prov = resolveProvider(Boolean(anthropic));
+    // Capability honesty: the CLI/Gemini paths are text-only — the model cannot call
+    // tools (look up accounts mid-chat, propose memories). The UI states this plainly
+    // instead of letting those features fail silently.
+    json(res, 200, {
+      ok: true,
+      hasKey: modelAvailable(),
+      provider: prov,
+      capabilities: {
+        tools: prov === 'anthropic',
+        streaming: prov === 'anthropic',
+        note: prov === 'anthropic' || prov === 'none' ? undefined
+          : 'Text-only provider: chat can’t read your accounts mid-conversation or save learnings.',
+      },
+    });
     return;
   }
 
@@ -819,6 +824,37 @@ const server = createServer(async (req, res) => {
       }
     } catch (err) {
       return json(res, 500, { error: (err as Error).message });
+    }
+  }
+
+  // Sidecar-owned kv store — persistence for the renderer outside Tauri, so MARVIN's
+  // brain (memories, settings, loops, chats) no longer lives in browser localStorage.
+  if (req.method === 'GET' && req.url === '/kv/all') {
+    return json(res, 200, { ok: true, kv: kvAll() });
+  }
+  if (req.method === 'POST' && req.url === '/kv/set') {
+    try {
+      const { key, value } = JSON.parse(await readBody(req)) as { key?: string; value?: string };
+      const ok = kvSet(String(key ?? ''), String(value ?? ''));
+      return json(res, ok ? 200 : 400, ok ? { ok: true } : { ok: false, error: 'Rejected key or oversized value.' });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: (err as Error).message });
+    }
+  }
+  if (req.method === 'POST' && req.url === '/kv/remove') {
+    try {
+      const { key } = JSON.parse(await readBody(req)) as { key?: string };
+      return json(res, 200, { ok: kvRemove(String(key ?? '')) });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: (err as Error).message });
+    }
+  }
+  if (req.method === 'POST' && req.url === '/kv/import') {
+    try {
+      const { kv } = JSON.parse(await readBody(req)) as { kv?: Record<string, unknown> };
+      return json(res, 200, { ok: true, imported: kvImport(kv ?? {}) });
+    } catch (err) {
+      return json(res, 400, { ok: false, error: (err as Error).message });
     }
   }
 
@@ -1079,7 +1115,22 @@ const server = createServer(async (req, res) => {
     return;
   }
 
+  // Single-port service mode: anything that isn't an API route is the built UI.
+  if (serveStatic(req, res, req.url ?? '/')) return;
+
   res.writeHead(404).end('Not found');
+});
+
+// The most common real-world failure (a stale sidecar in a forgotten terminal) used
+// to be an uncaught EADDRINUSE stack trace that also took the UI down. Say it plainly.
+server.on('error', (e: NodeJS.ErrnoException) => {
+  if (e.code === 'EADDRINUSE') {
+    console.error(`Xanî runtime is ALREADY running on port ${PORT} (probably in another terminal or as the background service).`);
+    console.error('Nothing is broken — close the other one first, or just use the app that is already running.');
+  } else {
+    console.error('Xanî runtime failed to start:', e.message);
+  }
+  process.exit(1);
 });
 
 // Bind to loopback only — the sidecar holds every secret and must never be
@@ -1092,4 +1143,5 @@ server.listen(PORT, '127.0.0.1', () => {
     : prov === 'anthropic' ? 'Claude (Anthropic API)'
     : 'NONE — set XANI_USE_CLAUDE_CLI=1, or a Gemini/Anthropic key';
   console.log(`MARVIN sidecar on http://127.0.0.1:${PORT} (model: ${label})`);
+  startScheduler(); // the heartbeat: nightly backups now; briefings/watchers in Phase 2
 });

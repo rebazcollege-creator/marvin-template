@@ -35,7 +35,9 @@ const DENIED_KINDS = new Set<string>([]);
 export function daysOff(): number[] {
   return (process.env.XANI_DAYS_OFF ?? '')
     .split(',')
-    .map((s) => Number(s.trim()))
+    .map((s) => s.trim())
+    .filter((s) => s !== '') // Number('') is 0 — an empty/disabled value must NOT read as Sunday
+    .map(Number)
     .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6);
 }
 

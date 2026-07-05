@@ -58,7 +58,8 @@ for (const { label, token } of TOKENS) {
     console.log(`     last_read:            ${has('last_read')}`);
     console.log(`     unread_count:         ${has('unread_count')}`);
     console.log(`     unread_count_display: ${has('unread_count_display')}`);
-    console.log('     → if these are ABSENT, this token CANNOT show unread badges. (Expected for bot tokens.)');
+    console.log('     → Slack returns unread_count ONLY for DMs, never for channels — ABSENT here is expected.');
+    console.log('       For channels, unread is computed from last_read vs message ts (which is what Xanî now does).');
   }
 
   // 4) THE DM QUESTION: can this token see your direct messages?

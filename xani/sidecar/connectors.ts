@@ -675,32 +675,45 @@ async function computeSlack(): Promise<SlackData> {
         const list = await client.conversations.list({ types, exclude_archived: true, limit: 1000 });
         const convos = (list.channels ?? []).filter((c) => c.is_member || c.is_im || c.is_mpim).slice(0, MAX_SLACK_CONVOS);
 
-        // conversations.info is rate-limited (Tier 3). Only enrich a bounded, DM-first
-        // subset with unread/preview, using a small pool — the rest still list, just
-        // without a preview/unread badge. This is what stops the 429 storm.
+        // Read-state, computed the way a real Slack client does it. Modern Slack drops
+        // `unread_count_display` from conversations.info and frequently omits `latest`,
+        // so we trust neither: conversations.info gives `last_read`, conversations.history
+        // gives the actual newest messages, and unread = "messages newer than last_read
+        // that Rebaz didn't send himself". Both calls are bounded (SLACK_INFO_CAP, DM-first)
+        // and pooled; a strict-tier app (rejectRateLimitedCalls) degrades to info.latest or
+        // no badge instead of a 429 storm.
+        type SlackMsg = { text?: string; user?: string; ts?: string; reactions?: { name?: string; count?: number }[]; reply_count?: number; subtype?: string };
+        type Enriched = { latest?: SlackMsg; latestTs?: string; unreadCount: number; hasUnread: boolean };
         const rank = (c: typeof convos[number]) => (c.is_im ? 3 : c.is_mpim ? 2 : c.is_member ? 1 : 0);
         const enrich = [...convos].sort((a, b) => rank(b) - rank(a)).slice(0, SLACK_INFO_CAP);
-        const infoById = new Map<string, typeof convos[number]>();
+        const enrichById = new Map<string, Enriched>();
         await mapPool(enrich, 4, async (c) => {
           if (!c.id) return;
-          try {
-            const r = await client.conversations.info({ channel: c.id });
-            if (r.channel) infoById.set(c.id, r.channel as typeof convos[number]);
-          } catch {
-            /* keep the list entry */
-          }
+          const [infoR, histR] = await Promise.all([
+            client.conversations.info({ channel: c.id }).catch(() => null),
+            client.conversations.history({ channel: c.id, limit: 15 }).catch(() => null),
+          ]);
+          const ch = (infoR?.channel ?? {}) as { last_read?: string; latest?: SlackMsg; unread_count_display?: number };
+          const lastRead = ch.last_read;
+          const hist = ((histR?.messages ?? []) as SlackMsg[]).filter((m) => !m.subtype || m.subtype === 'thread_broadcast');
+          // Prefer real history; fall back to info.latest on a rate-limited (strict) tier.
+          const pool = hist.length ? hist : (ch.latest ? [ch.latest] : []);
+          const latest = pool[0];
+          const newer = lastRead
+            ? pool.filter((m) => m.ts && Number(m.ts) > Number(lastRead) && m.user !== wsRec.selfId)
+            : [];
+          const display = typeof ch.unread_count_display === 'number' ? ch.unread_count_display : 0;
+          const unreadCount = newer.length || display;
+          enrichById.set(c.id, { latest, latestTs: latest?.ts, unreadCount, hasUnread: unreadCount > 0 });
         });
 
         for (const c of convos) {
             if (!c.id) continue;
-            const info: typeof c = infoById.get(c.id) ?? c;
-            const lastRead = (info as { last_read?: string }).last_read;
-            const latest = (info as { latest?: { text?: string; user?: string; ts?: string; reactions?: { name?: string; count?: number }[]; reply_count?: number } }).latest;
-            const unreadCount = typeof (info as { unread_count_display?: number }).unread_count_display === 'number'
-              ? (info as { unread_count_display: number }).unread_count_display
-              : 0;
-            const latestTs = latest?.ts;
-            const hasUnread = unreadCount > 0 || Boolean(lastRead && latestTs && Number(latestTs) > Number(lastRead));
+            const en = enrichById.get(c.id);
+            const latest = en?.latest;
+            const latestTs = en?.latestTs;
+            const unreadCount = en?.unreadCount ?? 0;
+            const hasUnread = en?.hasUnread ?? false;
             const ckind: SlackData['channels'][number]['kind'] = c.is_im ? 'dm' : c.is_mpim ? 'group' : 'channel';
             const dir = slackDir(w.role);
             const name = c.is_im

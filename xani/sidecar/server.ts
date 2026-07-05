@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
 import { loadDotenv } from './env.ts';
 import { htmlToText } from './html.ts';
-import { kvAll, kvSet, kvRemove, kvImport } from './kv.ts';
+import { kvAll, kvSet, kvRemove, kvImport, kvFlush } from './kv.ts';
 import { TRIAGE_CACHE_FILE as TRIAGE_CACHE_PATH } from './paths.ts';
 import { startScheduler } from './scheduler.ts';
 import { serveStatic } from './static.ts';
@@ -1120,6 +1120,16 @@ const server = createServer(async (req, res) => {
 
   res.writeHead(404).end('Not found');
 });
+
+// The kv store debounces writes (400ms). launchd stops the service with SIGTERM and
+// dev uses Ctrl+C — without a flush hook, a memory/settings write landing inside the
+// debounce window would be silently lost on every shutdown.
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    kvFlush();
+    process.exit(0);
+  });
+}
 
 // The most common real-world failure (a stale sidecar in a forgotten terminal) used
 // to be an uncaught EADDRINUSE stack trace that also took the UI down. Say it plainly.

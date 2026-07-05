@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { spawnSync } from 'node:child_process';
-import { writeFileSync, unlinkSync } from 'node:fs';
+import { writeFileSync, unlinkSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
@@ -289,9 +289,85 @@ function withLearnings(base: string, learned: string[]): string {
   );
 }
 
-/** Cache Slack triage briefly — Home mounts call this on every load and conversations.history
- *  is rate-limited. 90s keeps it fresh without hammering Slack. */
-let slackTriageCache: { at: number; key: string; data: SlackTriage } | null = null;
+/**
+ * Triage is served stale-while-revalidate so Home NEVER waits on the model. The last
+ * good result is returned instantly — from memory, or from a disk snapshot after a
+ * sidecar restart — and a fresh triage runs in the background. Only a real connected
+ * result is cached, so a transient error never overwrites a good snapshot. The TTL just
+ * decides when the next background refresh fires; the user is never blocked on it. This
+ * is the difference between "Home sits spinning on the Claude CLI" and "Home is instant".
+ */
+const TRIAGE_TTL_MS = 90_000;
+const TRIAGE_CACHE_FILE = join(process.cwd(), '.xani-triage-cache.json');
+type TriageSnap<T> = { at: number; learnKey: string; data: T };
+const triageState: {
+  inbox: TriageSnap<InboxTriage> | null;
+  slack: TriageSnap<SlackTriage> | null;
+  inboxInflight: Promise<InboxTriage> | null;
+  slackInflight: Promise<SlackTriage> | null;
+} = { inbox: null, slack: null, inboxInflight: null, slackInflight: null };
+const learnKeyOf = (learned: string[]) => (learned ?? []).join('§');
+
+function persistTriage(): void {
+  try {
+    writeFileSync(TRIAGE_CACHE_FILE, JSON.stringify({ inbox: triageState.inbox, slack: triageState.slack }));
+  } catch { /* best-effort cache, never fatal */ }
+}
+function hydrateTriage(): void {
+  try {
+    if (!existsSync(TRIAGE_CACHE_FILE)) return;
+    const j = JSON.parse(readFileSync(TRIAGE_CACHE_FILE, 'utf8')) as { inbox?: TriageSnap<InboxTriage>; slack?: TriageSnap<SlackTriage> };
+    if (j.inbox?.data?.connected) triageState.inbox = j.inbox;
+    if (j.slack?.data?.connected) triageState.slack = j.slack;
+  } catch { /* ignore a corrupt cache file */ }
+}
+
+async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
+  const kick = () => {
+    if (triageState.inboxInflight) return;
+    triageState.inboxInflight = refreshInboxTriage(learned).finally(() => { triageState.inboxInflight = null; });
+  };
+  const snap = triageState.inbox;
+  if (snap) {
+    // Stale, or the user's corrections changed → refresh in the background, but return now.
+    if (Date.now() - snap.at >= TRIAGE_TTL_MS || snap.learnKey !== learnKeyOf(learned)) kick();
+    return snap.data;
+  }
+  kick(); // cold: nothing cached yet — this is the only time Home waits.
+  return triageState.inboxInflight ?? computeInboxTriage(learned);
+}
+async function refreshInboxTriage(learned: string[]): Promise<InboxTriage> {
+  const data = await computeInboxTriage(learned);
+  if (data.connected && !data.error) {
+    triageState.inbox = { at: Date.now(), learnKey: learnKeyOf(learned), data };
+    persistTriage();
+  }
+  return data;
+}
+
+async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
+  const kick = () => {
+    if (triageState.slackInflight) return;
+    triageState.slackInflight = refreshSlackTriage(learned).finally(() => { triageState.slackInflight = null; });
+  };
+  const snap = triageState.slack;
+  if (snap) {
+    if (Date.now() - snap.at >= TRIAGE_TTL_MS || snap.learnKey !== learnKeyOf(learned)) kick();
+    return snap.data;
+  }
+  kick();
+  return triageState.slackInflight ?? computeSlackTriage(learned);
+}
+async function refreshSlackTriage(learned: string[]): Promise<SlackTriage> {
+  const data = await computeSlackTriage(learned);
+  if (data.connected && !data.error) {
+    triageState.slack = { at: Date.now(), learnKey: learnKeyOf(learned), data };
+    persistTriage();
+  }
+  return data;
+}
+
+hydrateTriage(); // warm the caches from the last session so the first Home load is instant
 
 /** Cheap HTML→text. Notification emails (Trello / GitHub / calendar) are HTML-only, so without
  *  this the summariser gets an empty body and hallucinates "No email content provided" as a headline. */
@@ -337,11 +413,8 @@ function isAck(raw: string): boolean {
   return ACK.test(noEmoji);
 }
 
-async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
+async function computeSlackTriage(learned: string[] = []): Promise<SlackTriage> {
   if (!modelAvailable()) return { connected: false, triaged: [], error: 'No API key.' };
-  // Cache is keyed on the learned-corrections set, so a fresh correction re-triages at once.
-  const learnKey = (learned ?? []).join('');
-  if (slackTriageCache && slackTriageCache.key === learnKey && Date.now() - slackTriageCache.at < 90_000) return slackTriageCache.data;
 
   const slack = await getSlack();
   if (!slack.connected) return { connected: false, triaged: [], error: slack.error };
@@ -354,8 +427,7 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   const unread = slack.channels.filter((c) => c.kind === 'channel' && c.hasUnread);
   const scan = [...dms, ...unread].slice(0, 8); // bound conversations.history — it's the strictest Slack tier
 
-  const cache = (data: SlackTriage) => { slackTriageCache = { at: Date.now(), key: learnKey, data }; return data; };
-  if (scan.length === 0) return cache({ connected: true, triaged: [] });
+  if (scan.length === 0) return { connected: true, triaged: [] };
 
   // conversations.history is Slack's strictest tier (as low as 1 req/min for newer apps).
   // Fetch SEQUENTIALLY, never in a parallel burst, so we respect retry-after instead of
@@ -409,7 +481,7 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
   }
   candidates.sort((a, b) => Number(b.ts) - Number(a.ts)); // newest first
   const capped = candidates.slice(0, 40);
-  if (capped.length === 0) return cache({ connected: true, triaged: [] });
+  if (capped.length === 0) return { connected: true, triaged: [] };
 
   const list = capped.map((m) => ({ id: m.id, from: m.from, where: m.dm ? 'DM' : `#${m.channel}`, dm: m.dm, emergency: m.emergency, when: ageLabel(Number(m.ts) * 1000), message: m.text.slice(0, 240), recent_conversation: m.context }));
   try {
@@ -424,27 +496,18 @@ async function triageSlack(learned: string[] = []): Promise<SlackTriage> {
         : (m.dm || m.emergency ? 'act' : 'know');
       return { id: m.id, workspace: m.workspace, workspaceName: m.workspaceName, channelId: m.channelId, channel: m.channel, dm: m.dm, from: m.from, text: m.text, ts: m.ts, emergency: m.emergency, verdict, reason: v?.reason ?? '', headline: (v?.headline ?? '').trim() || undefined, audience: m.audience };
     });
-    return cache({ connected: true, triaged });
+    return { connected: true, triaged };
   } catch (err) {
     return { connected: true, triaged: [], error: (err as Error).message };
   }
 }
 
-/** Cache inbox triage briefly, like Slack's: Home mounts call this on every load and
- *  each call is an LLM pass over 40 messages. Keyed on the newest message + learned
- *  set, so new mail or a fresh correction re-triages at once. */
-let inboxTriageCache: { at: number; key: string; data: InboxTriage } | null = null;
-
-async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
+async function computeInboxTriage(learned: string[] = []): Promise<InboxTriage> {
   if (!modelAvailable()) return { connected: false, triaged: [], error: 'No API key.' };
   const inbox = await getInbox('inbox', '');
   if (!inbox.connected) return { connected: false, triaged: [], error: inbox.error };
   const msgs = inbox.messages.slice(0, 40);
   if (msgs.length === 0) return { connected: true, triaged: [] };
-  const cacheKey = `${msgs[0]?.id ?? ''}|${msgs.length}|${(learned ?? []).join('')}`;
-  if (inboxTriageCache && inboxTriageCache.key === cacheKey && Date.now() - inboxTriageCache.at < 90_000) {
-    return inboxTriageCache.data;
-  }
   const list = msgs.map((m) => ({ id: m.id, from: m.from, to: (m.to ?? '').slice(0, 200), when: ageLabel(Date.parse(m.receivedAt)), subject: m.subject, snippet: (m.snippet ?? '').slice(0, 220) }));
   try {
     const text = await oneShot(withLearnings(TRIAGE_SYSTEM, learned), JSON.stringify(list), 2400);
@@ -461,11 +524,8 @@ async function triageInbox(learned: string[] = []): Promise<InboxTriage> {
       const audience: 'you' | 'team' | undefined = v?.audience === 'you' ? 'you' : v?.audience === 'team' ? 'team' : undefined;
       return { id: m.id, account: m.account, from: m.from, subject: m.subject, snippet: m.snippet, receivedAt: m.receivedAt, verdict, reason: v?.reason ?? '', headline: (v?.headline ?? '').trim() || undefined, audience };
     });
-    const data: InboxTriage = { connected: true, triaged };
-    inboxTriageCache = { at: Date.now(), key: cacheKey, data };
-    return data;
+    return { connected: true, triaged };
   } catch (err) {
-    // Errors are not cached — the next load retries at once.
     return { connected: true, triaged: [], error: (err as Error).message };
   }
 }

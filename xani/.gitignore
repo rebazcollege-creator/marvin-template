@@ -41,3 +41,6 @@ next-env.d.ts
 # Voice corpus + analysis (Rebaz's own harvested writing — private, never in git)
 .xani-voice-corpus.json
 .xani-voice-analysis.json
+
+# Triage snapshot (last inbox/Slack triage, for instant Home after a restart — private)
+.xani-triage-cache.json

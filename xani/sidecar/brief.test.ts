@@ -73,6 +73,26 @@ test('pressingCards keeps only urgent or due-dated cards', () => {
   assert.deepEqual(kept.map((c) => c.name), ['urgent one', 'due one']);
 });
 
+function waitingItem(p: Partial<import('../src/lib/marvin-protocol.ts').WaitingItem> = {}) {
+  return { account: 'leadstories', threadId: 't1', to: 'jil@x.com', subject: 'Shoot date?', snippet: 'when?', sentAt: '2026-07-01T09:00:00Z', quietDays: 6, ...p };
+}
+
+test('waiting-on-a-reply items appear as an awareness section', () => {
+  const r = buildBriefInput({ ...empty, waiting: [waitingItem()] });
+  assert.equal(r.empty, false);
+  assert.match(r.prompt, /WAITING ON A REPLY/);
+  assert.match(r.prompt, /jil@x\.com: Shoot date\? \(quiet 6d\)/);
+});
+
+test('waiting items alone are enough to brief (nothing else needed)', () => {
+  assert.equal(buildBriefInput({ ...empty, waiting: [waitingItem()] }).empty, false);
+});
+
+test('no waiting items → no WAITING section', () => {
+  const r = buildBriefInput({ ...empty, inboxActs: [email()] });
+  assert.doesNotMatch(r.prompt, /WAITING ON A REPLY/);
+});
+
 test('all four sources compose into one prompt in a stable order', () => {
   const r = buildBriefInput({
     inboxActs: [email()],

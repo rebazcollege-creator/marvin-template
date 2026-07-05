@@ -1,4 +1,4 @@
-import type { TriagedEmail, TriagedSlack } from '../src/lib/marvin-protocol.ts';
+import type { TriagedEmail, TriagedSlack, WaitingItem } from '../src/lib/marvin-protocol.ts';
 
 /**
  * Pure assembly of the morning brief's INPUT — the data block handed to the model,
@@ -19,6 +19,8 @@ export interface BriefInput {
   slackActs: TriagedSlack[];
   events: BriefEvent[];
   dueCards: BriefCard[];
+  /** Emails he sent that went quiet (silence detection) — awareness, not a new task. */
+  waiting?: WaitingItem[];
 }
 
 /** How many items of each source the brief data includes — the model sees a focused set,
@@ -45,8 +47,9 @@ export function buildBriefInput(input: BriefInput): BriefAssembly {
   const slackActs = input.slackActs.slice(0, BRIEF_ITEM_CAP);
   const events = input.events.slice(0, BRIEF_ITEM_CAP);
   const dueCards = input.dueCards.slice(0, BRIEF_ITEM_CAP);
+  const waiting = (input.waiting ?? []).slice(0, BRIEF_ITEM_CAP);
 
-  if (inboxActs.length === 0 && slackActs.length === 0 && events.length === 0 && dueCards.length === 0) {
+  if (inboxActs.length === 0 && slackActs.length === 0 && events.length === 0 && dueCards.length === 0 && waiting.length === 0) {
     return { empty: true, prompt: '' };
   }
 
@@ -68,6 +71,9 @@ export function buildBriefInput(input: BriefInput): BriefAssembly {
   }
   if (dueCards.length) {
     lines.push('TRELLO (overdue / due today):\n' + dueCards.map((c) => `- ${c.name}${c.due ? ` (due ${c.due})` : ''}${c.list ? ` [${c.list}]` : ''}`).join('\n'));
+  }
+  if (waiting.length) {
+    lines.push('WAITING ON A REPLY (he sent, no answer yet — awareness, not a new task):\n' + waiting.map((w) => `- ${w.to || 'someone'}: ${w.subject} (quiet ${w.quietDays}d)`).join('\n'));
   }
 
   return { empty: false, prompt: lines.join('\n\n') };

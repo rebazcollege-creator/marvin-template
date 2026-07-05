@@ -224,6 +224,12 @@ export default function HomePage() {
   const [flash, setFlash] = useState<string | null>(null);
   const [learned, setLearned] = useState(0);
   const [overwhelmed, setOverwhelmed] = useState(false);
+  // ADHD Rule 1 — a primary surface shows at most 3 items; the rest are one tap away,
+  // so a busy morning is a short calm list, not an endless scroll.
+  const HOME_CAP = 3;
+  const [showAllInbox, setShowAllInbox] = useState(false);
+  const [showAllSlack, setShowAllSlack] = useState(false);
+  const [showAllLoops, setShowAllLoops] = useState(false);
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
   const bodyCache = useRef<Record<string, string>>({});
   const triedHeadline = useRef<Set<string>>(new Set());
@@ -624,7 +630,7 @@ export default function HomePage() {
               </p>
             )}
 
-            {inboxActs?.map((m) => (
+            {(showAllInbox ? inboxActs : inboxActs?.slice(0, HOME_CAP))?.map((m) => (
               <div key={m.id} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <SourceBadge source="email" label={m.account} />
@@ -644,6 +650,12 @@ export default function HomePage() {
                 </div>
               </div>
             ))}
+
+            {inboxActs && inboxActs.length > HOME_CAP && (
+              <button type="button" onClick={() => setShowAllInbox((v) => !v)} className="px-1 text-[12.5px] font-semibold text-accent transition hover:underline">
+                {showAllInbox ? 'Show less' : `Show ${inboxActs.length - HOME_CAP} more`}
+              </button>
+            )}
 
             {!inboxLoading && !inboxErr && inboxActs && inboxActs.length > 0 && (inboxKnow > 0 || inboxFiled > 0) && (
               <p className="mt-4 px-1 text-[12.5px] text-muted">{inboxKnow} good to know · {inboxFiled} filed away as noise.</p>
@@ -668,7 +680,7 @@ export default function HomePage() {
               </p>
             )}
 
-            {slackActs?.map((m) => (
+            {(showAllSlack ? slackActs : slackActs?.slice(0, HOME_CAP))?.map((m) => (
               <div key={m.id} className="mb-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
                 <div className="flex flex-wrap items-center gap-2.5">
                   <SourceBadge source="slack" urgent={m.emergency} label={`${m.emergency ? 'URGENT · ' : ''}${m.dm ? 'DM' : `#${m.channel}`} · ${m.workspaceName}`} />
@@ -688,6 +700,12 @@ export default function HomePage() {
                 </div>
               </div>
             ))}
+
+            {slackActs && slackActs.length > HOME_CAP && (
+              <button type="button" onClick={() => setShowAllSlack((v) => !v)} className="px-1 text-[12.5px] font-semibold text-accent transition hover:underline">
+                {showAllSlack ? 'Show less' : `Show ${slackActs.length - HOME_CAP} more`}
+              </button>
+            )}
 
             {!slackLoading && !slackErr && slackActs && slackActs.length > 0 && (slackKnow > 0 || slackFiled > 0) && (
               <p className="mt-4 px-1 text-[12.5px] text-muted">{slackKnow} good to know · {slackFiled} filed away as noise.</p>
@@ -723,7 +741,7 @@ export default function HomePage() {
                 <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-muted">Open loops</h2>
                 <span className="rounded-full border border-border bg-surface px-2.5 py-0.5 text-[11px] font-semibold text-text-2">{restList.length}</span>
               </div>
-              {restList.map((l) => {
+              {(showAllLoops ? restList : restList.slice(0, HOME_CAP)).map((l) => {
                 const key = `loop:${l.id}`;
                 return (
                   <LoopCard
@@ -746,6 +764,11 @@ export default function HomePage() {
                   />
                 );
               })}
+              {restList.length > HOME_CAP && (
+                <button type="button" onClick={() => setShowAllLoops((v) => !v)} className="px-1 text-[12.5px] font-semibold text-accent transition hover:underline">
+                  {showAllLoops ? 'Show less' : `Show ${restList.length - HOME_CAP} more`}
+                </button>
+              )}
             </section>
           )}
 

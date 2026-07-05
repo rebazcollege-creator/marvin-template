@@ -2,40 +2,20 @@
 
 import { useEffect, useState } from 'react';
 import { ensureStorageReady } from '@/lib/storage';
-import { pendingCount } from '@/lib/approvals';
-import { activeLoops } from '@/lib/open-loops';
 import { runWatch } from '@/lib/watcher';
 import { canOfferNotify, requestNotifyPermission, setNotifyPref } from '@/lib/notify';
 
 /**
- * Mounted once (in the root layout). Two jobs:
- *  1) Keep a live "waiting on you" badge in the tab title (pending approvals + open loops).
- *  2) Poll Slack + inbox in the background and fire OS notifications for new important
- *     items — so Xanî pings you instead of you checking the apps.
+ * Mounted once (in the root layout). One job now:
+ *  - Poll Slack + inbox in the background and fire OS notifications for new important
+ *    items — so Xanî pings you instead of you checking the apps.
  * Renders only a one-time "turn on notifications" prompt, otherwise nothing.
+ *
+ * (The old live "(N) Xanî" tab-title counter was removed: ADHD Rule 4 forbids a running
+ * count staring at you on open, and it's invisible in the desktop window anyway.)
  */
 export function Watcher() {
   const [offer, setOffer] = useState(false);
-
-  // Live "waiting on you" badge in the tab title. Re-asserted on store changes and on a
-  // short interval, so client-side navigation (which resets the title) can't drop it.
-  useEffect(() => {
-    const applyBadge = () => {
-      try {
-        const n = pendingCount() + activeLoops().length;
-        document.title = n > 0 ? `(${n}) Xanî` : 'Xanî';
-      } catch { /* store not ready */ }
-    };
-    ensureStorageReady().then(applyBadge);
-    window.addEventListener('xani:approvals-changed', applyBadge);
-    window.addEventListener('xani:loops-changed', applyBadge);
-    const iv = window.setInterval(applyBadge, 10_000);
-    return () => {
-      window.clearInterval(iv);
-      window.removeEventListener('xani:approvals-changed', applyBadge);
-      window.removeEventListener('xani:loops-changed', applyBadge);
-    };
-  }, []);
 
   // Background poll: seed on mount, then every 60s and whenever the window regains focus.
   useEffect(() => {

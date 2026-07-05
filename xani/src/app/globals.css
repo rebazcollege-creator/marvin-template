@@ -13,7 +13,9 @@
   --border-2: #ece7db;
   --text: #242219;
   --text-2: #5e5a4e;
-  --muted: #a19d8f;
+  /* Was #a19d8f (~2.6:1 on the near-white surface — unreadable). #6c685b is ~5.3:1,
+     clears WCAG AA for the timestamps/labels/placeholders this is used for everywhere. */
+  --muted: #6c685b;
   --on-accent: #fbfaf3;
   --accent-soft: #e6ece7;
   --accent-soft-2: #dfe7e0;
@@ -33,7 +35,8 @@
   --border-2: #272b31;
   --text: #ecedea;
   --text-2: #b2b6bc;
-  --muted: #7f838b;
+  /* Was #7f838b (~4.0:1). #989ca4 is ~5.0:1 on the dark surfaces — passes AA. */
+  --muted: #989ca4;
   --on-accent: #fbf8f2;
   --accent-soft: #262a30;
   --accent-soft-2: #2b2f36;
@@ -51,6 +54,22 @@ body {
 
 body {
   font-family: var(--font-inter), system-ui, sans-serif;
+}
+
+/* Keyboard focus visibility — many inputs/buttons set outline-none and relied only on a
+   border-colour change, which is invisible to keyboard users. This restores a clear ring
+   for keyboard focus only (:focus-visible never fires on mouse click, so the calm mouse
+   experience is unchanged). Element+pseudo specificity + !important beats the utility. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[tabindex]:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px;
+  border-radius: 6px;
 }
 
 h1,

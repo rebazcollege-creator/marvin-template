@@ -12,6 +12,7 @@ import { TRIAGE_CACHE_FILE as TRIAGE_CACHE_PATH } from './paths.ts';
 import { startScheduler } from './scheduler.ts';
 import { serveStatic } from './static.ts';
 import { braveWebSearch } from './websearch.ts';
+import { deadlineRule, normalizeDeadline } from './deadline.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
 import { originAllowed } from './security.ts';
@@ -265,7 +266,7 @@ const TRIAGE_SYSTEM =
   `And "audience": "you" if the To line addresses Rebaz directly (he's the main/only recipient), or "team" ` +
   `if it's to a list / many people / a whole team. Judge from the To field.\n` +
   `Reply with ONLY a JSON array, no prose: ` +
-  `[{"id":"<id>","verdict":"act|know|ignore","headline":"<≤16 words>","audience":"you|team","reason":"<max 8 words>"}]`;
+  `[{"id":"<id>","verdict":"act|know|ignore","headline":"<≤16 words>","audience":"you|team","reason":"<max 8 words>","deadline":"<YYYY-MM-DD or omit>"}]`;
 
 const SLACK_TRIAGE_SYSTEM =
   `You are MARVIN, triaging Rebaz's Slack messages. Rebaz has ADHD and forgets tasks people ` +
@@ -288,7 +289,7 @@ const SLACK_TRIAGE_SYSTEM =
   `the Friday shoot time you asked about — nothing needed". Plain and specific; if too thin to be sure, ` +
   `stay factual, don't guess.\n` +
   `Reply with ONLY a JSON array, no prose: ` +
-  `[{"id":"<id>","verdict":"act|know|ignore","headline":"<≤16 words>","reason":"<max 8 words>"}]`;
+  `[{"id":"<id>","verdict":"act|know|ignore","headline":"<≤16 words>","reason":"<max 8 words>","deadline":"<YYYY-MM-DD or omit>"}]`;
 
 /**
  * Fold Rebaz's learned corrections (docs/self-development.md) into a triage prompt.
@@ -476,8 +477,8 @@ async function computeMorningBrief(): Promise<BriefSnap> {
   }
 
   const lines: string[] = [];
-  if (inboxActs.length) lines.push('INBOX (needs a reply/decision):\n' + inboxActs.slice(0, 8).map((t) => `- [${t.account}] ${t.from}: ${t.headline || t.subject}`).join('\n'));
-  if (slackActs.length) lines.push('SLACK (needs you):\n' + slackActs.slice(0, 8).map((t) => `- [${t.workspaceName}] ${t.dm ? 'DM' : `#${t.channel}`} ${t.from}: ${t.headline || t.text.slice(0, 120)}`).join('\n'));
+  if (inboxActs.length) lines.push('INBOX (needs a reply/decision):\n' + inboxActs.slice(0, 8).map((t) => `- [${t.account}] ${t.from}: ${t.headline || t.subject}${t.dueAt ? ` (due ${t.dueAt})` : ''}`).join('\n'));
+  if (slackActs.length) lines.push('SLACK (needs you):\n' + slackActs.slice(0, 8).map((t) => `- [${t.workspaceName}] ${t.dm ? 'DM' : `#${t.channel}`} ${t.from}: ${t.headline || t.text.slice(0, 120)}${t.dueAt ? ` (due ${t.dueAt})` : ''}`).join('\n'));
   if (events.length) lines.push('CALENDAR (today):\n' + events.map((e) => `- ${e.start}: ${e.title}`).join('\n'));
   if (dueCards.length) lines.push('TRELLO (overdue / due today):\n' + dueCards.map((c) => `- ${c.name}${c.due ? ` (due ${c.due})` : ''}${c.list ? ` [${c.list}]` : ''}`).join('\n'));
 
@@ -616,16 +617,16 @@ async function computeSlackTriage(learned: string[] = []): Promise<SlackTriage> 
 
   const list = capped.map((m) => ({ id: m.id, from: m.from, where: m.dm ? 'DM' : `#${m.channel}`, dm: m.dm, emergency: m.emergency, when: ageLabel(Number(m.ts) * 1000), message: m.text.slice(0, 240), recent_conversation: m.context }));
   try {
-    const t = await oneShot(withLearnings(SLACK_TRIAGE_SYSTEM, learned), JSON.stringify(list), 2000);
+    const t = await oneShot(withLearnings(SLACK_TRIAGE_SYSTEM, learned) + deadlineRule(todayKey()), JSON.stringify(list), 2000);
     const s = t.indexOf('['); const e = t.lastIndexOf(']');
-    const parsed = s >= 0 && e > s ? (JSON.parse(t.slice(s, e + 1)) as { id: string; verdict: string; reason?: string; headline?: string }[]) : [];
+    const parsed = s >= 0 && e > s ? (JSON.parse(t.slice(s, e + 1)) as { id: string; verdict: string; reason?: string; headline?: string; deadline?: string }[]) : [];
     const byId = new Map(parsed.map((p) => [p.id, p]));
     const triaged: TriagedSlack[] = capped.map((m) => {
       const v = byId.get(m.id);
       const verdict = v?.verdict === 'act' || v?.verdict === 'know' || v?.verdict === 'ignore'
         ? v.verdict
         : (m.dm || m.emergency ? 'act' : 'know');
-      return { id: m.id, workspace: m.workspace, workspaceName: m.workspaceName, channelId: m.channelId, channel: m.channel, dm: m.dm, from: m.from, text: m.text, ts: m.ts, emergency: m.emergency, verdict, reason: v?.reason ?? '', headline: (v?.headline ?? '').trim() || undefined, audience: m.audience };
+      return { id: m.id, workspace: m.workspace, workspaceName: m.workspaceName, channelId: m.channelId, channel: m.channel, dm: m.dm, from: m.from, text: m.text, ts: m.ts, emergency: m.emergency, verdict, reason: v?.reason ?? '', headline: (v?.headline ?? '').trim() || undefined, audience: m.audience, dueAt: normalizeDeadline(v?.deadline) };
     });
     return { connected: true, triaged };
   } catch (err) {
@@ -641,10 +642,10 @@ async function computeInboxTriage(learned: string[] = []): Promise<InboxTriage> 
   if (msgs.length === 0) return { connected: true, triaged: [] };
   const list = msgs.map((m) => ({ id: m.id, from: m.from, to: (m.to ?? '').slice(0, 200), when: ageLabel(Date.parse(m.receivedAt)), subject: m.subject, snippet: (m.snippet ?? '').slice(0, 220) }));
   try {
-    const text = await oneShot(withLearnings(TRIAGE_SYSTEM, learned), JSON.stringify(list), 2400);
+    const text = await oneShot(withLearnings(TRIAGE_SYSTEM, learned) + deadlineRule(todayKey()), JSON.stringify(list), 2400);
     const s = text.indexOf('[');
     const e = text.lastIndexOf(']');
-    const parsed = s >= 0 && e > s ? (JSON.parse(text.slice(s, e + 1)) as { id: string; verdict: string; reason?: string; headline?: string; audience?: string }[]) : [];
+    const parsed = s >= 0 && e > s ? (JSON.parse(text.slice(s, e + 1)) as { id: string; verdict: string; reason?: string; headline?: string; audience?: string; deadline?: string }[]) : [];
     const byId = new Map(parsed.map((p) => [p.id, p]));
     const triaged = msgs.map((m) => {
       const v = byId.get(m.id);
@@ -653,7 +654,7 @@ async function computeInboxTriage(learned: string[] = []): Promise<InboxTriage> 
         : v?.verdict === 'ignore' ? 'ignore'
         : 'know';
       const audience: 'you' | 'team' | undefined = v?.audience === 'you' ? 'you' : v?.audience === 'team' ? 'team' : undefined;
-      return { id: m.id, account: m.account, from: m.from, subject: m.subject, snippet: m.snippet, receivedAt: m.receivedAt, verdict, reason: v?.reason ?? '', headline: (v?.headline ?? '').trim() || undefined, audience };
+      return { id: m.id, account: m.account, from: m.from, subject: m.subject, snippet: m.snippet, receivedAt: m.receivedAt, verdict, reason: v?.reason ?? '', headline: (v?.headline ?? '').trim() || undefined, audience, dueAt: normalizeDeadline(v?.deadline) };
     });
     return { connected: true, triaged };
   } catch (err) {

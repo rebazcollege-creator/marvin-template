@@ -81,6 +81,32 @@ function Aud({ a }: { a?: 'you' | 'team' | 'group' }) {
   );
 }
 
+/** A hard calendar deadline the triage model pulled out of the message ("by Friday",
+ *  "COB Thursday"). Calm but clear — today/tomorrow/overdue get the accent, the rest
+ *  stays quiet. Distinct from dueLabel (which paces the "one thing" by time-of-day). */
+function DueChip({ dueAt, now }: { dueAt?: string; now: Date }) {
+  if (!dueAt) return null;
+  const m = dueAt.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return null;
+  const due = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const days = Math.round((due.getTime() - today.getTime()) / 86400000);
+  const dm = () => due.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  const label =
+    days === 0 ? 'due today'
+    : days === 1 ? 'due tomorrow'
+    : days > 1 && days <= 6 ? `due ${due.toLocaleDateString('en-GB', { weekday: 'short' })}`
+    : days > 6 ? `due ${dm()}`
+    : days === -1 ? 'was due yesterday'
+    : `was due ${dm()}`;
+  const soon = days <= 1; // today, tomorrow, or already passed
+  return (
+    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${soon ? 'bg-accent-soft text-accent' : 'bg-surface-2 text-muted'}`} title={dueAt}>
+      {label}
+    </span>
+  );
+}
+
 /** A timestamp that shows BOTH the relative age and the exact send date, so a "13h ago" can
  *  always be checked against the real date in Slack/Gmail — nothing can quietly look new. */
 function Stamp({ ms, tz }: { ms: number; tz?: string }) {
@@ -430,6 +456,7 @@ export default function HomePage() {
       task: m.headline || m.subject,
       headline: m.headline,
       at: m.receivedAt,
+      dueAt: m.dueAt,
       audience: m.audience,
       email: { account: m.account, id: m.id, from: m.from, subject: m.subject },
     });
@@ -456,6 +483,7 @@ export default function HomePage() {
       task: m.headline || (m.text.length > 180 ? `${m.text.slice(0, 177)}…` : m.text),
       headline: m.headline,
       at: m.ts ? new Date(slackTsMs(m.ts)).toISOString() : undefined,
+      dueAt: m.dueAt,
       audience: m.audience,
       ref: m.id,
       slack: { workspace: m.workspace, channelId: m.channelId, channel: m.channel, from: m.from, text: m.text },
@@ -654,6 +682,7 @@ export default function HomePage() {
                 <div className="flex flex-wrap items-center gap-2.5">
                   <SourceBadge source="email" label={m.account} />
                   <Aud a={m.audience} />
+                  <DueChip dueAt={m.dueAt} now={now} />
                   <span className="text-[13px] text-text-2">{m.from}</span>
                   {m.receivedAt && <Stamp ms={Date.parse(m.receivedAt)} tz={tz} />}
                 </div>
@@ -704,6 +733,7 @@ export default function HomePage() {
                 <div className="flex flex-wrap items-center gap-2.5">
                   <SourceBadge source="slack" urgent={m.emergency} label={`${m.emergency ? 'URGENT · ' : ''}${m.dm ? 'DM' : `#${m.channel}`} · ${m.workspaceName}`} />
                   <Aud a={m.audience} />
+                  <DueChip dueAt={m.dueAt} now={now} />
                   <span className="text-[13px] text-text-2">{m.from}</span>
                   {m.ts && <Stamp ms={slackTsMs(m.ts)} tz={tz} />}
                 </div>

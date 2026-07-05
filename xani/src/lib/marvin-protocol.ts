@@ -102,6 +102,9 @@ export interface TriagedEmail {
   headline?: string;
   /** Who it's aimed at: directly at Rebaz, or the whole team/list. */
   audience?: 'you' | 'team';
+  /** A concrete due date the message states for Rebaz's action (ISO YYYY-MM-DD),
+   *  resolved by triage. Absent when the message names no real deadline. */
+  dueAt?: string;
 }
 export interface InboxTriage {
   connected: boolean;
@@ -188,6 +191,9 @@ export interface TriagedSlack {
   headline?: string;
   /** Who it's aimed at: directly at Rebaz (DM / @mention), a small group, or a whole channel. */
   audience?: 'you' | 'group' | 'team';
+  /** A concrete due date the message states for Rebaz's action (ISO YYYY-MM-DD),
+   *  resolved by triage. Absent when the message names no real deadline. */
+  dueAt?: string;
 }
 export interface SlackTriage {
   connected: boolean;

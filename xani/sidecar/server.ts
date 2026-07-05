@@ -639,16 +639,25 @@ async function runDiagnostics(): Promise<{ headline: string; rows: ReturnType<ty
     getGithub().catch(fail),
     cs['BRAVE_SEARCH_API_KEY'] ? braveWebSearch('ping', 1).catch((e) => ({ ok: false, error: (e as Error).message })) : Promise.resolve({ ok: false, error: 'no_key' }),
   ]);
+  // A connector reports connected:true when its CREDS are present, not when the call
+  // actually succeeded — so a probe is only truly "live" when connected AND no error.
+  // Otherwise (creds present but erroring) it falls through to the error classification
+  // with its fix hint, instead of the Doctor falsely reporting "Working".
+  const errOf = (x: unknown) => (x && typeof x === 'object' && 'error' in x ? (x as { error?: string }).error : undefined);
   const slackErr = slack.connected ? undefined : (('workspaces' in slack ? slack.workspaces?.find((w) => w.error)?.error : undefined) ?? 'not connected');
+  const live = (x: { connected?: boolean }, err?: string) => !!x.connected && !err;
+  const gmailErr = errOf(inbox); const calErr = errOf(cal); const driveErr = errOf(drive);
+  const trelloErr = errOf(trello); const bufferErr = errOf(buffer); const githubErr = errOf(github);
+  const braveErr = brave.ok ? undefined : errOf(brave);
   const probes: ProbeResult[] = [
-    { id: 'gmail', name: 'Gmail', credPresent: gmailPresent, connected: inbox.connected, error: 'error' in inbox ? inbox.error : undefined },
-    { id: 'gcal', name: 'Google Calendar', credPresent: !!cs['GOOGLE_CALENDAR_REFRESH_TOKEN'], connected: cal.connected, error: 'error' in cal ? cal.error : undefined },
-    { id: 'drive', name: 'Google Drive', credPresent: !!cs['GOOGLE_DRIVE_REFRESH_TOKEN'], connected: drive.connected, error: 'error' in drive ? drive.error : undefined },
-    { id: 'slack', name: 'Slack', credPresent: !!(cs['SLACK_AMARGI_USER_TOKEN'] || cs['SLACK_AMARGI_BOT_TOKEN'] || cs['SLACK_LEADSTORIES_USER_TOKEN'] || cs['SLACK_LEADSTORIES_BOT_TOKEN']), connected: slack.connected, error: slackErr },
-    { id: 'trello', name: 'Trello', credPresent: !!(cs['TRELLO_API_KEY'] && cs['TRELLO_TOKEN']), connected: trello.connected, error: 'error' in trello ? trello.error : undefined },
-    { id: 'buffer', name: 'Buffer', credPresent: !!cs['BUFFER_ACCESS_TOKEN'], connected: buffer.connected, error: 'error' in buffer ? buffer.error : undefined },
-    { id: 'github', name: 'GitHub', credPresent: !!cs['GITHUB_TOKEN'], connected: github.connected, error: 'error' in github ? github.error : undefined },
-    { id: 'websearch', name: 'Web search', credPresent: !!cs['BRAVE_SEARCH_API_KEY'], connected: !!brave.ok, error: brave.ok ? undefined : ('error' in brave ? brave.error : undefined) },
+    { id: 'gmail', name: 'Gmail', credPresent: gmailPresent, connected: live(inbox, gmailErr), error: gmailErr },
+    { id: 'gcal', name: 'Google Calendar', credPresent: !!cs['GOOGLE_CALENDAR_REFRESH_TOKEN'], connected: live(cal, calErr), error: calErr },
+    { id: 'drive', name: 'Google Drive', credPresent: !!cs['GOOGLE_DRIVE_REFRESH_TOKEN'], connected: live(drive, driveErr), error: driveErr },
+    { id: 'slack', name: 'Slack', credPresent: !!(cs['SLACK_AMARGI_USER_TOKEN'] || cs['SLACK_AMARGI_BOT_TOKEN'] || cs['SLACK_LEADSTORIES_USER_TOKEN'] || cs['SLACK_LEADSTORIES_BOT_TOKEN']), connected: live(slack, slackErr), error: slackErr },
+    { id: 'trello', name: 'Trello', credPresent: !!(cs['TRELLO_API_KEY'] && cs['TRELLO_TOKEN']), connected: live(trello, trelloErr), error: trelloErr },
+    { id: 'buffer', name: 'Buffer', credPresent: !!cs['BUFFER_ACCESS_TOKEN'], connected: live(buffer, bufferErr), error: bufferErr },
+    { id: 'github', name: 'GitHub', credPresent: !!cs['GITHUB_TOKEN'], connected: live(github, githubErr), error: githubErr },
+    { id: 'websearch', name: 'Web search', credPresent: !!cs['BRAVE_SEARCH_API_KEY'], connected: !!brave.ok, error: braveErr },
   ];
   const rows = summarizeHealth(probes);
   return { headline: healthHeadline(rows), rows };

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady, readJson, writeJson } from '@/lib/storage';
 import { fetchBriefingData, fetchInbox, fetchMessageBody, fetchSlack, peekData, PATHS } from '@/lib/marvin-data';
-import { fetchInboxTriage, fetchSlackTriage, requestDraft, sortDump, summarizeItem } from '@/lib/marvin-client';
+import { fetchInboxTriage, fetchSlackTriage, getBrief, requestDraft, sortDump, summarizeItem } from '@/lib/marvin-client';
 import { enqueueApproval } from '@/lib/approvals';
 import type { BriefingData, InboxData, SlackData, TriagedEmail, TriagedSlack } from '@/lib/marvin-protocol';
 import { activeLoops, attachLoopRef, captureLoop, completeLoop, snoozeLoop, refineLoop, type OpenLoop } from '@/lib/open-loops';
@@ -224,6 +224,7 @@ export default function HomePage() {
   const [flash, setFlash] = useState<string | null>(null);
   const [learned, setLearned] = useState(0);
   const [overwhelmed, setOverwhelmed] = useState(false);
+  const [brief, setBrief] = useState('');
   // ADHD Rule 1 — a primary surface shows at most 3 items; the rest are one tap away,
   // so a busy morning is a short calm list, not an endless scroll.
   const HOME_CAP = 3;
@@ -270,6 +271,11 @@ export default function HomePage() {
       const learnings = [...triageLearnings(), ...understandingFacts()];
       const cached = peekData<BriefingData>(PATHS.briefing);
       if (cached) setData(cached);
+
+      // MARVIN speaks first: one plain-language brief of what actually needs him today,
+      // synthesised server-side from inbox/slack "act" items + calendar + urgent Trello.
+      // SWR — instant if today's is cached, regenerates in the background otherwise.
+      void getBrief(learnings).then((b) => { if (b.ok && b.text) setBrief(b.text); });
       void syncOpenLoops().then(reloadLoops); // pull live Trello commitments into Open Loops
 
       // Seed triage from the last session so Home is populated on open; then revalidate.
@@ -539,6 +545,19 @@ export default function HomePage() {
         </section>
       ) : (
         <>
+          {/* MARVIN speaks first — the morning brief, in his own words */}
+          {brief && (
+            <section className="mt-8 rounded-2xl border border-border bg-surface p-6 shadow-sm"
+              style={{ borderTopWidth: 3, borderTopColor: 'var(--accent)' }}>
+              <div className="text-[11px] font-bold uppercase tracking-[0.08em] text-accent">MARVIN — this morning</div>
+              <div className="mt-3 space-y-1.5 text-[14.5px] leading-relaxed text-text">
+                {brief.split('\n').filter((l) => l.trim()).map((line, i) => (
+                  <p key={i}>{line.replace(/^[-•*]\s*/, '· ')}</p>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* a gentle bookend — morning intention / evening reflection (skippable) */}
           {settings && !overwhelmed && <DayRitual tz={tz} now={now} name={name} />}
 

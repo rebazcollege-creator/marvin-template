@@ -498,6 +498,21 @@ export async function webSearch(query: string, count = 5): Promise<{ ok: boolean
   }
 }
 
+export interface MorningBrief { ok: boolean; text: string; at?: number; forDate?: string; dayOff?: boolean; error?: string }
+/** MARVIN's morning brief — built by the heartbeat; served stale-while-revalidate. */
+export async function getBrief(learned: string[] = []): Promise<MorningBrief> {
+  try {
+    const r = await fetch(`${SIDECAR_URL}/brief`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ learned }),
+    });
+    return (await r.json()) as MorningBrief;
+  } catch {
+    return { ok: false, text: '' };
+  }
+}
+
 export async function pingRuntime(): Promise<boolean> {
   try {
     const resp = await fetch(`${SIDECAR_URL}/health`, { cache: 'no-store' });

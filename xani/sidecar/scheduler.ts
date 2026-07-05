@@ -63,13 +63,26 @@ export function runNightlyBackup(now: Date = new Date()): boolean {
 
 let started = false;
 
-/** Start the heartbeat. Idempotent; also runs jobs once at boot so a laptop that was
- *  asleep at 03:00 still gets its backup the moment the service comes up. */
-export function startScheduler(): void {
+/**
+ * Start the heartbeat. Idempotent; also runs jobs once at boot so a laptop that was
+ * asleep at 03:00 still gets its backup the moment the service comes up.
+ *
+ * `jobs` are extra work to run every tick (e.g. the scheduled triage refresh so Home
+ * is fresh when Rebaz opens it in the morning). Each job is isolated — one throwing
+ * never stops the heartbeat or the other jobs.
+ */
+export function startScheduler(jobs: Array<() => void | Promise<void>> = []): void {
   if (started) return;
   started = true;
+  const all: Array<() => void | Promise<void>> = [() => { runNightlyBackup(); }, ...jobs];
   const tick = () => {
-    try { runNightlyBackup(); } catch { /* a job must never kill the heartbeat */ }
+    for (const job of all) {
+      try {
+        void Promise.resolve(job()).catch(() => undefined);
+      } catch {
+        /* a job must never kill the heartbeat */
+      }
+    }
   };
   tick();
   const t = setInterval(tick, TICK_MS);

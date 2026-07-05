@@ -324,6 +324,9 @@ const triageState: {
   slackInflight: Promise<SlackTriage> | null;
 } = { inbox: null, slack: null, inboxInflight: null, slackInflight: null };
 const learnKeyOf = (learned: string[]) => (learned ?? []).join('§');
+// The most recent learned-corrections set the renderer sent — reused by the scheduled
+// background refresh so overnight triage applies the same corrections Rebaz curated.
+let lastLearned: string[] = [];
 
 function persistTriage(): void {
   try {
@@ -382,6 +385,31 @@ async function refreshSlackTriage(learned: string[]): Promise<SlackTriage> {
     persistTriage();
   }
   return data;
+}
+
+/**
+ * Scheduled background triage refresh — the heartbeat doing real work. Keeps the inbox
+ * and Slack snapshots fresh so Home shows TODAY's world the instant Rebaz opens it,
+ * instead of last session's. Read-only (fetch + triage + cache); it never sends,
+ * notifies, or acts, so it's safe to run unattended and needs no day-off gate (silence
+ * is about not pinging him — a quiet cache refresh doesn't). Only runs during waking
+ * hours, and only when a snapshot is stale, to keep background model usage modest.
+ */
+const TRIAGE_WAKE_START = 6; // local hour
+const TRIAGE_WAKE_END = 23;
+const TRIAGE_MIN_AGE_MS = 25 * 60 * 1000;
+async function scheduledTriageRefresh(): Promise<void> {
+  if (!modelAvailable()) return;
+  const h = new Date().getHours();
+  if (h < TRIAGE_WAKE_START || h >= TRIAGE_WAKE_END) return; // let the small hours be quiet
+  const inboxAge = triageState.inbox ? Date.now() - triageState.inbox.at : Infinity;
+  const slackAge = triageState.slack ? Date.now() - triageState.slack.at : Infinity;
+  try {
+    if (inboxAge > TRIAGE_MIN_AGE_MS) await refreshInboxTriage(lastLearned);
+    if (slackAge > TRIAGE_MIN_AGE_MS) await refreshSlackTriage(lastLearned);
+  } catch {
+    /* a background refresh must never disturb the running app */
+  }
 }
 
 hydrateTriage(); // warm the caches from the last session so the first Home load is instant
@@ -614,6 +642,7 @@ const server = createServer(async (req, res) => {
   if ((req.method === 'GET' || req.method === 'POST') && req.url?.startsWith('/triage/inbox')) {
     try {
       const learned = req.method === 'POST' ? readLearned(await readBody(req)) : [];
+      if (req.method === 'POST') lastLearned = learned; // remember for the scheduled refresh
       return json(res, 200, await triageInbox(learned));
     } catch (err) {
       return json(res, 200, { connected: false, triaged: [], error: (err as Error).message });
@@ -632,6 +661,7 @@ const server = createServer(async (req, res) => {
   if ((req.method === 'GET' || req.method === 'POST') && req.url?.startsWith('/triage/slack')) {
     try {
       const learned = req.method === 'POST' ? readLearned(await readBody(req)) : [];
+      if (req.method === 'POST') lastLearned = learned;
       return json(res, 200, await triageSlack(learned));
     } catch (err) {
       return json(res, 200, { connected: false, triaged: [], error: (err as Error).message });
@@ -1212,5 +1242,7 @@ server.listen(PORT, '127.0.0.1', () => {
     : prov === 'anthropic' ? 'Claude (Anthropic API)'
     : 'NONE — set XANI_USE_CLAUDE_CLI=1, or a Gemini/Anthropic key';
   console.log(`MARVIN sidecar on http://127.0.0.1:${PORT} (model: ${label})`);
-  startScheduler(); // the heartbeat: nightly backups now; briefings/watchers in Phase 2
+  // The heartbeat: nightly backup + a scheduled triage refresh so Home is fresh when
+  // Rebaz opens it in the morning (needs the background service — Phase 0 — to be running).
+  startScheduler([scheduledTriageRefresh]);
 });

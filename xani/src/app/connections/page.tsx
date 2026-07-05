@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ensureStorageReady } from '@/lib/storage';
 import {
   CONNECTIONS,
@@ -14,7 +14,7 @@ import { credKeysFor } from '@/lib/connect-flows';
 import { ConnectFlow } from '@/components/connections/ConnectFlow';
 import { LivePreview } from '@/components/connections/LivePreview';
 import { logActivity } from '@/lib/activity';
-import { getCredStatus, clearRuntimeCreds } from '@/lib/marvin-client';
+import { getCredStatus, clearRuntimeCreds, getDiagnostics, type HealthRow } from '@/lib/marvin-client';
 import { clearDataCache } from '@/lib/marvin-data';
 
 /** Env-vars the runtime needs before an integration can actually fetch/act. */
@@ -66,6 +66,58 @@ function Card({ c, state, credsReady, onOpen }: { c: Connection; state?: ConnSta
       >
         {on ? 'Manage' : 'Connect'}
       </button>
+    </div>
+  );
+}
+
+/** Live self-diagnostic: probes every connector and says, in plain language, what works and
+ *  what needs Rebaz — so an empty brief has a visible, fixable cause instead of a mystery. */
+function HealthCheck() {
+  const [rows, setRows] = useState<HealthRow[] | null>(null);
+  const [headline, setHeadline] = useState('');
+  const [running, setRunning] = useState(false);
+
+  const run = useCallback(async () => {
+    setRunning(true);
+    const d = await getDiagnostics();
+    setRunning(false);
+    if (!d) { setHeadline('Runtime unreachable — is Xanî running?'); setRows([]); return; }
+    if (!d.ok) { setHeadline(d.error || 'Health check failed'); setRows([]); return; }
+    setHeadline(d.headline);
+    setRows(d.rows);
+  }, []);
+
+  const dot = (s: HealthRow['status']) => (s === 'live' ? 'bg-green' : s === 'needs_setup' ? 'bg-muted' : 'bg-[var(--accent)]');
+  return (
+    <div className="mb-8 rounded-[14px] border border-border bg-surface p-[18px]">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-text">Health check</div>
+          <div className="text-[11.5px] text-muted">{rows ? headline : 'See what’s actually working right now — and how to fix what isn’t.'}</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void run()}
+          disabled={running}
+          className="ml-auto rounded-xl bg-accent px-3.5 py-1.5 text-[13px] font-semibold text-on-accent transition hover:bg-accent-dim disabled:opacity-60"
+        >
+          {running ? 'Checking…' : rows ? 'Re-check' : 'Run check'}
+        </button>
+      </div>
+      {rows && rows.length > 0 && (
+        <ul className="mt-4 flex flex-col gap-2.5">
+          {rows.map((r) => (
+            <li key={r.id} className="flex items-start gap-2.5">
+              <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${dot(r.status)}`} />
+              <div className="min-w-0">
+                <span className="text-[13px] font-semibold text-text">{r.name}</span>
+                <span className="text-[13px] text-text-2"> — {r.detail}</span>
+                {r.hint && <div className="text-[12px] text-muted">{r.hint}</div>}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -127,6 +179,8 @@ export default function ConnectionsPage() {
           how you’d like to connect and exactly what to grant.
         </p>
       </header>
+
+      <HealthCheck />
 
       {ready && connected.length > 0 && (
         <>

@@ -525,6 +525,18 @@ export async function getWaiting(): Promise<WaitingOnData | null> {
   }
 }
 
+export interface HealthRow { id: string; name: string; status: 'live' | 'needs_setup' | 'error'; detail: string; hint?: string }
+export interface DiagnosticsResult { ok: boolean; headline: string; rows: HealthRow[]; error?: string }
+/** Live self-diagnostic — probes every connector and returns plain-language health + fixes. */
+export async function getDiagnostics(): Promise<DiagnosticsResult | null> {
+  try {
+    const r = await fetch(`${SIDECAR_URL}/diagnostics`, { cache: 'no-store' });
+    return (await r.json()) as DiagnosticsResult;
+  } catch {
+    return null;
+  }
+}
+
 export async function pingRuntime(): Promise<boolean> {
   try {
     const resp = await fetch(`${SIDECAR_URL}/health`, { cache: 'no-store' });

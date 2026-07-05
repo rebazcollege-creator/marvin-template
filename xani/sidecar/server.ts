@@ -16,6 +16,7 @@ import { deadlineRule, normalizeDeadline } from './deadline.ts';
 import { buildBriefInput, pressingCards } from './brief.ts';
 import { pickAwaiting, DEFAULT_WAITING_OPTS } from './waiting.ts';
 import { decideNotifications, pruneFiredKeys, type NotifyEmergency } from './notify.ts';
+import { summarizeHealth, healthHeadline, type ProbeResult } from './diagnostics.ts';
 import { loadCreds, setCred, clearCred, credStatus } from './creds.ts';
 import { startOAuthLogin } from './google-oauth.ts';
 import { originAllowed } from './security.ts';
@@ -620,6 +621,39 @@ function pendingNotifications() {
   );
 }
 
+// ── Self-diagnostic ("Doctor") — probe every connector live and say, in plain
+// language, what's working and what needs Rebaz. Reuses the real connectors so the
+// verdict matches what the app would actually get; classification lives in the pure,
+// tested diagnostics.ts.
+async function runDiagnostics(): Promise<{ headline: string; rows: ReturnType<typeof summarizeHealth> }> {
+  const cs = credStatus();
+  const gmailPresent = [1, 2, 3, 4, 5].some((n) => cs[`GMAIL_CLIENT_ID_${n}`] && cs[`GMAIL_REFRESH_TOKEN_${n}`]);
+  const fail = (e: unknown) => ({ connected: false, error: (e as Error).message });
+  const [inbox, cal, drive, slack, trello, buffer, github, brave] = await Promise.all([
+    getInbox('inbox', '').catch(fail),
+    getCalendar().catch(fail),
+    getDrive().catch(fail),
+    getSlack().catch(fail),
+    getTrello().catch(fail),
+    getBuffer().catch(fail),
+    getGithub().catch(fail),
+    cs['BRAVE_SEARCH_API_KEY'] ? braveWebSearch('ping', 1).catch((e) => ({ ok: false, error: (e as Error).message })) : Promise.resolve({ ok: false, error: 'no_key' }),
+  ]);
+  const slackErr = slack.connected ? undefined : (('workspaces' in slack ? slack.workspaces?.find((w) => w.error)?.error : undefined) ?? 'not connected');
+  const probes: ProbeResult[] = [
+    { id: 'gmail', name: 'Gmail', credPresent: gmailPresent, connected: inbox.connected, error: 'error' in inbox ? inbox.error : undefined },
+    { id: 'gcal', name: 'Google Calendar', credPresent: !!cs['GOOGLE_CALENDAR_REFRESH_TOKEN'], connected: cal.connected, error: 'error' in cal ? cal.error : undefined },
+    { id: 'drive', name: 'Google Drive', credPresent: !!cs['GOOGLE_DRIVE_REFRESH_TOKEN'], connected: drive.connected, error: 'error' in drive ? drive.error : undefined },
+    { id: 'slack', name: 'Slack', credPresent: !!(cs['SLACK_AMARGI_USER_TOKEN'] || cs['SLACK_AMARGI_BOT_TOKEN'] || cs['SLACK_LEADSTORIES_USER_TOKEN'] || cs['SLACK_LEADSTORIES_BOT_TOKEN']), connected: slack.connected, error: slackErr },
+    { id: 'trello', name: 'Trello', credPresent: !!(cs['TRELLO_API_KEY'] && cs['TRELLO_TOKEN']), connected: trello.connected, error: 'error' in trello ? trello.error : undefined },
+    { id: 'buffer', name: 'Buffer', credPresent: !!cs['BUFFER_ACCESS_TOKEN'], connected: buffer.connected, error: 'error' in buffer ? buffer.error : undefined },
+    { id: 'github', name: 'GitHub', credPresent: !!cs['GITHUB_TOKEN'], connected: github.connected, error: 'error' in github ? github.error : undefined },
+    { id: 'websearch', name: 'Web search', credPresent: !!cs['BRAVE_SEARCH_API_KEY'], connected: !!brave.ok, error: brave.ok ? undefined : ('error' in brave ? brave.error : undefined) },
+  ];
+  const rows = summarizeHealth(probes);
+  return { headline: healthHeadline(rows), rows };
+}
+
 
 /** Relative age of an instant ("13h ago") — handed to Claude so IT can weigh recency when
  *  deciding what still needs Rebaz, instead of recency being decided only by code. */
@@ -906,6 +940,15 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: false, notifications: [], error: (err as Error).message });
     }
   }
+  // Self-diagnostic — live probe of every connector with plain-language fixes.
+  if (req.method === 'GET' && req.url === '/diagnostics') {
+    try {
+      return json(res, 200, { ok: true, ...(await runDiagnostics()) });
+    } catch (err) {
+      return json(res, 200, { ok: false, headline: '', rows: [], error: (err as Error).message });
+    }
+  }
+
   // Record that these notification keys were delivered, so they never fire again.
   if (req.method === 'POST' && req.url === '/notifications/ack') {
     try {

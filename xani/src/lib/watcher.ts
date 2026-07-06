@@ -39,6 +39,11 @@ export async function runWatch(): Promise<void> {
   const s = getSeen();
   const first = !s.seeded; // seed silently on the very first run — don't notify old history
   const pings: Ping[] = [];
+  // Candidate ids found THIS pass — not committed to the seen-set until we've actually
+  // decided (fixes: items arriving during days off / quiet hours / focus / the cooldown were
+  // marked seen before the nudge gate, so they never resurfaced when the gate opened).
+  const newSlack: string[] = [];
+  const newEmail: string[] = [];
 
   try {
     const sl = await fetchSlack();
@@ -50,8 +55,8 @@ export async function runWatch(): Promise<void> {
         const flag = m.emergency || (isDM && (ch?.hasUnread ?? false)) || namesRebaz(m.text);
         if (!flag) continue;
         const id = `s:${m.channelId}:${m.ts}`;
-        if (s.slack.includes(id)) continue;
-        s.slack.push(id);
+        if (s.slack.includes(id) || newSlack.includes(id)) continue;
+        newSlack.push(id);
         if (!first) {
           const where = m.emergency ? `🚨 ${m.workspace} · urgent` : isDM ? `${m.user} · Slack DM` : `#${m.channel} · ${m.workspace}`;
           pings.push({ title: where, body: tidy(m.text) || 'New message', tag: id });
@@ -68,8 +73,8 @@ export async function runWatch(): Promise<void> {
       for (const m of inb.messages) {
         if (!m.unread || m.split !== 'important') continue; // Gmail's own IMPORTANT marker — no model needed
         const id = `e:${m.id}`;
-        if (s.email.includes(id)) continue;
-        s.email.push(id);
+        if (s.email.includes(id) || newEmail.includes(id)) continue;
+        newEmail.push(id);
         if (!first) pings.push({ title: `✉️ ${m.from}`, body: tidy(m.subject) || '(no subject)', tag: id });
       }
     }
@@ -77,17 +82,24 @@ export async function runWatch(): Promise<void> {
     /* offline / not connected */
   }
 
-  saveSeen(s);
+  const commit = () => { s.slack.push(...newSlack); s.email.push(...newEmail); saveSeen(s); };
 
-  if (first || pings.length === 0 || !notifyEnabled()) return;
-  // Single gate: quiet by default, batched (≥90 min apart), no days off, no quiet hours,
-  // never during a focus session. New items are still recorded above — they wait quietly.
+  // Seed the very first run silently — record everything, notify nothing.
+  if (first) { commit(); return; }
+  if (pings.length === 0) { commit(); return; } // nothing new to consider
+  // Master toggle OFF is a deliberate, lasting choice → mark seen, don't resurface later.
+  if (!notifyEnabled()) { commit(); return; }
+  // Single TEMPORARY gate: quiet by default, batched (≥90 min apart), no days off, no quiet
+  // hours, never during a focus session. Do NOT commit here — leave these items unseen so
+  // they resurface the moment the gate opens (they were being silently swallowed before).
   if (!canNudge()) return;
+
   if (pings.length <= 3) {
     for (const p of pings) pushNotify(p.title, p.body, { tag: p.tag });
   } else {
     // One calm summary instead of a storm.
     pushNotify(`${pings.length} things for when you surface`, 'They’re in Xanî whenever you’re ready — no rush.', { tag: 'xani-batch' });
   }
+  commit(); // only now, having actually surfaced them, mark these seen
   markNudged();
 }

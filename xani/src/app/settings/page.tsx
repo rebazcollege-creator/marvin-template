@@ -131,7 +131,15 @@ export default function SettingsPage() {
     window.setTimeout(() => setGeminiSaved(false), 3000);
   };
   const removeGeminiKey = async () => {
-    if (!isTauri()) await setRuntimeCred('GOOGLE_AI_API_KEY', '');
+    // Must actually clear the runtime cred on BOTH paths — in Tauri the save goes through
+    // set_integration_cred, so the removal must too, or the sidecar keeps the key and keeps
+    // routing AI traffic to Gemini while the UI claims it's gone.
+    if (isTauri()) {
+      const { invoke } = await import('@tauri-apps/api/core');
+      await invoke('set_integration_cred', { name: 'GOOGLE_AI_API_KEY', value: '' });
+    } else {
+      await setRuntimeCred('GOOGLE_AI_API_KEY', '');
+    }
     setGeminiStored(false);
   };
 

@@ -242,11 +242,13 @@ export default function HomePage() {
   const [inboxFiled, setInboxFiled] = useState(0);
   const [inboxErr, setInboxErr] = useState<string | null>(null);
   const [inboxLoading, setInboxLoading] = useState(true);
+  const [inboxStale, setInboxStale] = useState(false); // showing last-known because we couldn't verify
   const [slackActs, setSlackActs] = useState<TriagedSlack[] | null>(null);
   const [slackKnow, setSlackKnow] = useState(0);
   const [slackFiled, setSlackFiled] = useState(0);
   const [slackErr, setSlackErr] = useState<string | null>(null);
   const [slackLoading, setSlackLoading] = useState(true);
+  const [slackStale, setSlackStale] = useState(false);
   const [flash, setFlash] = useState<string | null>(null);
   const [learned, setLearned] = useState(0);
   const [overwhelmed, setOverwhelmed] = useState(false);
@@ -318,25 +320,27 @@ export default function HomePage() {
       // Triage reads Rebaz's corrections so it gets sharper each time (self-development.md).
       fetchInboxTriage(learnings).then((t) => {
         setInboxLoading(false);
-        if (!t) { if (!ci) setInboxErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
-        // Honest: no Gmail creds in the runtime is NOT "nothing needs you" — say it's not connected (but keep last-known if we have it).
-        if (t.connected === false) { if (!ci) { setInboxErr(t.error ?? 'No Gmail connected to the runtime — open Connections and reconnect (the Claude app’s Gmail is separate).'); setInboxActs([]); } return; }
-        if (t.error && t.triaged.length === 0) { if (!ci) setInboxErr(t.error); return; } // keep last-known
+        // Couldn't verify (runtime down / disconnected / transient error). With NO cache, say
+        // so plainly. WITH a cache, mark it STALE — never present last-known as a confident
+        // "nothing needs you" (that's a false all-clear the render now suppresses).
+        if (!t) { if (ci) setInboxStale(true); else setInboxErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        if (t.connected === false) { if (ci) setInboxStale(true); else { setInboxErr(t.error ?? 'No Gmail connected to the runtime — open Connections and reconnect (the Claude app’s Gmail is separate).'); setInboxActs([]); } return; }
+        if (t.error && t.triaged.length === 0) { if (ci) setInboxStale(true); else setInboxErr(t.error); return; }
         const acts = t.triaged.filter((m) => m.verdict === 'act');
         const know = t.triaged.filter((m) => m.verdict === 'know').length;
         const filed = t.triaged.filter((m) => m.verdict === 'ignore').length;
-        setInboxActs(acts); setInboxKnow(know); setInboxFiled(filed); setInboxErr(null);
+        setInboxActs(acts); setInboxKnow(know); setInboxFiled(filed); setInboxErr(null); setInboxStale(false);
         writeJson(INBOX_TRIAGE_KEY, { acts, know, filed });
       });
       fetchSlackTriage(learnings).then((t) => {
         setSlackLoading(false);
-        if (!t) { if (!cs) setSlackErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
-        if (t.connected === false) { if (!cs) { setSlackErr(t.error ?? 'No Slack connected to the runtime — open Connections and reconnect.'); setSlackActs([]); } return; }
-        if (t.error && t.triaged.length === 0) { if (!cs) setSlackErr(t.error); return; } // keep last-known
+        if (!t) { if (cs) setSlackStale(true); else setSlackErr('runtime unreachable — is it running? (npm run dev:all)'); return; }
+        if (t.connected === false) { if (cs) setSlackStale(true); else { setSlackErr(t.error ?? 'No Slack connected to the runtime — open Connections and reconnect.'); setSlackActs([]); } return; }
+        if (t.error && t.triaged.length === 0) { if (cs) setSlackStale(true); else setSlackErr(t.error); return; }
         const acts = t.triaged.filter((m) => m.verdict === 'act');
         const know = t.triaged.filter((m) => m.verdict === 'know').length;
         const filed = t.triaged.filter((m) => m.verdict === 'ignore').length;
-        setSlackActs(acts); setSlackKnow(know); setSlackFiled(filed); setSlackErr(null);
+        setSlackActs(acts); setSlackKnow(know); setSlackFiled(filed); setSlackErr(null); setSlackStale(false);
         writeJson(SLACK_TRIAGE_KEY, { acts, know, filed });
       });
     });
@@ -703,7 +707,10 @@ export default function HomePage() {
 
             {inboxLoading && <p className="px-1 text-[13.5px] text-muted">Reading your inbox…</p>}
             {!inboxLoading && inboxErr && <p className="px-1 text-[13.5px] text-muted">Couldn’t read your inbox: {inboxErr}</p>}
-            {!inboxLoading && !inboxErr && inboxActs && inboxActs.length === 0 && (
+            {!inboxLoading && !inboxErr && inboxStale && (
+              <p className="px-1 text-[13.5px] text-muted">Couldn’t refresh just now — showing last known. Not a confirmed all-clear.</p>
+            )}
+            {!inboxLoading && !inboxErr && !inboxStale && inboxActs && inboxActs.length === 0 && (
               <p className="px-1 text-[13.5px] text-text-2">
                 Nothing in your inbox needs you right now.
                 {(inboxKnow > 0 || inboxFiled > 0) && ` ${inboxKnow} good to know · ${inboxFiled} filed as noise.`}
@@ -754,7 +761,10 @@ export default function HomePage() {
 
             {slackLoading && <p className="px-1 text-[13.5px] text-muted">Reading your Slack…</p>}
             {!slackLoading && slackErr && <p className="px-1 text-[13.5px] text-muted">Couldn’t read Slack: {slackErr}</p>}
-            {!slackLoading && !slackErr && slackActs && slackActs.length === 0 && (
+            {!slackLoading && !slackErr && slackStale && (
+              <p className="px-1 text-[13.5px] text-muted">Couldn’t refresh just now — showing last known. Not a confirmed all-clear.</p>
+            )}
+            {!slackLoading && !slackErr && !slackStale && slackActs && slackActs.length === 0 && (
               <p className="px-1 text-[13.5px] text-text-2">
                 Nothing on Slack needs you right now.
                 {(slackKnow > 0 || slackFiled > 0) && ` ${slackKnow} good to know · ${slackFiled} filed as noise.`}

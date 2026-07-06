@@ -1110,6 +1110,12 @@ function base64url(s: string): string {
 }
 
 async function sendGmail(p: { to: string; subject: string; body: string; account?: string; threadId?: string; inReplyTo?: string; references?: string }): Promise<ActResult> {
+  // FAIL CLOSED on an unknown account: the personal / LeadStories / Moonshot identity
+  // separation is a hard project rule, and the renderer is untrusted — a card that said
+  // "send as leadstories" must never silently go out from the personal account.
+  if (p.account && !GMAIL_ACCOUNTS.some((a) => a.role === p.account)) {
+    return { ok: false, error: `Unknown Gmail account "${p.account}" — refusing to send from the wrong identity.` };
+  }
   // Pick the account by role if given, else the first configured one.
   const acct = GMAIL_ACCOUNTS.find((a) => a.role === p.account) ?? GMAIL_ACCOUNTS.find((a) => gmailCreds(a.n));
   const c = acct ? gmailCreds(acct.n) : null;
@@ -1212,6 +1218,10 @@ async function createCalendarEvent(p: { title: string; start?: string; end?: str
 }
 
 async function postSlack(p: { channel: string; text: string; workspace?: string; threadTs?: string }): Promise<ActResult> {
+  // FAIL CLOSED on an unknown workspace — never post to the wrong Slack because a name drifted.
+  if (p.workspace && !SLACK_WORKSPACES.some((x) => x.role === p.workspace)) {
+    return { ok: false, error: `Unknown Slack workspace "${p.workspace}" — refusing to post to the wrong place.` };
+  }
   // Default to the first connected workspace if none specified.
   const w = (p.workspace ? SLACK_WORKSPACES.find((x) => x.role === p.workspace) : undefined)
     ?? SLACK_WORKSPACES.find((x) => slackPostToken(x));

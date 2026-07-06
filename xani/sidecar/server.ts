@@ -771,7 +771,13 @@ async function computeSlackTriage(learned: string[] = []): Promise<SlackTriage> 
   }
   candidates.sort((a, b) => Number(b.ts) - Number(a.ts)); // newest first
   const capped = candidates.slice(0, 40);
-  if (capped.length === 0) return { connected: true, triaged: [] };
+  if (capped.length === 0) {
+    // Empty because there was genuinely nothing to surface, OR because every history fetch
+    // failed. Only the latter is a transient error — flag it so it isn't cached as a false
+    // "nothing on Slack needs you" over the last-good snapshot.
+    const allHistFailed = histories.length > 0 && histories.every((x) => !x.h || !x.h.ok);
+    return { connected: true, triaged: [], error: allHistFailed ? 'Slack history fetch failed' : undefined };
+  }
 
   const list = capped.map((m) => ({ id: m.id, from: m.from, where: m.dm ? 'DM' : `#${m.channel}`, dm: m.dm, emergency: m.emergency, when: ageLabel(Number(m.ts) * 1000), message: m.text.slice(0, 240), recent_conversation: m.context }));
   try {
@@ -797,7 +803,11 @@ async function computeInboxTriage(learned: string[] = []): Promise<InboxTriage> 
   const inbox = await getInbox('inbox', '');
   if (!inbox.connected) return { connected: false, triaged: [], error: inbox.error };
   const msgs = inbox.messages.slice(0, 40);
-  if (msgs.length === 0) return { connected: true, triaged: [] };
+  // Propagate inbox.error: getInbox reports connected:true (creds present) even when EVERY
+  // account's live call failed — messages then come back empty WITH an error. Passing the
+  // error through means refreshInboxTriage's `!data.error` guard refuses to cache this
+  // transient failure over the last-good snapshot (a false "nothing needs you").
+  if (msgs.length === 0) return { connected: true, triaged: [], error: inbox.error };
   const list = msgs.map((m) => ({ id: m.id, from: m.from, to: (m.to ?? '').slice(0, 200), when: ageLabel(Date.parse(m.receivedAt)), subject: m.subject, snippet: (m.snippet ?? '').slice(0, 220) }));
   try {
     const text = await oneShot(withLearnings(TRIAGE_SYSTEM, learned) + deadlineRule(todayKey()), JSON.stringify(list), 2400);

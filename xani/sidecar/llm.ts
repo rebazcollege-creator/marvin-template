@@ -165,8 +165,14 @@ function runClaudeStream(args: string[], input: string, onText?: (t: string) => 
       }
       resolve(acc.finalText());
     });
-    child.stdin.write(input);
-    child.stdin.end();
+    // A fast-exiting CLI can close stdin before we finish writing; the resulting EPIPE
+    // is emitted on child.stdin and, unhandled, crashes the whole sidecar. Swallow it —
+    // the real outcome is decided by the exit code / streamed output above.
+    child.stdin.on('error', () => { /* EPIPE: CLI closed stdin early */ });
+    try {
+      child.stdin.write(input);
+      child.stdin.end();
+    } catch { /* stdin already closed */ }
   });
 }
 

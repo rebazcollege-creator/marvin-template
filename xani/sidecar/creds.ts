@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, renameSync } from 'node:fs';
 import { bumpInboxCache, bumpSlackCache } from './connectors.ts';
 import { CREDS_FILE, migrateLegacyFiles } from './paths.ts';
 
@@ -96,7 +96,12 @@ export function clearCred(name: string): boolean {
 
 function persist(): void {
   try {
-    writeFileSync(FILE, JSON.stringify(store, null, 2));
+    // Owner-only (0o600) — this file holds OAuth refresh tokens and API keys; it must not
+    // be world-readable like every other secret-bearing file. Write-then-rename so a crash
+    // mid-write can never truncate the store to empty (atomic replace).
+    const tmp = `${FILE}.tmp`;
+    writeFileSync(tmp, JSON.stringify(store, null, 2), { mode: 0o600 });
+    renameSync(tmp, FILE);
   } catch {
     /* in-memory still applied */
   }

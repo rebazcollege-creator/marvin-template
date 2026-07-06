@@ -65,7 +65,11 @@ function send(res: ServerResponse, file: string, status = 200, injectToken?: str
     // Hashed Next assets are immutable; HTML must always revalidate.
     'Cache-Control': file.includes('/_next/') ? 'public, max-age=31536000, immutable' : 'no-cache',
   });
-  createReadStream(file).pipe(res);
+  // A read error after the header is written (file vanished, permissions) must not throw an
+  // uncaught 'error' that crashes the sidecar — end the response instead.
+  const stream = createReadStream(file);
+  stream.on('error', () => { try { res.destroy(); } catch { /* already closed */ } });
+  stream.pipe(res);
 }
 
 /**

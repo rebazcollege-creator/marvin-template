@@ -34,9 +34,17 @@ export interface BriefAssembly {
   prompt: string;
 }
 
-/** Filter Trello cards down to what actually presses today: overdue/due-dated or urgent. */
-export function pressingCards(cards: BriefCard[]): BriefCard[] {
-  return cards.filter((c) => c.urgent || c.due);
+/** Filter Trello cards down to what actually presses today: urgent, overdue, or due within
+ *  ~2 days. A card with a far-future due date is NOT pressing — keeping it (the old
+ *  `c.urgent || c.due`) manufactured daily false urgency and defeated the brief's empty-gate. */
+export function pressingCards(cards: BriefCard[], now: Date = new Date()): BriefCard[] {
+  const soon = now.getTime() + 48 * 60 * 60 * 1000; // overdue (t <= now < soon) or due within 48h
+  return cards.filter((c) => {
+    if (c.urgent) return true;
+    if (!c.due) return false;
+    const t = Date.parse(c.due);
+    return Number.isFinite(t) && t <= soon;
+  });
 }
 
 /** Build the model's source-data block from already-triaged act-items + calendar + Trello.

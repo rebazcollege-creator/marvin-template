@@ -62,15 +62,16 @@ test('each source is capped at BRIEF_ITEM_CAP items', () => {
   assert.doesNotMatch(r.prompt, /item 8/); // 0..7 shown, 8+ dropped
 });
 
-test('pressingCards keeps only urgent or due-dated cards', () => {
+test('pressingCards keeps urgent, overdue, and due-soon; drops far-future and undated', () => {
+  const now = new Date('2026-07-05T12:00:00Z');
   const cards = [
-    { name: 'urgent one', urgent: true },
-    { name: 'due one', due: '2026-07-05' },
-    { name: 'someday', urgent: false, due: null },
+    { name: 'urgent', urgent: true },
+    { name: 'overdue', due: '2026-07-01' },
+    { name: 'due tomorrow', due: '2026-07-06' },
+    { name: 'far future', due: '2026-09-01' }, // must NOT manufacture daily urgency
+    { name: 'undated', urgent: false, due: null },
   ];
-  const kept = pressingCards(cards);
-  assert.equal(kept.length, 2);
-  assert.deepEqual(kept.map((c) => c.name), ['urgent one', 'due one']);
+  assert.deepEqual(pressingCards(cards, now).map((c) => c.name), ['urgent', 'overdue', 'due tomorrow']);
 });
 
 function waitingItem(p: Partial<import('../src/lib/marvin-protocol.ts').WaitingItem> = {}) {

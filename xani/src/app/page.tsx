@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { getSettings, isDayOff, weekdayInTimezone, type XaniSettings } from '@/lib/settings';
 import { ensureStorageReady, readJson, writeJson } from '@/lib/storage';
 import { fetchBriefingData, fetchInbox, fetchMessageBody, fetchSlack, peekData, PATHS } from '@/lib/marvin-data';
-import { fetchInboxTriage, fetchSlackTriage, getBrief, getWaiting, requestDraft, sortDump, summarizeItem } from '@/lib/marvin-client';
+import { fetchInboxTriage, fetchSlackTriage, getBrief, getWaiting, requestDraft, sortDump, summarizeItem, syncDaysOff } from '@/lib/marvin-client';
 import { enqueueApproval } from '@/lib/approvals';
 import type { BriefingData, InboxData, SlackData, TriagedEmail, TriagedSlack, WaitingItem } from '@/lib/marvin-protocol';
 import { activeLoops, attachLoopRef, captureLoop, completeLoop, snoozeLoop, refineLoop, type OpenLoop } from '@/lib/open-loops';
@@ -293,7 +293,9 @@ export default function HomePage() {
 
   useEffect(() => {
     ensureStorageReady().then(() => {
-      setSettings(getSettings());
+      const s0 = getSettings();
+      setSettings(s0);
+      void syncDaysOff(s0.daysOff); // keep the sidecar's day-off gate in step with the setting
       reloadLoops();
       setLearned(learnedCount());
       // Triage reads BOTH his corrections and everything he's taught me in Train (understanding),

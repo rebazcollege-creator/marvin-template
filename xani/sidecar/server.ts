@@ -365,13 +365,27 @@ function todayKey(at: Date = new Date()): string {
  * the scheduled brief respects what he set; falls back to his known default Sun+Tue.
  * On a day off, MARVIN initiates nothing — no auto-generated brief.
  */
+const DAYSOFF_SYNC_KEY = 'xani.settings.daysoff';
+const validDaysOff = (d: unknown): d is number[] => Array.isArray(d) && d.every((n) => Number.isInteger(n) && (n as number) >= 0 && (n as number) <= 6);
+
 function configuredDaysOff(): number[] {
+  // 1. Explicit sync from the renderer (POST /settings/sync) — the authoritative path that
+  //    works regardless of storage backend (dev localStorage / Tauri SQLite / service kv),
+  //    because the renderer pushes it here rather than the sidecar guessing at its store.
   try {
-    const raw = Object.entries(kvAll()).find(([k]) => k.startsWith('xani.settings'))?.[1];
+    const synced = kvAll()[DAYSOFF_SYNC_KEY];
+    if (synced) {
+      const d = JSON.parse(synced) as unknown;
+      if (validDaysOff(d)) return d;
+    }
+  } catch { /* fall through */ }
+  // 2. Legacy: a full settings blob living directly in the sidecar's own kv (service mode).
+  try {
+    const raw = Object.entries(kvAll()).find(([k]) => k.startsWith('xani.settings') && k !== DAYSOFF_SYNC_KEY)?.[1];
     if (raw) {
       const s = JSON.parse(raw) as { profile?: { daysOff?: number[] }; daysOff?: number[] };
       const d = s.profile?.daysOff ?? s.daysOff;
-      if (Array.isArray(d) && d.every((n) => Number.isInteger(n))) return d;
+      if (validDaysOff(d)) return d;
     }
   } catch { /* fall through to the default */ }
   return [0, 2]; // Sunday + Tuesday (his default)
@@ -946,6 +960,23 @@ const server = createServer(async (req, res) => {
       return json(res, 200, { ok: true, text: b.text, at: b.at, forDate: b.forDate, dayOff: configuredDaysOff().includes(new Date().getDay()) });
     } catch (err) {
       return json(res, 200, { ok: false, text: '', error: (err as Error).message });
+    }
+  }
+
+  // The renderer pushes its effective days-off here (on boot + on change) so the sidecar's
+  // day-off gate honours the user's setting no matter which storage backend holds it. This
+  // is the authoritative source for configuredDaysOff() — a LOCKED rule ("MARVIN initiates
+  // nothing on days off") that was silently defaulting to Sun+Tue in the packaged app.
+  if (req.method === 'POST' && req.url === '/settings/sync') {
+    try {
+      const body = JSON.parse((await readBody(req)) || '{}') as { daysOff?: unknown };
+      if (validDaysOff(body.daysOff)) {
+        kvSet(DAYSOFF_SYNC_KEY, JSON.stringify(body.daysOff));
+        return json(res, 200, { ok: true, daysOff: body.daysOff });
+      }
+      return json(res, 200, { ok: false, error: 'daysOff must be an array of 0-6 integers' });
+    } catch (err) {
+      return json(res, 200, { ok: false, error: (err as Error).message });
     }
   }
 

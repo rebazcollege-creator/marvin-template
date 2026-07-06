@@ -10,7 +10,7 @@ import {
   type XaniSettings,
 } from '@/lib/settings';
 import { ensureStorageReady, exportAll, importAll, isTauri } from '@/lib/storage';
-import { setRuntimeCred, getCredStatus } from '@/lib/marvin-client';
+import { setRuntimeCred, getCredStatus, syncDaysOff } from '@/lib/marvin-client';
 import { Collapsible } from '@/components/ui/Collapsible';
 
 /**
@@ -163,12 +163,14 @@ export default function SettingsPage() {
 
   const handleSave = () => {
     saveSettings(settings);
+    void syncDaysOff(settings.daysOff); // push the day-off change to the sidecar's gate immediately
     setSavedAt(new Date().toLocaleTimeString('en-GB'));
   };
 
   const handleReset = () => {
     resetSettings();
     setSettings(structuredClone(DEFAULT_SETTINGS));
+    void syncDaysOff(DEFAULT_SETTINGS.daysOff);
     setSavedAt(null);
   };
 

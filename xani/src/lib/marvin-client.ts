@@ -537,6 +537,20 @@ export async function getDiagnostics(): Promise<DiagnosticsResult | null> {
   }
 }
 
+/** Push the user's effective days-off to the sidecar so its day-off gate (brief +
+ *  notifications) honours the setting regardless of which storage backend holds it. */
+export async function syncDaysOff(daysOff: number[]): Promise<void> {
+  try {
+    await fetch(`${SIDECAR_URL}/settings/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ daysOff }),
+    });
+  } catch {
+    /* best-effort — the sidecar falls back to the last-synced value or the default */
+  }
+}
+
 export async function pingRuntime(): Promise<boolean> {
   try {
     const resp = await fetch(`${SIDECAR_URL}/health`, { cache: 'no-store' });

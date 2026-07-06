@@ -92,10 +92,13 @@ export default function ApprovalsPage() {
       addVoiceSampleByKey(item.voiceKey, draft.trim());
       setResult('Learned your edit — future drafts will sound more like you.');
     }
-    // For drafted replies/messages (voiceKey items, whose preview IS the draft body),
-    // push the edit into the payload so the EDITED text is what actually sends.
+    // Push the edit into the payload so the EDITED text is what actually sends. This must
+    // happen for EVERY item with a sendable payload — not just voiceKey (drafted-reply)
+    // items. Compose modal, Slack composer and inbox AI-drafts enqueue a payload with NO
+    // voiceKey; gating the sync on voiceKey meant their edits were shown but the ORIGINAL
+    // text was sent. Only the voice-learning above depends on voiceKey.
     const syncPayload = (it: ApprovalItem): ApprovalItem => {
-      if (!it.voiceKey || !it.payload) return { ...it, preview: draft };
+      if (!it.payload) return { ...it, preview: draft };
       const body = draft;
       const payload =
         it.payload.kind === 'email' ? { ...it.payload, body }

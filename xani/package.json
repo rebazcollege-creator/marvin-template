@@ -24,12 +24,16 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
     "@slack/web-api": "^7.8.0",
     "@tauri-apps/api": "^2.11.1",
     "cmdk": "^1.1.1",
+    "framer-motion": "^11.18.2",
     "next": "^15.1.6",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "three": "^0.171.0"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.2.7",

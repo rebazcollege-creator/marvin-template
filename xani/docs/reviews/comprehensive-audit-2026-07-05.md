@@ -49,22 +49,28 @@ covered by tests / build:
 
 Commits: `0324c57`, `3f0605d`, `3e7f717`, and the sidecar/renderer HIGH batches after.
 
-## Deferred — need your Mac to build + verify (not done)
+## Deferred set — now IMPLEMENTED (verify on macOS)
 
-These are real but riskier to change blind; they touch the packaged-app runtime or the
-OAuth flow and should be done with the app running on macOS:
+All five were coded + type-checked + built; they touch the packaged-app runtime or the
+OAuth flow, so confirm each with the app running on your Mac:
 
-- **Day-off gating ignored in the packaged app** — settings live in the Rust SQLite kv the
-  sidecar can't read; the fix (renderer POSTs effective settings to the sidecar, or Tauri
-  passes them at spawn) needs the Tauri build to verify.
-- **OAuth loopback has no `state`/PKCE + reflected-XSS in the callback HTML** — security
-  hardening of `google-oauth.ts`; must be tested against a real sign-in.
-- **`marvin-data` hardcodes `localhost:8787`** — breaks the documented remote/phone flow;
-  low impact while you run locally.
-- **Snoozed loops don't resurface while Home stays mounted** (resident tray app) — needs a
-  re-eval interval; verify against the packaged tray behaviour.
-- **`marvin-data` invalidate doesn't fence in-flight fetches** — subtle concurrency; and the
-  generic-connect token-discard (only affects integrations without a built-in flow).
+- **Day-off gating** — new `POST /settings/sync`; the renderer pushes effective `daysOff`
+  on Home boot + every Settings save; `configuredDaysOff()` reads that authoritative key.
+  *Verify:* change days off in Settings → the brief/notifications respect it.
+- **OAuth `state` + PKCE + escaped callback** — `google-oauth.ts` now issues/validates a
+  `state`, sends PKCE (S256) for Google, and HTML-escapes all callback output.
+  *Verify:* reconnect a Gmail/Calendar account — sign-in still completes.
+- **`marvin-data` URL** — now uses the shared `SIDECAR_URL` resolver (remote `/__mv` proxy).
+  *Verify:* the remote/phone flow loads data.
+- **Snoozed-loop resurfacing** — 60s re-eval of `activeLoops()`. *Verify:* snooze a loop,
+  it returns after the window without a reload.
+- **`marvin-data` invalidate fence** — a `generation` counter stops an in-flight fetch from
+  repopulating a just-cleared cache. *Verify:* disconnect an account mid-load → its data
+  doesn't reappear.
+
+Still open (low impact): the generic-connect token-discard — only affects arbitrary
+integrations with no built-in flow (not Gmail/Slack/Trello/Buffer), and MarvinChat dead code
+(unreachable, left in place).
 
 ---
 

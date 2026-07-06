@@ -28,16 +28,43 @@ not just by the swarm vote.
 
 ## Already fixed this session (verified against code + tested)
 
-| # | Finding | File | Commit |
-|---|---------|------|--------|
-| 1 | **Morning brief froze all day on a false "you're clear"** (unconditional cache of a premature/failed generation) | `sidecar/server.ts` | `3f0605d` |
-| 2 | **Doctor reported a broken connector as "Working"** (`connected` = creds-present, not call-succeeded) | `sidecar/server.ts` diagnostics | `0324c57` |
-| 3 | **A far-future Trello due date manufactured daily false urgency** (`pressingCards` kept any due date) | `sidecar/brief.ts` | `3f0605d` |
-| 4 | **CRITICAL: editing a draft in Approvals sent the ORIGINAL text** (payload sync gated on `voiceKey`) | `src/app/approvals/page.tsx` | this commit |
+The CRITICAL and the bulk of the actionable HIGH findings are fixed, type-checked, and
+covered by tests / build:
 
-Each was reproduced in the code, fixed, type-checked, and (for the sidecar three) covered
-by tests / live-smoked. #4 is the most urgent for a journalist: a rewritten email/Slack
-message no longer sends its pre-edit text.
+| # | Severity | Finding | File |
+|---|----------|---------|------|
+| 1 | CRITICAL | Editing a draft in Approvals sent the **original** text (payload sync gated on `voiceKey`) | `src/app/approvals/page.tsx` |
+| 2 | HIGH | Morning brief froze all day on a false "you're clear" (unconditional cache of a premature/failed generation) | `sidecar/server.ts` |
+| 3 | HIGH | Doctor reported a broken connector as "Working" (`connected` = creds-present) | `sidecar/server.ts` + `diagnostics.ts` |
+| 4 | HIGH | A far-future Trello due date manufactured daily false urgency | `sidecar/brief.ts` |
+| 5 | HIGH | `sendGmail`/`postSlack` fell back to the wrong account/workspace on an unknown name → now **fail closed** | `sidecar/connectors.ts` |
+| 6 | HIGH | Triage cached a transient all-accounts failure as a false all-clear over the last-good snapshot | `sidecar/server.ts` |
+| 7 | HIGH | `creds.json` world-readable + truncatable → now `0o600` + atomic write | `sidecar/creds.ts` |
+| 8 | HIGH | Claude CLI stdin EPIPE crashed the whole sidecar → error handler | `sidecar/llm.ts` |
+| 9 | HIGH | Home showed a confident false all-clear from a stale cache when disconnected → `stale` flag + honest note | `src/app/page.tsx` |
+| 10 | HIGH | "Remove Gemini key" was a no-op in the packaged app (kept routing to Gemini) | `src/app/settings/page.tsx` |
+| 11 | HIGH | Prompt-injection: attacker-controlled sender embedded verbatim into the trusted triage prompt → `sanitizeSender()` | `src/lib/triage-learning.ts` |
+| 12 | HIGH | Watcher swallowed notifications during days off / quiet hours / focus / cooldown (marked seen before the gate) | `src/lib/watcher.ts` |
+| — | LOW | Static file ReadStream had no error handler (crash) — fixed alongside #8 | `sidecar/static.ts` |
+
+Commits: `0324c57`, `3f0605d`, `3e7f717`, and the sidecar/renderer HIGH batches after.
+
+## Deferred — need your Mac to build + verify (not done)
+
+These are real but riskier to change blind; they touch the packaged-app runtime or the
+OAuth flow and should be done with the app running on macOS:
+
+- **Day-off gating ignored in the packaged app** — settings live in the Rust SQLite kv the
+  sidecar can't read; the fix (renderer POSTs effective settings to the sidecar, or Tauri
+  passes them at spawn) needs the Tauri build to verify.
+- **OAuth loopback has no `state`/PKCE + reflected-XSS in the callback HTML** — security
+  hardening of `google-oauth.ts`; must be tested against a real sign-in.
+- **`marvin-data` hardcodes `localhost:8787`** — breaks the documented remote/phone flow;
+  low impact while you run locally.
+- **Snoozed loops don't resurface while Home stays mounted** (resident tray app) — needs a
+  re-eval interval; verify against the packaged tray behaviour.
+- **`marvin-data` invalidate doesn't fence in-flight fetches** — subtle concurrency; and the
+  generic-connect token-discard (only affects integrations without a built-in flow).
 
 ---
 

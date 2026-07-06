@@ -1,6 +1,14 @@
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { randomBytes, createHash } from 'node:crypto';
 import { setCred } from './creds.ts';
+
+const b64url = (b: Buffer): string => b.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+/** Escape untrusted text before it lands in the callback HTML (the `error`/message params
+ *  are attacker-influenceable via the redirect → reflected XSS without this). */
+function escapeHtml(s: string): string {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+}
 
 /**
  * Real one-click sign-in via the desktop **loopback** OAuth flow (as the gcloud
@@ -26,6 +34,8 @@ type Provider = {
   jsonAccept?: boolean;
   /** which stored token field to write: refresh (Google) or access (GitHub) */
   tokenField: 'refresh_token' | 'access_token';
+  /** send PKCE (S256) — Google supports it; GitHub OAuth apps don't, so opt-in per provider */
+  pkce?: boolean;
   /** optional endpoint to fetch the account email/login for display */
   whoUrl?: string;
   whoField?: string;
@@ -37,6 +47,7 @@ const PROVIDERS: Record<string, Provider> = {
     tokenUrl: 'https://oauth2.googleapis.com/token',
     authParams: { access_type: 'offline', prompt: 'consent' },
     tokenField: 'refresh_token',
+    pkce: true,
     whoUrl: 'https://www.googleapis.com/oauth2/v2/userinfo',
     whoField: 'email',
   },
@@ -102,6 +113,11 @@ export function startOAuthLogin(input: { integration: string; clientId: string; 
   if (!clientId || !clientSecret) return Promise.resolve({ ok: false, error: 'Client ID and client secret are required.' });
 
   const redirect = `http://127.0.0.1:${PORT}`;
+  // CSRF/code-injection defence: a random state the callback must echo back, and (where the
+  // provider supports it) PKCE so an intercepted code can't be exchanged without the verifier.
+  const state = randomBytes(16).toString('hex');
+  const verifier = provider.pkce ? b64url(randomBytes(32)) : '';
+  const challenge = verifier ? b64url(createHash('sha256').update(verifier).digest()) : '';
 
   return new Promise<OAuthResult>((resolve) => {
     let done = false;
@@ -130,12 +146,18 @@ export function startOAuthLogin(input: { integration: string; clientId: string; 
         res.writeHead(204);
         return res.end();
       }
+      // Reject any callback whose state doesn't match the one we issued — a different local
+      // process (or a drive-by page) hitting this port with a forged code is dropped here.
+      if (u.searchParams.get('state') !== state) {
+        res.end(page('Sign-in could not be verified (state mismatch). Please try again.'));
+        return finish({ ok: false, error: 'state mismatch' });
+      }
       try {
         const tr = await fetch(provider.tokenUrl, {
           signal: AbortSignal.timeout(15_000),
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded', ...(provider.jsonAccept ? { Accept: 'application/json' } : {}) },
-          body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirect, grant_type: 'authorization_code' }),
+          body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirect, grant_type: 'authorization_code', ...(verifier ? { code_verifier: verifier } : {}) }),
         });
         const tj = (await tr.json()) as Record<string, string>;
         const token = tj[provider.tokenField];
@@ -169,7 +191,15 @@ export function startOAuthLogin(input: { integration: string; clientId: string; 
       const authUrl =
         provider.authUrl +
         '?' +
-        new URLSearchParams({ client_id: clientId, redirect_uri: redirect, response_type: 'code', scope: cfg.scopes.join(' '), ...provider.authParams }).toString();
+        new URLSearchParams({
+          client_id: clientId,
+          redirect_uri: redirect,
+          response_type: 'code',
+          scope: cfg.scopes.join(' '),
+          state,
+          ...(challenge ? { code_challenge: challenge, code_challenge_method: 'S256' } : {}),
+          ...provider.authParams,
+        }).toString();
       openBrowser(authUrl);
     });
 
@@ -178,5 +208,6 @@ export function startOAuthLogin(input: { integration: string; clientId: string; 
 }
 
 function page(msg: string): string {
-  return `<!doctype html><meta charset="utf-8"><body style="font-family:system-ui,sans-serif;background:#f7f6f3;color:#1f1f1d;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center;max-width:420px;padding:32px"><div style="font-size:22px;font-weight:600;font-family:Georgia,serif">Xanî</div><p style="margin-top:14px;font-size:15px;line-height:1.5">${msg}</p></div></body>`;
+  // msg can carry provider/error text influenced by the redirect — escape it (reflected XSS).
+  return `<!doctype html><meta charset="utf-8"><body style="font-family:system-ui,sans-serif;background:#f7f6f3;color:#1f1f1d;display:grid;place-items:center;height:100vh;margin:0"><div style="text-align:center;max-width:420px;padding:32px"><div style="font-size:22px;font-weight:600;font-family:Georgia,serif">Xanî</div><p style="margin-top:14px;font-size:15px;line-height:1.5">${escapeHtml(msg)}</p></div></body>`;
 }

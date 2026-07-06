@@ -9,6 +9,10 @@ import type {
   DriveData,
   GithubData,
 } from '@/lib/marvin-protocol';
+// Reuse the ONE sidecar-URL resolver (handles the remote /__mv reverse-proxy and the
+// NEXT_PUBLIC override) instead of a drifting hardcoded localhost:8787 that broke every
+// data view in the remote/phone flow.
+import { SIDECAR_URL } from '@/lib/marvin-client';
 
 /**
  * Read-only data the renderer pulls from the sidecar (which owns the tokens and
@@ -23,11 +27,13 @@ import type {
  * a screen share one request.)
  */
 
-const SIDECAR_URL = process.env.NEXT_PUBLIC_MARVIN_SIDECAR_URL ?? 'http://localhost:8787';
-
 type Entry = { data: unknown; ts: number };
 const cache = new Map<string, Entry>();
 const inflight = new Map<string, Promise<unknown>>();
+// Bumped on every invalidate/clear so an in-flight fetch that started BEFORE the
+// invalidation can't repopulate the cache/localStorage with now-stale (e.g. a
+// just-disconnected account's) data when it finally resolves.
+let generation = 0;
 
 // Persist a few high-value, small payloads to localStorage so the screen paints
 // last-session data INSTANTLY on app relaunch (then revalidates in the background).
@@ -84,6 +90,7 @@ export function dataAge(path: string): number {
 /** Drop the cached + in-flight entry for one exact path, so the next fetch hits the
  *  network. Used by the manual refresh button on each screen. */
 export function invalidate(path: string): void {
+  generation++;
   cache.delete(path);
   inflight.delete(path);
   dropPersisted((p) => p === path);
@@ -92,6 +99,7 @@ export function invalidate(path: string): void {
 /** Drop cached entries whose path starts with `prefix` (or all). Used on disconnect
  *  so a removed account's mail can't linger in the UI. */
 export function clearDataCache(prefix?: string): void {
+  generation++;
   if (!prefix) {
     cache.clear();
     dropPersisted(() => true);
@@ -105,14 +113,19 @@ async function get<T>(path: string): Promise<T | null> {
   const existing = inflight.get(path);
   if (existing) return existing as Promise<T | null>;
 
+  const startGen = generation;
   const req = (async () => {
     try {
       const resp = await fetch(`${SIDECAR_URL}${path}`);
       if (!resp.ok) return null;
       const data = (await resp.json()) as T;
       const ts = Date.now();
-      cache.set(path, { data, ts });
-      persist(path, data, ts);
+      // Only write through if no invalidate/clear happened while this was in flight —
+      // otherwise a disconnected account's data would silently repopulate the cache.
+      if (generation === startGen) {
+        cache.set(path, { data, ts });
+        persist(path, data, ts);
+      }
       return data;
     } catch {
       return null;

@@ -291,6 +291,14 @@ export default function HomePage() {
 
   const reloadLoops = useCallback(() => setLoops(activeLoops()), []);
 
+  // Re-evaluate open loops on a timer so a snoozed loop ("Not now" / "Tomorrow") actually
+  // resurfaces the moment its snooze elapses — otherwise, in a resident tray app where Home
+  // stays mounted for days, "Tomorrow" silently never comes back until something else fires.
+  useEffect(() => {
+    const t = setInterval(reloadLoops, 60_000);
+    return () => clearInterval(t);
+  }, [reloadLoops]);
+
   useEffect(() => {
     ensureStorageReady().then(() => {
       const s0 = getSettings();

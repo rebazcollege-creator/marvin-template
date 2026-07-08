@@ -1,10 +1,7 @@
 import type { Metadata } from 'next';
 import { Fraunces, Inter } from 'next/font/google';
 import './globals.css';
-import { Sidebar } from '@/components/layout/Sidebar';
-import { CommandPalette } from '@/components/ui/CommandPalette';
 import { Watcher } from '@/components/system/Watcher';
-import { EntranceGate } from '@/components/entrance/EntranceGate';
 
 // Quiet Stone identity: Fraunces is the display serif (kept under the
 // --font-playfair variable name so globals.css / tailwind need no change).
@@ -39,14 +36,8 @@ export default function RootLayout({
               "(function(){try{var t=localStorage.getItem('xani.theme');if(t){document.documentElement.dataset.xtheme=t;}}catch(e){}})();",
           }}
         />
-        <CommandPalette />
         <Watcher />
-        <EntranceGate>
-          <div className="flex h-screen overflow-hidden">
-            <Sidebar />
-            <main className="flex-1 overflow-y-auto">{children}</main>
-          </div>
-        </EntranceGate>
+        <main className="min-h-screen">{children}</main>
       </body>
     </html>
   );

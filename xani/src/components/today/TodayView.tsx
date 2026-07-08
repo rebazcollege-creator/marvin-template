@@ -7,6 +7,7 @@ import { getSettings, type XaniSettings } from '@/lib/settings';
 import { fetchInboxTriage, fetchSlackTriage, getBrief, getWaiting } from '@/lib/marvin-client';
 import { fetchBriefingData } from '@/lib/marvin-data';
 import { activeLoops } from '@/lib/open-loops';
+import { syncOpenLoops } from '@/lib/loops-monitor';
 import { triageLearnings, learnedCount } from '@/lib/triage-learning';
 import { understandingFacts } from '@/lib/understanding';
 import { buildTasks, markDone, dismissTask, snoozeTask, type Task } from '@/lib/today-tasks';
@@ -17,6 +18,14 @@ function greeting(h: number): string {
   return h < 5 ? 'Still up' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 }
 const SRC_ICON: Record<string, string> = { email: '✉️', slack: '💬', trello: '🗂️', manual: '✦' };
+
+function freshLabel(ts: number): string {
+  const s = Math.round((Date.now() - ts) / 1000);
+  if (s < 8) return 'just now';
+  if (s < 60) return `${s}s ago`;
+  const m = Math.round(s / 60);
+  return m < 60 ? `${m}m ago` : `${Math.round(m / 60)}h ago`;
+}
 
 function dueChip(dueAt: string | undefined, now: Date): { label: string; soon: boolean } | null {
   if (!dueAt) return null;
@@ -40,29 +49,51 @@ export function TodayView() {
   const [cal, setCal] = useState<BriefingData['calendar']>([]);
   const [calConnected, setCalConnected] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState(0);
   const [rev, setRev] = useState(0);
   const [learned, setLearned] = useState(0);
   const now = useMemo(() => new Date(), []);
 
   const refreshLoops = useCallback(() => setLoops(activeLoops()), []);
 
-  useEffect(() => {
-    ensureStorageReady().then(() => {
-      const s = getSettings();
-      setSettings(s);
-      setLearned(learnedCount());
-      refreshLoops();
-      const learnings = [...triageLearnings(), ...understandingFacts()];
-      void getBrief(learnings).then((b) => { if (b.ok && b.text) setBrief(b.text); });
-      void getWaiting().then((w) => { if (w?.connected) setWaiting(w.items); });
-      void fetchBriefingData().then((d) => { if (d) { setCal(d.calendar ?? []); setCalConnected(!!d.connected?.calendar); } });
-      void Promise.all([fetchInboxTriage(learnings), fetchSlackTriage(learnings)]).then(([i, sl]) => {
-        if (i?.triaged) setInbox(i.triaged.filter((m) => m.verdict === 'act'));
-        if (sl?.triaged) setSlack(sl.triaged.filter((m) => m.verdict === 'act'));
-        setLoading(false);
-      });
-    });
+  /** One live pull from the sidecar: Trello→loops sync, then triage + brief + waiting +
+   *  calendar in parallel. Keeps last-known on a transient failure (never a false empty). */
+  const load = useCallback(async () => {
+    await ensureStorageReady();
+    setSettings(getSettings());
+    setLearned(learnedCount());
+    await syncOpenLoops().catch(() => undefined); // live Trello commitments → Open Loops
+    refreshLoops();
+    const learnings = [...triageLearnings(), ...understandingFacts()];
+    const [b, w, d, i, sl] = await Promise.all([
+      getBrief(learnings).catch(() => null),
+      getWaiting().catch(() => null),
+      fetchBriefingData().catch(() => null),
+      fetchInboxTriage(learnings).catch(() => null),
+      fetchSlackTriage(learnings).catch(() => null),
+    ]);
+    if (b?.ok) setBrief(b.text);
+    if (w?.connected) setWaiting(w.items);
+    if (d) { setCal(d.calendar ?? []); setCalConnected(!!d.connected?.calendar); }
+    if (i?.triaged) setInbox(i.triaged.filter((m) => m.verdict === 'act')); // keep last-known if null
+    if (sl?.triaged) setSlack(sl.triaged.filter((m) => m.verdict === 'act'));
+    refreshLoops();
+    setLoading(false);
+    setUpdatedAt(Date.now());
   }, [refreshLoops]);
+
+  const refresh = useCallback(() => { setRefreshing(true); void load().finally(() => setRefreshing(false)); }, [load]);
+
+  // Live: initial load, then every 60s and whenever the window regains focus.
+  useEffect(() => {
+    void load();
+    const iv = window.setInterval(() => { if (document.visibilityState !== 'hidden') void load(); }, 60_000);
+    const onFocus = () => { if (document.visibilityState !== 'hidden') void load(); };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onFocus);
+    return () => { window.clearInterval(iv); window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus); };
+  }, [load]);
 
   const tasks = useMemo(() => buildTasks({ inbox, slack, loops, now }), [inbox, slack, loops, now, rev]);
   const bump = () => { setRev((r) => r + 1); setLearned(learnedCount()); };
@@ -85,6 +116,9 @@ export function TodayView() {
             <p className="td-sub">Here’s your day, gently organized.</p>
           </div>
           <div className="td-date">{dateLabel}</div>
+          <button type="button" className={`td-refresh${refreshing ? ' spin' : ''}`} onClick={refresh} title="Refresh now">
+            <span className="td-fresh">{updatedAt ? freshLabel(updatedAt) : 'live'}</span> ↻
+          </button>
           <Link href="/connections" className="td-gear" title="Connections & settings">⚙</Link>
         </header>
 
@@ -173,6 +207,11 @@ const CSS = `
 .td-date{margin-left:auto;color:#9a917e;font-size:13px;padding-top:8px}
 .td-gear{color:#b7ad98;text-decoration:none;font-size:18px;padding:6px;border-radius:8px;line-height:1}
 .td-gear:hover{color:#6b6455;background:rgba(198,163,95,.12)}
+.td-refresh{display:flex;align-items:center;gap:6px;background:none;border:0;color:#b7ad98;font-size:12px;cursor:pointer;padding:6px 8px;border-radius:8px;font-family:inherit}
+.td-refresh:hover{color:#6b6455;background:rgba(198,163,95,.12)}
+.td-fresh{font-variant-numeric:tabular-nums}
+.td-refresh.spin{animation:tdspin .8s linear infinite}
+@keyframes tdspin{to{transform:rotate(360deg)}}
 
 .td-brief{background:#fbf8f1;border:1px solid #e6ddcd;border-top:3px solid #c6a35f;border-radius:16px;padding:18px 20px;margin-bottom:24px}
 .td-brief-label{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a8843f}
